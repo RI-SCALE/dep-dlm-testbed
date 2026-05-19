@@ -98,7 +98,7 @@ setup_accounts_and_identities() {
     ra account add --type USER --email randomaccount@rucio randomaccount || true
 
     echo "  Verifying Keycloak token endpoint..."
-    AUTH=$(echo -n "rucio-oidc:rucio-oidc-secret" | base64)
+    AUTH=$(echo -n "rucio:rucio-secret" | base64)
     for i in $(seq 1 12); do
         code=$(_exec rucio curl -s -o /dev/null -w '%{http_code}' \
             -X POST https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
@@ -118,7 +118,7 @@ from rucio.common import exception
 
 try:
     data = urllib.parse.urlencode({'grant_type':'password','username':'randomaccount','password':'secret'}).encode()
-    _auth = base64.b64encode(b'rucio-oidc:rucio-oidc-secret').decode()
+    _auth = base64.b64encode(b'rucio:rucio-secret').decode()
     req = urllib.request.Request('https://keycloak:8443/realms/rucio/protocol/openid-connect/token',
         data=data, headers={'Authorization': f'Basic {_auth}'})
     resp = json.loads(urllib.request.urlopen(req).read())
@@ -197,8 +197,8 @@ setup_fts_oidc_provider() {
     _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
     INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret)
     VALUES
-      ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'rucio-oidc', 'rucio-oidc-secret'),
-      ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'rucio-oidc', 'rucio-oidc-secret');"
+      ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'rucio', 'rucio-secret'),
+      ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'rucio', 'rucio-secret');"
 
     echo "  Restarting fts..."
     _restart fts

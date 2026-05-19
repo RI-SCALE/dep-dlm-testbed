@@ -11,7 +11,7 @@
 
   Consumers:
     testbed-scripts        → rucio-server, rucio-client (mounted at /scripts)
-    testbed-scripts-fts    → fts-oidc entrypoint + related helpers
+    testbed-scripts-fts    → fts entrypoint + related helpers
     testbed-scripts-xrootd → xrd entrypoint
     testbed-scripts-rucio  → rucio bootstrap-db.py
 */}}

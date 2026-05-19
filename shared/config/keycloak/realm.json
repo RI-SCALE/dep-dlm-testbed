@@ -47,7 +47,7 @@
         "storage.read", "storage.modify",
         "storage.read:/data", "storage.modify:/data",
         "storage.read:/", "storage.modify:/",
-        "aud:fts-oidc", "aud:xrd3", "aud:xrd4",
+        "aud:fts", "aud:xrd3", "aud:xrd4",
         "aud:teapot"
       ],
       "optionalClientScopes": [
@@ -63,11 +63,11 @@
       }
     },
     {
-      "clientId": "fts-oidc",
+      "clientId": "fts",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "fts-oidc-secret",
+      "secret": "fts-secret",
       "defaultClientScopes": [ "openid", "wlcg", "fts" ]
     }
   ],
@@ -159,8 +159,8 @@
     { "name": "storage.modify:/", "protocol": "openid-connect" },
 
     {
-      "name": "aud:fts-oidc",
-      "description": "Adds fts-oidc to the token's aud claim. Request alongside 'fts' scope to get an FTS-submission token.",
+      "name": "aud:fts",
+      "description": "Adds fts to the token's aud claim. Request alongside 'fts' scope to get an FTS-submission token.",
       "protocol": "openid-connect",
       "attributes": {
         "display.on.consent.screen": "false",
@@ -168,11 +168,11 @@
       },
       "protocolMappers": [
         {
-          "name": "aud-fts-oidc",
+          "name": "aud-fts",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "fts-oidc",
+            "included.custom.audience": "fts",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }

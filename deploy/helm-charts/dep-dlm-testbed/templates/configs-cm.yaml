@@ -13,7 +13,7 @@ data:
     and expose them flat (last path component as key). This matches what the
     docker-compose bind mounts look like from inside each container:
 
-        shared/config/fts/fts3config-oidc  →  /etc/fts3/fts3config
+        shared/config/fts/fts3config  →  /etc/fts3/fts3config
         shared/config/keycloak/realm.json  →  /opt/keycloak/data/import/realm.json
 
     Each subchart's volumeMount uses `subPath: <flat-name>` to pick the

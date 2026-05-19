@@ -1,4 +1,4 @@
-Alias = rucio/fts-oidc
+Alias = rucio/fts
 SiteName = DOCKER
 
 AuthorizedVO = *

@@ -42,8 +42,8 @@ mint_cert() {
 
 generate_service_certs() {
     # FTS OIDC host cert
-    write_ext_file /tmp/fts-ext.cnf "fts-oidc,localhost" both
-    mint_cert "host" "fts-oidc" /tmp/fts-ext.cnf
+    write_ext_file /tmp/fts-ext.cnf "fts,localhost" both
+    mint_cert "host" "fts" /tmp/fts-ext.cnf
     cat "$CERTS/hostcert.pem" "$CERTS/hostkey.pem" > "$CERTS/hostcert_with_key.pem"
     chmod 600 "$CERTS/hostkey.pem" "$CERTS/hostcert_with_key.pem"
 
