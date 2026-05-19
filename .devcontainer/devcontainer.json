@@ -1,0 +1,26 @@
+{
+    "name": "Kind Setup",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+    "features": {
+      "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+      "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
+      "ghcr.io/devcontainers/features/python:1": {},
+      "ghcr.io/prulloac/devcontainer-features/pre-commit:1": {}
+    },
+    "forwardPorts": [
+        8447, 8449,
+        3306,
+        1096, 1097,
+        8080, 8090, 8448
+    ],
+    "postCreateCommand": "bash .devcontainer/setup.sh",
+    "remoteUser": "root",
+    "privileged": true,
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+    "runArgs": ["--network=host"],
+    "remoteEnv": {
+      "TESTBED_HOST_SOURCE": "${localWorkspaceFolder}"
+    }
+}

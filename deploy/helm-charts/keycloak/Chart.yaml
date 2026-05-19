@@ -1,0 +1,10 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak identity provider for OIDC tests
+type: application
+version: 0.1.0
+appVersion: "23.0.1"
+keywords:
+  - keycloak
+  - oidc
+  - rucio

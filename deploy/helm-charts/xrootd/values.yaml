@@ -1,0 +1,38 @@
+image:
+  repository: rucio/test-xrootd
+  tag: ""
+  digest: sha256:27d212ec136d6d2ed7029fc445384053acb551805060cae554597a32e6361df4
+  pullPolicy: IfNotPresent
+
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 1094
+
+xrdPort: 1094
+
+certFile: xrd1cert.pem
+keyFile: xrd1key.pem
+
+# ── Auth mode ─────────────────────────────────────────────────────────────
+scitokens:
+  # Set to true for xrd3/xrd4 (SciTokens/OIDC).
+  # Set to false (default) for xrd1/xrd2 (GSI/VOMS).
+  enabled: false
+
+# ── Shared artifacts (managed by umbrella chart) ──────────────────────────
+certsSecret: testbed-certs
+
+# Holds: xrdrucio-gsi.cfg, xrdrucio-scitokens.cfg, grid-mapfile,
+#        authdb, scitokens.conf
+configsConfigMap: testbed-configs
+
+# Holds docker-entrypoint.sh (in the -xrootd sub-ConfigMap)
+scriptsConfigMap: testbed-scripts
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

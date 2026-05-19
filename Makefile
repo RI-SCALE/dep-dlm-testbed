@@ -10,8 +10,12 @@ export TESTBED_HOST_SOURCE ?= $(CURDIR)
 COMPOSE_FILE := deploy/compose/docker-compose.yml
 COMPOSE      := docker compose -f $(COMPOSE_FILE)
 
-EXEC_RUCIO := docker exec compose-rucio-client-1
-EXEC_FTS   := docker exec compose-fts-oidc-1
+# Helm / Kubernetes
+HELM_CHART   := deploy/helm-charts/dep-dlm-testbed
+HELM_RELEASE ?= testbed
+K8S_NAMESPACE ?= dep-dlm-testbed
+KUBECTL      := kubectl -n $(K8S_NAMESPACE)
+HELM         := helm
 
 # ── Help ──────────────────────────────────────────────────────────────────
 .PHONY: help
@@ -25,6 +29,10 @@ help: ## Show this help (default target)
 .PHONY: certs
 certs: ## Generate certificates (e.g. CA, hosts)
 	./shared/scripts/generate-certs.sh
+
+# .PHONY: bootstrap
+# bootstrap: ## Bootstrap DEP DLM testbed
+# 	./shared/scripts/bootstrap-testbed.sh
 
 ## Stack lifecycle (compose-*)
 
@@ -60,9 +68,33 @@ compose-logs-%: ## Tail logs from a single service, e.g. `make compose-logs-ruci
 compose-build: ## Build local Docker images (e.g. fts, teapot)
 	$(COMPOSE) build
 
-# .PHONY: bootstrap
-# bootstrap: ## Bootstrap DEP DLM testbed
-# 	./shared/scripts/bootstrap-testbed.sh
+## Helm / Kubernetes lifecycle (helm-*, k8s-*)
+
+.PHONY: helm-lint
+helm-lint: ## Lint the umbrella chart
+	$(HELM) lint $(HELM_CHART)
+
+.PHONY: helm-template
+helm-template: ## Render manifests locally (helm template …) without installing
+	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+
+.PHONY: helm-install
+helm-install: ## Create the namespace and install the umbrella chart
+	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	$(HELM) dependency update $(HELM_CHART)
+	$(HELM) install $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+
+.PHONY: helm-upgrade
+helm-upgrade: ## Apply local chart changes to the running release
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the release and delete its PVCs
+	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
+	$(KUBECTL) delete pvc --all --ignore-not-found
+
+.PHONY: helm-reinstall
+helm-reinstall: helm-uninstall helm-install ## Uninstall + install (full reset)
 
 ## Cleanup
 

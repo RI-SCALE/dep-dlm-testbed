@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fts.fullname" . }}
+  labels:
+    app: {{ include "fts.name" . }}
+    instance: {{ include "fts.fullname" . }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "fts.name" . }}
+      instance: {{ include "fts.fullname" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "fts.name" . }}
+        instance: {{ include "fts.fullname" . }}
+        release: {{ .Release.Name }}
+    spec:
+      hostname: {{ include "fts.fullname" . }}
+      containers:
+        - name: fts
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # CA trust injection
+              if ! grep -q "5fca1cb1" /etc/pki/tls/certs/ca-bundle.crt; then
+                cat /etc/grid-security/certificates/5fca1cb1.0 >> /etc/pki/tls/certs/ca-bundle.crt
+              fi
+
+              /docker-entrypoint.sh
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+            - name: FTS_DB_HOST
+              value: {{ .Values.ftsdbHost | quote }}
+          ports:
+            - name: rest
+              containerPort: 8446
+              protocol: TCP
+            - name: monitoring
+              containerPort: 8449
+              protocol: TCP
+          volumeMounts:
+            # Certs
+            - name: certs
+              mountPath: /etc/grid-security/hostcert.pem
+              subPath: hostcert.pem
+            - name: certs
+              mountPath: /etc/grid-security/hostkey.pem
+              subPath: hostkey.pem
+            - name: certs
+              mountPath: /etc/grid-security/certificates/5fca1cb1.0
+              subPath: 5fca1cb1.0
+            - name: certs
+              mountPath: /etc/grid-security/certificates/5fca1cb1.signing_policy
+              subPath: 5fca1cb1.signing_policy
+            - name: certs
+              mountPath: /etc/grid-security/certificates/b96dc756.0
+              subPath: b96dc756.0
+            - name: certs
+              mountPath: /etc/grid-security/certificates/b96dc756.signing_policy
+              subPath: b96dc756.signing_policy
+            - name: certs
+              mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
+              subPath: rucio_ca.pem
+              readOnly: false
+            - name: scripts
+              mountPath: /scripts
+            - name: configs
+              mountPath: /etc/fts3/fts3config
+              subPath: fts3config
+            - name: configs
+              mountPath: /etc/fts3/fts3restconfig
+              subPath: fts3restconfig
+            - name: configs
+              mountPath: /etc/gfal2.d/http_plugin.conf
+              subPath: gfal2_http_plugin.conf
+            - name: scripts-fts
+              mountPath: /docker-entrypoint.sh
+              subPath: docker-entrypoint.sh
+          {{- if .Values.healthcheck.enabled }}
+          readinessProbe:
+            exec:
+              command: ["curl", "-sk", "https://localhost:8446/whoami"]
+            initialDelaySeconds: {{ .Values.healthcheck.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthcheck.periodSeconds }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: certs
+          secret:
+            secretName: {{ .Values.certsSecret }}
+            defaultMode: 0600
+            items:
+              - key: hostcert.pem
+                path: hostcert.pem
+                mode: 0600
+              - key: hostkey.pem
+                path: hostkey.pem
+                mode: 0600
+              - key: rucio_ca.pem
+                path: rucio_ca.pem
+                mode: 0644
+              - key: 5fca1cb1.0
+                path: 5fca1cb1.0
+                mode: 0644
+              - key: 5fca1cb1.signing_policy
+                path: 5fca1cb1.signing_policy
+                mode: 0644
+              - key: b96dc756.0
+                path: b96dc756.0
+                mode: 0644
+              - key: b96dc756.signing_policy
+                path: b96dc756.signing_policy
+                mode: 0644
+        - name: scripts
+          configMap:
+            name: {{ .Values.scriptsConfigMap }}
+            defaultMode: 0755
+        - name: scripts-fts
+          configMap:
+            name: {{ .Values.scriptsConfigMap }}-fts
+            defaultMode: 0755
+        - name: configs
+          configMap:
+            name: {{ .Values.configsConfigMap }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

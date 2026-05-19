@@ -1,0 +1,36 @@
+image:
+  repository: rucio/rucio-clients
+  tag: ""
+  digest: sha256:d03fd88c2b6fe50a64a95cc7001486208aa115e3997658359158746eb178cc1d
+  pullPolicy: IfNotPresent
+
+fullnameOverride: rucio-client
+
+env:
+  - name: RUCIO_CFG_CLIENT_RUCIO_HOST
+    value: http://rucio
+  - name: RUCIO_CFG_CLIENT_AUTH_HOST
+    value: http://rucio
+  - name: RUCIO_CFG_CLIENT_AUTH_TYPE
+    value: userpass
+  - name: RUCIO_CFG_CLIENT_USERNAME
+    value: ddmlab
+  - name: RUCIO_CFG_CLIENT_PASSWORD
+    value: secret
+  - name: RUCIO_CFG_CLIENT_ACCOUNT
+    value: root
+  - name: REQUESTS_CA_BUNDLE
+    value: /etc/grid-security/certificates/rucio_ca.pem
+
+# Shared artifacts provided by the umbrella chart.
+certsSecret: testbed-certs
+# Contains userpass-client.cfg and userpass-client.cfg
+configsConfigMap: testbed-configs
+# Contains general scripts (bootstrap-testbed.sh, etc.)
+scriptsConfigMap: testbed-scripts
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

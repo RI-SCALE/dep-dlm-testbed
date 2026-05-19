@@ -1,0 +1,56 @@
+image:
+  repository: mgajekcern/test-fts
+  tag: latest
+  pullPolicy: IfNotPresent
+
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  ports:
+    # FTS REST API
+    rest: 8446
+    # FTS monitoring
+    monitoring: 8449
+
+# ftsdb Service hostname the server should connect to (set by umbrella)
+ftsdbHost: ftsdb
+
+# Optional MySQL StatefulSet co-located with the FTS server.
+# The umbrella enables one ftsdb per FTS instance (ftsdb, ftsdb-oidc).
+ftsdb:
+  enabled: false
+  hostname: ftsdb
+  image: mysql:8
+  storage: 2Gi
+  resources: {}
+
+# Shared artifact sources (managed by umbrella chart)
+certsSecret: testbed-certs
+# Holds fts3config-oidc, fts3restconfig-oidc, gfal2_xrootd_plugin.conf
+configsConfigMap: testbed-configs
+# Holds docker-entrypoint.sh and general scripts
+scriptsConfigMap: testbed-scripts
+
+env:
+  - name: REQUESTS_CA_BUNDLE
+    value: /etc/pki/tls/certs/ca-bundle.crt
+  - name: SSL_CERT_FILE
+    value: /etc/pki/tls/certs/ca-bundle.crt
+  - name: X509_USER_PROXY
+    value: /tmp/x509up_u0
+  - name: XrdSecGSISRVNAMES
+    value: "*"
+  - name: XrdSecGSIDELEGPROXY
+    value: "2"
+
+resources: {}
+
+healthcheck:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

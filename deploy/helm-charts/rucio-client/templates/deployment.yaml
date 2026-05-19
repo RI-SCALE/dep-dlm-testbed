@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rucio-client.fullname" . }}
+  labels:
+    app: {{ include "rucio-client.name" . }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "rucio-client.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "rucio-client.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      hostname: {{ include "rucio-client.fullname" . }}
+      containers:
+        - name: client
+          image: "{{ .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ .Values.image.tag }}{{ end }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              pip install --no-cache-dir \
+                --trusted-host pypi.org \
+                --trusted-host pypi.python.org \
+                --trusted-host files.pythonhosted.org \
+                pytest &&
+
+              sleep infinity
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: certs
+              mountPath: /etc/grid-security/hostcert.pem
+              subPath: hostcert.pem
+              readOnly: true
+            - name: certs
+              mountPath: /etc/grid-security/hostkey.pem
+              subPath: hostkey.pem
+              readOnly: true
+            - name: certs
+              mountPath: /etc/grid-security/certificates/5fca1cb1.0
+              subPath: rucio_ca.pem
+              readOnly: true
+            - name: certs
+              mountPath: /etc/grid-security/certificates/rucio_ca.pem
+              subPath: rucio_ca.pem
+              readOnly: true
+            - name: configs
+              mountPath: /opt/rucio/etc/userpass-client.cfg
+              subPath: userpass-client.cfg
+              readOnly: true
+            - name: configs
+              mountPath: /opt/rucio/etc/rucio.cfg
+              subPath: userpass-client.cfg
+              readOnly: true
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: certs
+          secret:
+            secretName: {{ .Values.certsSecret }}
+            defaultMode: 0600
+        - name: configs
+          configMap:
+            name: {{ .Values.configsConfigMap }}
+        - name: scripts
+          configMap:
+            name: {{ .Values.scriptsConfigMap }}
+            defaultMode: 0755
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

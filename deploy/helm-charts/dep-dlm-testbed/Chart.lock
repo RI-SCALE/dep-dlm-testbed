@@ -1,0 +1,30 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 18.3.0
+- name: rucio-server
+  repository: file://../rucio-server
+  version: 40.0.0
+- name: fts
+  repository: file://../fts
+  version: 0.1.0
+- name: keycloak
+  repository: file://../keycloak
+  version: 0.1.0
+- name: xrootd
+  repository: file://../xrootd
+  version: 0.1.0
+- name: xrootd
+  repository: file://../xrootd
+  version: 0.1.0
+- name: rucio-client
+  repository: file://../rucio-client
+  version: 0.1.0
+- name: teapot
+  repository: file://../teapot
+  version: 0.1.0
+- name: teapot
+  repository: file://../teapot
+  version: 0.1.0
+digest: sha256:e940bd0d1d8f90c7d50655465aeb61573b4f4ec1d5e346d6a164615ab6734336
+generated: "2026-05-19T07:54:42.955993549Z"
