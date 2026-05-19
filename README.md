@@ -80,7 +80,7 @@ Cleanup
 
 ## High Level Flow
 
-The testbed exclusively supports the OIDC Token Flow, which is used for StoRM WebDAV and XRootD SciTokens integration.
+The testbed exclusively supports token-based authentication.
 
 ```mermaid
 sequenceDiagram
