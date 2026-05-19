@@ -37,7 +37,7 @@ spec:
           volumeMounts:
             - name: certs
               mountPath: /etc/grid-security/certificates/5fca1cb1.0
-              subPath: 5fca1cb1.0
+              subPath: rucio_ca.pem
             - name: certs
               mountPath: /tmp/xrdcert.pem
               subPath: {{ .Values.certFile }}
@@ -80,20 +80,6 @@ spec:
               - key: rucio_ca.pem
                 path: rucio_ca.pem
                 mode: 0644
-              {{- if not .Values.scitokens.enabled }}
-              - key: 5fca1cb1.0
-                path: 5fca1cb1.0
-                mode: 0644
-              - key: 5fca1cb1.signing_policy
-                path: 5fca1cb1.signing_policy
-                mode: 0644
-              - key: b96dc756.0
-                path: b96dc756.0
-                mode: 0644
-              - key: b96dc756.signing_policy
-                path: b96dc756.signing_policy
-                mode: 0644
-              {{- end }}
         - name: configs
           configMap:
             name: {{ .Values.configsConfigMap }}
