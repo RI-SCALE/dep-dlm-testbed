@@ -1,0 +1,151 @@
+name: Run DEP DLM Testbed
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      label:
+        required: true
+        type: string
+      runtime:
+        required: false
+        type: string
+        default: compose
+        description: "compose | k8s"
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runner }}
+    name: ${{ inputs.label }}
+    timeout-minutes: 45
+    env:
+      TESTBED_HOST_SOURCE: ${{ github.workspace }}
+      RUNTIME: ${{ inputs.runtime }}
+      COMPOSE_FILE: deploy/compose/docker-compose.ci.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU for multi-arch emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - name: Generate certificates
+        run: make certs
+
+      - name: Start stack (compose)
+        if: inputs.runtime == 'compose'
+        run: make compose-up
+
+      - name: Set up kind cluster
+        if: inputs.runtime == 'k8s'
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dep-dlm-testbed
+
+      - name: Install Helm
+        if: inputs.runtime == 'k8s'
+        uses: azure/setup-helm@v4
+
+      - name: Install testbed (k8s)
+        if: inputs.runtime == 'k8s'
+        run: |
+          kubectl create namespace dep-dlm-testbed
+          make helm-install
+
+      - name: Initialize DE DLM testbed
+        run: make init
+
+      - name: Wait for fts (compose)
+        if: inputs.runtime == 'compose'
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' \
+              https://localhost:8446/whoami) || true
+            [[ "$code" == "200" ]] && { echo "fts REST ready"; exit 0; }
+            echo "  [$i] HTTP $code"; sleep 5
+          done
+          make compose-logs-fts; exit 1
+
+      - name: Wait for fts (k8s)
+        if: inputs.runtime == 'k8s'
+        run: |
+          kubectl -n dep-dlm-testbed rollout status deploy/fts --timeout=300s
+          for i in $(seq 1 40); do
+            code=$(kubectl -n dep-dlm-testbed exec deploy/fts -- \
+              curl -sk -o /dev/null -w '%{http_code}' \
+              https://localhost:8446/whoami) || true
+            [[ "$code" == "200" ]] && { echo "fts REST ready"; exit 0; }
+            echo "  [$i] HTTP $code"; sleep 5
+          done
+          kubectl -n dep-dlm-testbed logs deploy/fts --tail=200; exit 1
+
+      - name: fts OIDC token auth check (compose)
+        if: inputs.runtime == 'compose'
+        run: |
+          TOKEN=$(docker exec compose-fts-1 curl -sk \
+            -u "rucio:rucio-secret" \
+            -d "grant_type=password&username=randomaccount&password=secret" \
+            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
+          RESP=$(curl -sk --cacert certs/rucio_ca.pem \
+            -H "Authorization: Bearer $TOKEN" \
+            https://localhost:8446/whoami)
+          echo "whoami response: $RESP"
+          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
+          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
+          echo "fts OIDC auth OK (method=$METHOD)"
+
+      - name: fts OIDC token auth check (k8s)
+        if: inputs.runtime == 'k8s'
+        run: |
+          TOKEN=$(kubectl -n dep-dlm-testbed exec deploy/fts -- curl -sk \
+            -u "rucio:rucio-secret" \
+            -d "grant_type=password&username=randomaccount&password=secret" \
+            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
+          RESP=$(kubectl -n dep-dlm-testbed exec deploy/fts -- curl -sk \
+            -H "Authorization: Bearer $TOKEN" \
+            https://localhost:8446/whoami)
+          echo "whoami response: $RESP"
+          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
+          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
+          echo "fts OIDC auth OK (method=$METHOD)"
+
+      - name: Rucio E2E TPC transfer test
+        run: make test-rucio-transfers
+
+      # Diagnostics
+      - name: Dump logs on failure (compose)
+        if: failure() && inputs.runtime == 'compose'
+        run: |
+          for svc in fts rucio keycloak xrd3 xrd4 teapot1 teapot2; do
+            echo "=== $svc ===" && \
+            make compose-logs $svc 2>/dev/null || true
+          done
+
+      - name: Dump logs on failure (k8s)
+        if: failure() && inputs.runtime == 'k8s'
+        run: |
+          echo "=== Pod status ==="
+          kubectl -n dep-dlm-testbed get pods -o wide
+          echo "=== Recent events ==="
+          kubectl -n dep-dlm-testbed get events --sort-by=.lastTimestamp | tail -50
+          for deploy in fts rucio keycloak xrd3 xrd4 teapot1 teapot2; do
+            echo "=== $deploy ==="
+            kubectl -n dep-dlm-testbed logs deploy/$deploy --tail=200 2>/dev/null || true
+          done
+
+      - name: Tear down (compose)
+        if: always() && inputs.runtime == 'compose'
+        run: make compose-down
+
+      - name: Tear down (k8s)
+        if: always() && inputs.runtime == 'k8s'
+        run: |
+          make helm-uninstall

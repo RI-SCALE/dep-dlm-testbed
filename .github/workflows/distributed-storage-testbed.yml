@@ -1,0 +1,37 @@
+name: Distributed Storage Testbed
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-amd64-compose:
+    uses: ./.github/workflows/_run-dep-dlm-testbed.yml
+    with:
+      runner: ubuntu-latest
+      label: amd64
+      runtime: compose
+
+  test-amd64-k8s:
+    uses: ./.github/workflows/_run-dep-dlm-testbed.yml
+    with:
+      runner: ubuntu-latest
+      label: amd64
+      runtime: k8s
+
+  test-arm64-compose:
+    uses: ./.github/workflows/_run-dep-dlm-testbed.yml
+    with:
+      runner: ubuntu-24.04-arm
+      label: arm64
+      runtime: compose
+
+  test-arm64-k8s:
+    uses: ./.github/workflows/_run-dep-dlm-testbed.yml
+    with:
+      runner: ubuntu-24.04-arm
+      label: arm64
+      runtime: k8s
