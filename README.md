@@ -4,6 +4,10 @@ Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and OIDC prov
 
 ## Quick start
 
+The recommended setup is to use the provided [dev container](./.devcontainer/devcontainer.json). This requires:
+- [Docker](https://docs.docker.com/engine/install/) installed on your system
+- An IDE with dev container support (e.g. [VS Code with the devcontainer plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
+
 ### Docker Compose
 
 ```bash
