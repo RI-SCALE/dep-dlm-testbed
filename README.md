@@ -19,6 +19,9 @@ make compose-up
 
 # 3. Initialize DEP DLM testbed
 RUNTIME=compose make init
+
+# 4. Run transfer tests
+RUNTIME=compose make test-rucio-transfers
 ```
 
 ### Kubernetes
@@ -32,6 +35,9 @@ make helm-install
 
 # 3. Initialize DEP DLM testbed
 RUNTIME=k8s make init
+
+# 4. Run transfer tests
+RUNTIME=k8s make test-rucio-transfers
 ```
 
 ## Make Targets
@@ -60,6 +66,9 @@ Helm / Kubernetes lifecycle (helm-*, k8s-*)
   helm-upgrade               Apply local chart changes to the running release
   helm-uninstall             Uninstall the release and delete its PVCs
   helm-reinstall             Uninstall + install (full reset)
+
+Tests
+  test-rucio-transfers       Rucio E2E TPC transfer test
 
 Cleanup
   clean                      Remove generated certs and volumes; keep CA (rucio_ca.pem + key)

@@ -17,7 +17,7 @@ service:
 ftsdbHost: ftsdb
 
 # Optional MySQL StatefulSet co-located with the FTS server.
-# The umbrella enables one ftsdb per FTS instance (ftsdb, ftsdb-oidc).
+# The umbrella enables one ftsdb per FTS instance (ftsdb, ftsdb).
 ftsdb:
   enabled: false
   hostname: ftsdb
@@ -27,10 +27,12 @@ ftsdb:
 
 # Shared artifact sources (managed by umbrella chart)
 certsSecret: testbed-certs
-# Holds fts3config-oidc, fts3restconfig-oidc, gfal2_xrootd_plugin.conf
+# Holds fts3config, fts3restconfig, gfal2_xrootd_plugin.conf
 configsConfigMap: testbed-configs
 # Holds docker-entrypoint.sh and general scripts
 scriptsConfigMap: testbed-scripts
+# Holds fts/middleware.py and fts/openidconnect.py.
+patchesSecret: testbed-patches
 
 env:
   - name: REQUESTS_CA_BUNDLE

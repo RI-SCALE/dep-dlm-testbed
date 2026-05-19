@@ -13,6 +13,7 @@ service:
 certsSecret: testbed-certs
 configsConfigMap: testbed-configs
 scriptsConfigMap: testbed-scripts
+patchesSecret: testbed-patches
 
 certFiles:
   teapotcert: teapotcert.pem

@@ -8,7 +8,7 @@
       "ghcr.io/prulloac/devcontainer-features/pre-commit:1": {}
     },
     "forwardPorts": [
-        8447, 8449,
+        8446, 8449,
         3306,
         1096, 1097,
         8080, 8090, 8448

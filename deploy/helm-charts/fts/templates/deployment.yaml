@@ -82,6 +82,13 @@ spec:
             - name: scripts-fts
               mountPath: /docker-entrypoint.sh
               subPath: docker-entrypoint.sh
+            # Python patches for fts-rest-flask
+            - name: patches
+              mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py
+              subPath: fts--middleware.py
+            - name: patches
+              mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py
+              subPath: fts--openidconnect.py
           {{- if .Values.healthcheck.enabled }}
           readinessProbe:
             exec:
@@ -129,6 +136,9 @@ spec:
         - name: configs
           configMap:
             name: {{ .Values.configsConfigMap }}
+        - name: patches
+          secret:
+            secretName: {{ .Values.patchesSecret }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -15,6 +15,8 @@ helm-charts/
 │   │   ├── certs/    → ../../../certs
 │   │   ├── configs/  → ../../../shared/config
 │   │   └── scripts/  → ../../../shared/scripts
+│   │   └── tests/    → ../../../shared/tests
+│   │   └── patches/  → ../../../shared/patches
 │   └── templates/
 │       ├── certs-secret.yaml         # All host/CA certs as one Secret
 │       ├── configs-cm.yaml           # Shared config files as ConfigMap(s)
@@ -36,10 +38,12 @@ helm-charts/
 cd dep-dlm-testbed/files
 
 # Recreate corrected links (4 levels up to reach repo root)
-rm -f certs configs scripts
+rm -f certs configs scripts tests patches
 ln -s ../../../../certs certs
 ln -s ../../../../shared/config configs
 ln -s ../../../../shared/scripts scripts
+ln -s ../../../../shared/tests tests
+ln -s ../../../../shared/patches patches
 ```
 
 ## Quickstart

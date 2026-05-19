@@ -41,6 +41,12 @@ configs:
 scripts:
   create: true
   configMapName: testbed-scripts
+patches:
+  create: true
+  configMapName: testbed-patches
+tests:
+  create: true
+  configMapName: testbed-tests
 
 # DATABASES
 
@@ -107,6 +113,16 @@ rucio:
       volumeName: idpsecrets
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
+
+    # Python patches
+    - secretFullName: testbed-patches
+      volumeName: fts3-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
+      subPath: rucio--fts3.py
+    - secretFullName: testbed-patches
+      volumeName: constants-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
+      subPath: rucio--constants.py
 
 # FTS
 

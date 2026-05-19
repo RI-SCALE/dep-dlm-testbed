@@ -17,6 +17,13 @@ K8S_NAMESPACE ?= dep-dlm-testbed
 KUBECTL      := kubectl -n $(K8S_NAMESPACE)
 HELM         := helm
 
+# Execution wrappers based on RUNTIME (Defined after variables they depend on)
+ifeq ($(RUNTIME), k8s)
+  EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+else
+  EXEC_RUCIO := docker exec compose-rucio-client-1
+endif
+
 # ── Help ──────────────────────────────────────────────────────────────────
 .PHONY: help
 help: ## Show this help (default target)
@@ -95,6 +102,12 @@ helm-uninstall: ## Uninstall the release and delete its PVCs
 
 .PHONY: helm-reinstall
 helm-reinstall: helm-uninstall helm-install ## Uninstall + install (full reset)
+
+## Tests
+
+.PHONY: test-rucio-transfers
+test-rucio-transfers: ## Rucio E2E TPC transfer test
+	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 ## Cleanup
 

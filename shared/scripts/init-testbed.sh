@@ -226,8 +226,9 @@ setup_scopes_and_quotas() {
     done
 
     for rse in TEAPOT1 TEAPOT2; do
+        ra account set-limits root "$rse" -1 || true
         ra account set-limits randomaccount "$rse" -1 || true
-        ra account set-limits ddmlab "$rse" -1 || true
+        ra account set-limits ddmlab "$rse" -1 || true   # ← add this
     done
 }
 

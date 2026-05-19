@@ -1,7 +1,7 @@
 image:
-  repository: rucio/rucio-clients
-  tag: ""
-  digest: sha256:d03fd88c2b6fe50a64a95cc7001486208aa115e3997658359158746eb178cc1d
+  repository: mgajekcern/rucio-client-docker-kubectl
+  tag: "latest"
+  digest: ""
   pullPolicy: IfNotPresent
 
 fullnameOverride: rucio-client
@@ -28,6 +28,8 @@ certsSecret: testbed-certs
 configsConfigMap: testbed-configs
 # Contains general scripts (init-testbed.sh, etc.)
 scriptsConfigMap: testbed-scripts
+# Contains all test scripts
+testsConfigMap: testbed-tests
 
 resources: {}
 
