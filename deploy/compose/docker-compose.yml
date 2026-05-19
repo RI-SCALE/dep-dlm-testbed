@@ -1,0 +1,308 @@
+services:
+  xrd3:
+    image: rucio/test-xrootd@sha256:27d212ec136d6d2ed7029fc445384053acb551805060cae554597a32e6361df4
+    hostname: xrd3
+    environment:
+      - XRDPORT=1094
+    ports:
+      - "1096:1094"
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/certs/xrd3cert.pem:/tmp/xrdcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/xrd3key.pem:/tmp/xrdkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+
+  xrd4:
+    image: rucio/test-xrootd@sha256:27d212ec136d6d2ed7029fc445384053acb551805060cae554597a32e6361df4
+    hostname: xrd4
+    environment:
+      - XRDPORT=1094
+    ports:
+      - "1097:1094"
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/certs/xrd4cert.pem:/tmp/xrdcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/xrd4key.pem:/tmp/xrdkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+
+  ftsdb:
+    image: mysql:8
+    hostname: ftsdb
+    environment:
+      - MYSQL_USER=fts
+      - MYSQL_PASSWORD=fts
+      - MYSQL_ROOT_PASSWORD=fts
+      - MYSQL_DATABASE=fts
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ftsdb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ufts", "-pfts"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  fts:
+    build:
+      context: ${TESTBED_HOST_SOURCE}
+      dockerfile: deploy/compose/Dockerfile.fts
+    hostname: fts
+    environment:
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+      - SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+    ports:
+      - "8447:8446"
+    depends_on:
+      ftsdb:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3config:/etc/fts3/fts3config:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3restconfig:/etc/fts3/fts3restconfig:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    entrypoint:
+      - bash
+      - -c
+      - |
+        /docker-entrypoint.sh
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:8446/whoami"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 20
+
+  teapot1:
+    build:
+      context: ${TESTBED_HOST_SOURCE}
+      dockerfile: deploy/compose/Dockerfile.teapot
+    platform: linux/amd64
+    hostname: teapot1
+    ports:
+      - "8081:8081"
+    depends_on:
+      - keycloak
+    networks:
+      - dep-dlm-testbed
+    environment:
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/teapot1cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/teapot1key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - teapot1-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:8081/docs", "-o", "/dev/null", "-w", "%{http_code}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  teapot2:
+    build:
+      context: ${TESTBED_HOST_SOURCE}
+      dockerfile: deploy/compose/Dockerfile.teapot
+    platform: linux/amd64
+    hostname: teapot2
+    ports:
+      - "8082:8081"
+    depends_on:
+      - keycloak
+    networks:
+      - dep-dlm-testbed
+    environment:
+      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/teapot2cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/teapot2key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
+      - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - teapot2-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:8081/docs", "-o", "/dev/null", "-w", "%{http_code}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.1
+    hostname: keycloak
+    command:
+      - start-dev
+      - --features=token-exchange
+      - --health-enabled=true
+      - --import-realm
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      # HTTPS configuration — the issuer claim in JWTs will use this.
+      - KC_HTTPS_CERTIFICATE_FILE=/etc/x509/https/keycloakcert.pem
+      - KC_HTTPS_CERTIFICATE_KEY_FILE=/etc/x509/https/keycloakkey.pem
+      - KC_HOSTNAME=keycloak
+      - KC_HOSTNAME_STRICT=false
+      - KC_HOSTNAME_STRICT_HTTPS=false
+      # Keep HTTP enabled too so old healthchecks / dev tools still work
+      # during the migration. Remove this once everything is on HTTPS.
+      - KC_HTTP_ENABLED=true
+    ports:
+      - "8080:8080"
+      - "8448:8443"
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - ${TESTBED_HOST_SOURCE}/certs/keycloakcert.pem:/etc/x509/https/keycloakcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/keycloakkey.pem:/etc/x509/https/keycloakkey.pem:ro
+
+  ruciodb:
+    image: postgres:14
+    hostname: ruciodb
+    environment:
+      - POSTGRES_USER=rucio
+      - POSTGRES_PASSWORD=rucio
+      - POSTGRES_DB=rucio
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ruciodb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rucio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rucio:
+    image: rucio/rucio-server@sha256:0d81e6c85616106443814a9c3193e13452da6a36de3d4569a7c9ca2d94db62b1
+    hostname: rucio
+    environment:
+      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+    ports:
+      - "8090:80"
+    depends_on:
+      ruciodb:
+        condition: service_healthy
+      fts:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    networks:
+      - dep-dlm-testbed
+    entrypoint:
+      - bash
+      - -c
+      - |
+        python3 /scripts/rucio/bootstrap-db.py &&
+        exec /docker-entrypoint.sh httpd -DFOREGROUND
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/ping"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 20
+
+  rucio-client:
+    image: rucio/rucio-clients@sha256:d03fd88c2b6fe50a64a95cc7001486208aa115e3997658359158746eb178cc1d
+    hostname: rucio-client
+    depends_on:
+      rucio:
+        condition: service_healthy
+    networks:
+      - dep-dlm-testbed
+    environment:
+      - RUCIO_CFG_CLIENT_RUCIO_HOST=http://rucio
+      - RUCIO_CFG_CLIENT_AUTH_HOST=http://rucio
+      - RUCIO_CFG_CLIENT_AUTH_TYPE=userpass
+      - RUCIO_CFG_CLIENT_USERNAME=ddmlab
+      - RUCIO_CFG_CLIENT_PASSWORD=secret
+      - RUCIO_CFG_CLIENT_ACCOUNT=root
+      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/userpass-client.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client-for-rucio.cfg:/opt/rucio/etc/userpass-client-for-rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - /bin/bash
+      - -c
+      - |
+        pip install --no-cache-dir \
+          --trusted-host pypi.org \
+          --trusted-host pypi.python.org \
+          --trusted-host files.pythonhosted.org \
+          pytest &&
+        sleep infinity
+
+networks:
+  dep-dlm-testbed:
+    name: compose-net
+
+volumes:
+  ruciodb-data:
+  ftsdb-data:
+  teapot1-data:
+  teapot2-data:
