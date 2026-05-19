@@ -157,3 +157,89 @@ class TestTeapotOIDC:
         # Advance conveyor pipeline and poll until done
         run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "TEAPOT1→TEAPOT2 WebDAV OIDC", RUCIO_SVC)
+
+
+# ── Cross-protocol: XRootD SciTokens ↔ Teapot WebDAV ─────────────────────
+
+
+class TestCrossProtocolOIDC:
+    """
+    Cross-protocol OIDC TPC via FTS OIDC.
+
+    These tests exercise FTS obtaining tokens for two different audiences
+    simultaneously:
+      - XRD3 audience:    https://xrd3:1094  (SciTokens)
+      - TEAPOT1 audience: teapot             (WebDAV bearer)
+
+    FTS uses the t_token_provider Keycloak entry to perform token exchange
+    for each endpoint independently. The HTTP COPY is still davs:// on both
+    sides since XRootD exposes HTTP on port 1094. This is the first validation
+    of cross-protocol cross-audience TPC in the dep-dlm-testbed.
+    """
+
+    def test_xrd3_to_teapot1(self, rucio_client, oidc_token, teapots_ready):
+        """XRD3 (SciTokens) → TEAPOT1 (WebDAV): seed via xrd3 exec, dest via Teapot."""
+        name = f"xrd-to-teapot-{int(time.time())}"
+        log.info("[ XRD3 → TEAPOT1  name=%s ]", name)
+
+        # Compute PFNs
+        src_pfn = compute_pfn(rucio_client, "XRD3", SCOPE, name)
+        dst_pfn = compute_pfn(rucio_client, "TEAPOT1", SCOPE, name)
+        log.info("  src PFN: %s", src_pfn)
+        log.info("  dst PFN: %s", dst_pfn)
+
+        # Seed source file inside the xrd3 container
+        size, adler32 = seed_xrd("xrd3", src_pfn)
+        log.info("  seeded %d bytes  adler32=%s", size, adler32)
+
+        # Register replica and create replication rule
+        register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
+        rule_id = add_rule(rucio_client, SCOPE, name, "TEAPOT1")
+
+        # Advance conveyor pipeline and poll until done
+        run_daemons(RUCIO_SVC)
+        validate_rule(rucio_client, rule_id, "XRD3→TEAPOT1 cross-protocol", RUCIO_SVC)
+
+    def test_teapot1_to_xrd3(self, rucio_client, oidc_token, teapots_ready):
+        """TEAPOT1 (WebDAV) → XRD3 (SciTokens): seed via WebDAV PUT, dest via xrd3 exec."""
+        name = f"teapot-to-xrd-{int(time.time())}"
+        seed_content = b"rucio-teapot-to-xrd-test\n"
+        log.info("[ TEAPOT1 → XRD3  name=%s ]", name)
+
+        # Compute PFNs
+        src_pfn = compute_pfn(rucio_client, "TEAPOT1", SCOPE, name)
+        dst_pfn = compute_pfn(rucio_client, "XRD3", SCOPE, name)
+        log.info("  src PFN: %s", src_pfn)
+        log.info("  dst PFN: %s", dst_pfn)
+
+        # Seed via authenticated WebDAV PUT
+        src_path = urlparse(src_pfn).path
+        webdav_delete(f"{TEAPOT1_URL}{src_path}", oidc_token)
+        resp = webdav_put(f"{TEAPOT1_URL}{src_path}", oidc_token, seed_content)
+        assert resp.status_code in {200, 201, 204}, (
+            f"Seed PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
+        )
+        log.info("  ✓ Seeded via WebDAV PUT (HTTP %s)", resp.status_code)
+
+        verify = webdav_get(f"{TEAPOT1_URL}{src_path}", oidc_token)
+        assert verify.status_code == 200, (
+            f"Seed not readable: GET {TEAPOT1_URL}{src_path} → HTTP {verify.status_code}"
+        )
+        log.info("  ✓ Seed confirmed readable (HTTP 200)")
+
+        # Pre-create destination directory on xrd3
+        prepare_xrd_dest("xrd3", dst_pfn)
+
+        # Compute checksum locally
+        adler32 = binascii.hexlify(
+            zlib.adler32(seed_content).to_bytes(4, "big")
+        ).decode()
+        size = len(seed_content)
+
+        # Register replica and create replication rule
+        register_replica(rucio_client, "TEAPOT1", SCOPE, name, src_pfn, size, adler32)
+        rule_id = add_rule(rucio_client, SCOPE, name, "XRD3")
+
+        # Advance conveyor pipeline and poll until done
+        run_daemons(RUCIO_SVC)
+        validate_rule(rucio_client, rule_id, "TEAPOT1→XRD3 cross-protocol", RUCIO_SVC)

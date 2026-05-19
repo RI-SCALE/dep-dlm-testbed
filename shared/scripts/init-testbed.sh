@@ -176,6 +176,9 @@ configure_rses() {
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+
+    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
+    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
 }
 
 # ── FTS OIDC Provider Registration ───────────────────────────────
