@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# generate-certs.sh — generate all runtime certificates and Java truststores
-# Run from repo root. Requires certs/rucio_ca.pem and certs/rucio_ca.key.pem.
+# generate-certs.sh — generate all runtime certificates
 
 set -euo pipefail
 
