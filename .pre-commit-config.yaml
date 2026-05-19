@@ -35,3 +35,4 @@ repos:
     hooks:
       - id: shellcheck
         files: ^shared/scripts/.*\.sh$
+        exclude: ^shared/scripts/fts/wait-for-it\.sh$

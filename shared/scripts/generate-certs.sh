@@ -6,7 +6,6 @@ set -euo pipefail
 
 # ── Global Config ───────────────────────────────────────────────────────────
 CERTS="certs"
-STORM_IMAGE="ghcr.io/italiangrid/storm-webdav:v1.12.0"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
