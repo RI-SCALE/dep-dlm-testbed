@@ -57,3 +57,42 @@ Helm / Kubernetes lifecycle (helm-*)
 Cleanup
   clean                      Remove generated certs and volumes; keep CA (rucio_ca.pem + key)
 ```
+
+## High Level Flow
+
+The testbed exclusively supports the OIDC Token Flow, which is used for StoRM WebDAV and XRootD SciTokens integration.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant KC as Keycloak (IdP)
+    participant RS as Rucio (OIDC)
+    participant FTS as FTS3 (OIDC)
+    participant SE as Storage (Bearer Auth)
+
+    User->>KC: Login (Get JWT)
+    User->>RS: Add Rule + JWT
+
+    NOTE over RS: Conveyor identifies need for transfer
+    RS->>KC: Request FTS-audience token (f)
+    KC-->>RS: Token f
+    RS->>KC: Request source RSE token (s)
+    KC-->>RS: Token s
+    RS->>KC: Request destination RSE token (d)
+    KC-->>RS: Token d
+
+    RS->>FTS: Submit transfer + tokens (f, s, d)
+
+    NOTE over FTS,KC: FTS refreshes s and d<br/>for the job lifetime
+    FTS->>KC: Refresh token s
+    KC-->>FTS: Renewed s
+    FTS->>KC: Refresh token d
+    KC-->>FTS: Renewed d
+
+    FTS->>SE: TPC Request + tokens s, d
+    SE->>KC: Validate token (Introspection/JWKS)
+    SE-->>FTS: Transfer Started
+```
+
+> Token orchestration follows the design described in [Rucio Token Workflow Evolution](https://rucio.cern.ch/documentation/files/Rucio_Tokens_v0.1.pdf). Rucio acquires separate tokens for FTS authentication and for source/destination storage access, then bundles all three into the FTS submission. FTS is responsible only for refreshing the storage-scoped tokens during the transfer lifetime.
