@@ -26,7 +26,7 @@ env:
 certsSecret: testbed-certs
 # Contains userpass-client.cfg and userpass-client.cfg
 configsConfigMap: testbed-configs
-# Contains general scripts (bootstrap-testbed.sh, etc.)
+# Contains general scripts (init-testbed.sh, etc.)
 scriptsConfigMap: testbed-scripts
 
 resources: {}

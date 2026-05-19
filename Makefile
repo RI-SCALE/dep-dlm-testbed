@@ -30,9 +30,9 @@ help: ## Show this help (default target)
 certs: ## Generate certificates (e.g. CA, hosts)
 	./shared/scripts/generate-certs.sh
 
-# .PHONY: bootstrap
-# bootstrap: ## Bootstrap DEP DLM testbed
-# 	./shared/scripts/bootstrap-testbed.sh
+.PHONY: init
+init: ## Initialize DEP DLM testbed (uses $RUNTIME — set RUNTIME=k8s for kubernetes)
+	./shared/scripts/init-testbed.sh
 
 ## Docker Compose lifecycle (compose-*)
 

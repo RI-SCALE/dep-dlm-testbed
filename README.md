@@ -16,6 +16,9 @@ make certs
 
 # 2. Start the stack
 make compose-up
+
+# 3. Initialize DEP DLM testbed
+RUNTIME=compose make init
 ```
 
 ### Kubernetes
@@ -26,6 +29,9 @@ make certs
 
 # 2. Install the Helm chart
 make helm-install
+
+# 3. Initialize DEP DLM testbed
+RUNTIME=k8s make init
 ```
 
 ## Make Targets
@@ -35,6 +41,7 @@ make helm-install
 
 Setup
   certs                      Generate certificates (e.g. CA, hosts)
+  init                       Initialize DEP DLM testbed (uses $RUNTIME — set RUNTIME=k8s for kubernetes)
 
 Docker Compose lifecycle (compose-*)
   compose-up                 Start the full stack in the background
@@ -46,7 +53,7 @@ Docker Compose lifecycle (compose-*)
   compose-logs-%             Tail logs from a single service, e.g. `make compose-logs-rucio`
   compose-build              Build local Docker images (e.g. fts, teapot)
 
-Helm / Kubernetes lifecycle (helm-*)
+Helm / Kubernetes lifecycle (helm-*, k8s-*)
   helm-lint                  Lint the umbrella chart
   helm-template              Render manifests locally (helm template …) without installing
   helm-install               Create the namespace and install the umbrella chart
