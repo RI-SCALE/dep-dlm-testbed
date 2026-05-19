@@ -34,7 +34,7 @@ certs: ## Generate certificates (e.g. CA, hosts)
 # bootstrap: ## Bootstrap DEP DLM testbed
 # 	./shared/scripts/bootstrap-testbed.sh
 
-## Stack lifecycle (compose-*)
+## Docker Compose lifecycle (compose-*)
 
 .PHONY: compose-up
 compose-up: ## Start the full stack in the background
