@@ -4,6 +4,7 @@ conftest.py — shared fixtures and helpers for dep-dlm-testbed OIDC transfer te
 Covers XRootD SciTokens (xrd3/xrd4) and Teapot WebDAV (teapot1/teapot2).
 Runtime-agnostic: respects $RUNTIME (compose | k8s, default compose).
 """
+
 import logging
 import os
 import subprocess
@@ -26,23 +27,21 @@ K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "dep-dlm-testbed")
 
 # Maps service name → (k8s resource kind, container name or None)
 K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
-    "rucio":        ("deploy", "rucio"),
-    "fts":          ("deploy", None),
-    "ftsdb":        ("statefulset", None),
-    "xrd3":         ("deploy", None),
-    "xrd4":         ("deploy", None),
-    "teapot1":      ("deploy", None),
-    "teapot2":      ("deploy", None),
-    "keycloak":     ("deploy", None),
-    "ruciodb":      ("statefulset", None),
+    "rucio": ("deploy", "rucio"),
+    "fts": ("deploy", None),
+    "ftsdb": ("statefulset", None),
+    "xrd3": ("deploy", None),
+    "xrd4": ("deploy", None),
+    "teapot1": ("deploy", None),
+    "teapot2": ("deploy", None),
+    "keycloak": ("deploy", None),
+    "ruciodb": ("statefulset", None),
     "rucio-client": ("deploy", None),
 }
 
 # ── Service constants ─────────────────────────────────────────────────────
 
-KEYCLOAK_TOKEN_URL = (
-    "https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
-)
+KEYCLOAK_TOKEN_URL = "https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
 TEAPOT1_URL = "https://teapot1:8081"
 TEAPOT2_URL = "https://teapot2:8081"
 
@@ -51,6 +50,7 @@ CFG_RUCIO = "/opt/rucio/etc/rucio.cfg"
 
 
 # ── Container exec ────────────────────────────────────────────────────────
+
 
 def svc_exec(svc: str, cmd: list, user: str = None) -> bytes:
     """Run a command inside a service container (compose or k8s)."""
@@ -81,7 +81,8 @@ def svc_exec(svc: str, cmd: list, user: str = None) -> bytes:
 
 # ── Rucio client (Python API) ─────────────────────────────────────────────
 
-def make_client() -> "Client":
+
+def make_client():
     """Build a Rucio Python client from the mounted config."""
     from rucio.client import Client
     from rucio.common.config import get_config
@@ -103,6 +104,7 @@ def make_client() -> "Client":
 
 # ── PFN computation ───────────────────────────────────────────────────────
 
+
 def compute_pfn(client, rse: str, scope: str, name: str) -> str:
     """Compute the write PFN for a DID on a given RSE."""
     from rucio.rse import rsemanager as rsemgr
@@ -119,16 +121,32 @@ def compute_pfn(client, rse: str, scope: str, name: str) -> str:
 
 # ── Rucio rule helpers ────────────────────────────────────────────────────
 
+
 def register_replica(
     client, rse: str, scope: str, name: str, pfn: str, size: int, adler32: str
 ) -> None:
     from rucio.common.exception import Duplicate, RucioException
 
-    log.info("  Registering %s:%s @ %s (bytes=%d adler32=%s)", scope, name, rse, size, adler32)
+    log.info(
+        "  Registering %s:%s @ %s (bytes=%d adler32=%s)",
+        scope,
+        name,
+        rse,
+        size,
+        adler32,
+    )
     try:
         client.add_replicas(
             rse=rse,
-            files=[{"scope": scope, "name": name, "bytes": size, "adler32": adler32, "pfn": pfn}],
+            files=[
+                {
+                    "scope": scope,
+                    "name": name,
+                    "bytes": size,
+                    "adler32": adler32,
+                    "pfn": pfn,
+                }
+            ],
         )
     except Duplicate:
         log.warning("  Replica %s:%s already exists at %s", scope, name, rse)
@@ -156,7 +174,10 @@ def run_daemons(rucio_svc: str = "rucio") -> None:
         log.info("  → %s %s", rucio_svc, " ".join(daemon))
         out = svc_exec(rucio_svc, daemon)
         for line in out.decode(errors="replace").splitlines():
-            if any(k in line.lower() for k in ("warning", "error", "failed", "submit", "checksum")):
+            if any(
+                k in line.lower()
+                for k in ("warning", "error", "failed", "submit", "checksum")
+            ):
                 log.info("    | %s", line)
 
 
@@ -181,12 +202,15 @@ def validate_rule(
             time.sleep(2)
             continue
 
-        ok   = rule["locks_ok_cnt"]
+        ok = rule["locks_ok_cnt"]
         repl = rule["locks_replicating_cnt"]
-        stk  = rule["locks_stuck_cnt"]
+        stk = rule["locks_stuck_cnt"]
         log.info(
             "  state=%-12s  OK=%-3d REPL=%-3d STUCK=%-3d",
-            rule.get("state", "?"), ok, repl, stk,
+            rule.get("state", "?"),
+            ok,
+            repl,
+            stk,
         )
 
         if stk > 0:
@@ -206,6 +230,7 @@ def validate_rule(
 
 
 # ── XRootD filesystem seeding (via container exec) ────────────────────────
+
 
 def seed_xrd(svc: str, pfn: str) -> tuple[int, str]:
     """
@@ -239,6 +264,7 @@ def prepare_xrd_dest(svc: str, pfn: str) -> None:
 
 # ── Keycloak token helpers ────────────────────────────────────────────────
 
+
 def fetch_token_password(
     url: str,
     client_id: str,
@@ -249,7 +275,12 @@ def fetch_token_password(
 ) -> str:
     resp = requests.post(
         url,
-        data={"grant_type": "password", "username": username, "password": password, "scope": scope},
+        data={
+            "grant_type": "password",
+            "username": username,
+            "password": password,
+            "scope": scope,
+        },
         auth=(client_id, client_secret),
         verify=False,
         timeout=10,
@@ -260,7 +291,10 @@ def fetch_token_password(
 
 # ── WebDAV helpers ────────────────────────────────────────────────────────
 
-def webdav_put(url: str, token: str, content: bytes, timeout: int = 30) -> requests.Response:
+
+def webdav_put(
+    url: str, token: str, content: bytes, timeout: int = 30
+) -> requests.Response:
     return requests.put(
         url,
         headers={"Authorization": f"Bearer {token}"},
@@ -288,7 +322,9 @@ def webdav_delete(url: str, token: str, timeout: int = 30) -> requests.Response:
     )
 
 
-def webdav_propfind(url: str, token: str, depth: str = "1", timeout: int = 240) -> requests.Response:
+def webdav_propfind(
+    url: str, token: str, depth: str = "1", timeout: int = 240
+) -> requests.Response:
     return requests.request(
         "PROPFIND",
         url,
@@ -298,8 +334,14 @@ def webdav_propfind(url: str, token: str, depth: str = "1", timeout: int = 240) 
     )
 
 
-def webdav_warm_up(base_url: str, path: str, label: str, token: str,
-                   retries: int = 6, interval: int = 10) -> None:
+def webdav_warm_up(
+    base_url: str,
+    path: str,
+    label: str,
+    token: str,
+    retries: int = 6,
+    interval: int = 10,
+) -> None:
     """
     Trigger Teapot's per-user Storm-WebDAV JVM cold start via PROPFIND.
     Blocks until HTTP 207 or raises AssertionError.
@@ -312,7 +354,13 @@ def webdav_warm_up(base_url: str, path: str, label: str, token: str,
         if resp.status_code == 207:
             log.info("  ✓ %s Storm-WebDAV ready (HTTP 207)", label)
             return
-        log.info("  [%d] %s returned HTTP %s — retrying in %ds", attempt, label, resp.status_code, interval)
+        log.info(
+            "  [%d] %s returned HTTP %s — retrying in %ds",
+            attempt,
+            label,
+            resp.status_code,
+            interval,
+        )
         time.sleep(interval)
     raise AssertionError(
         f"{label} warm-up failed after {retries} attempts "
@@ -321,6 +369,7 @@ def webdav_warm_up(base_url: str, path: str, label: str, token: str,
 
 
 # ── Session-scoped fixtures ───────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def rucio_client():

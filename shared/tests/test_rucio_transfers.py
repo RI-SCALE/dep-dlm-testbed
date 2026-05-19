@@ -48,6 +48,7 @@ RUCIO_SVC = "rucio"
 
 # ── XRootD SciTokens: XRD3 → XRD4 ───────────────────────────────────────
 
+
 class TestXRootDOIDC:
     """
     XRootD SciTokens TPC via FTS OIDC.
@@ -96,6 +97,7 @@ class TestXRootDOIDC:
 
 # ── Teapot WebDAV: TEAPOT1 → TEAPOT2 ─────────────────────────────────────
 
+
 class TestTeapotOIDC:
     """
     Teapot WebDAV OIDC TPC via FTS OIDC.
@@ -123,7 +125,7 @@ class TestTeapotOIDC:
         log.info("  dst PFN: %s", dst_pfn)
 
         # Derive the WebDAV path from the PFN
-        src_path = urlparse(src_pfn).path   # e.g. /data/ddmlab/ab/cd/teapot-...
+        src_path = urlparse(src_pfn).path  # e.g. /data/ddmlab/ab/cd/teapot-...
 
         # Clean up any stale file from a previous run
         webdav_delete(f"{TEAPOT1_URL}{src_path}", oidc_token)

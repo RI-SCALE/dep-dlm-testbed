@@ -143,7 +143,8 @@ configure_rses() {
 
     # XRootD SciTokens instances
     for rse in XRD3 XRD4; do
-        local host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
+        local host
+        host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
@@ -160,7 +161,8 @@ configure_rses() {
 
     # Teapot WebDAV instances
     for rse in TEAPOT1 TEAPOT2; do
-        local instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
+        local instance
+        instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
