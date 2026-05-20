@@ -372,3 +372,8 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+lifecycle: {}
+  # postStart:
+  #   exec:
+  #     command: ["/bin/sh", "-c", "echo postStart hook"]

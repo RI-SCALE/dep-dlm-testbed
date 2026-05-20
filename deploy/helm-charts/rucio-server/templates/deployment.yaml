@@ -284,6 +284,10 @@ spec:
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+{{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
           env:
             {{- range $key, $val := .Values.httpd_config }}
             - name: RUCIO_HTTPD_{{ $key | upper }}

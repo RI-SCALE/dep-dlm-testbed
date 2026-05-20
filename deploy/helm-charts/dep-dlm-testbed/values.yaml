@@ -82,6 +82,17 @@ rucio:
     targetPort: 80
   useDeprecatedImplicitSecrets: false
 
+  lifecycle:
+    postStart:
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - |
+            dnf -y install yum-utils epel-release.noarch &&
+            dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
+              python3-gfal2-util gfal2-plugin-http --skip-broken ||
+            echo "gfal2 install failed"
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
       value: /etc/grid-security/certificates/rucio_ca.pem

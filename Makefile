@@ -109,6 +109,10 @@ helm-reinstall: helm-uninstall helm-install ## Uninstall + install (full reset)
 test-rucio-transfers: ## Rucio E2E TPC transfer test
 	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
+.PHONY: test-rucio-deletion
+test-rucio-deletion: ## Rucio E2E deletion test
+	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+
 ## Cleanup
 
 .PHONY: clean

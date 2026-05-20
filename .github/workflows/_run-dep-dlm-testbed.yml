@@ -56,6 +56,25 @@ jobs:
           kubectl create namespace dep-dlm-testbed
           make helm-install
 
+      - name: Wait for rucio server ready (k8s)
+        if: inputs.runtime == 'k8s'
+        run: |
+          kubectl -n dep-dlm-testbed rollout status deploy/rucio --timeout=300s
+          # Wait for postStart gfal2 install to complete before running tests.
+          # The postStart hook runs asynchronously alongside httpd; rollout status
+          # only confirms httpd readiness, not hook completion.
+          echo "Waiting for gfal2 to be available in rucio container..."
+          for i in $(seq 1 24); do
+            kubectl -n dep-dlm-testbed exec deploy/rucio -c rucio -- \
+              python3 -c "import gfal2" 2>/dev/null && \
+              { echo "gfal2 ready"; exit 0; }
+            echo "  [$i] gfal2 not yet available, waiting 10s..."
+            sleep 10
+          done
+          echo "ERROR: gfal2 not available after 240s — postStart hook may have failed"
+          kubectl -n dep-dlm-testbed describe pod -l app=rucio | grep -A 5 "Events:"
+          exit 1
+
       - name: Initialize DE DLM testbed
         run: make init
 
@@ -119,6 +138,9 @@ jobs:
 
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
+
+      - name: Rucio E2E deletion test
+        run: make test-rucio-deletion
 
       # Diagnostics
       - name: Dump logs on failure (compose)

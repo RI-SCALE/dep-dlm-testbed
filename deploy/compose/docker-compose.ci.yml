@@ -241,6 +241,8 @@ services:
       - -c
       - |
         python3 /scripts/rucio/bootstrap-db.py &&
+        dnf -y install yum-utils epel-release.noarch &&
+        dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.cfg:/opt/rucio/etc/rucio.cfg:ro
