@@ -31,8 +31,10 @@ from conftest import (
     add_rule,
     compute_pfn,
     prepare_xrd_dest,
+    prepare_xrd_dest_files,
     register_replica,
     run_daemons,
+    seed_and_register_files,
     seed_xrd,
     validate_rule,
     webdav_delete,
@@ -243,3 +245,63 @@ class TestCrossProtocolOIDC:
         # Advance conveyor pipeline and poll until done
         run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "TEAPOT1→XRD3 cross-protocol", RUCIO_SVC)
+
+
+# ── Dataset operations: XRD3 ──────────────────────────────────────────────
+
+
+class TestDatasetOIDC:
+    """
+    Rucio dataset registration and replication via XRD3→XRD4 (OIDC).
+
+    Demonstrates the two dataset population patterns:
+      - add_dataset: atomically create a dataset with its initial replicas
+      - add_files_to_dataset: extend an existing dataset with new replicas
+    """
+
+    def test_add_dataset(self, rucio_client):
+        """Register two files into a new dataset on XRD3, replicate to XRD4."""
+        ts = int(time.time())
+        dataset = f"oidc-dataset-{ts}"
+        names = [f"{dataset}-file1", f"{dataset}-file2"]
+        log.info("[ add_dataset: XRD3 (seed 2 files) → XRD4 ]")
+
+        registered = seed_and_register_files(rucio_client, "XRD3", SCOPE, names, "xrd3")
+        prepare_xrd_dest_files(rucio_client, "XRD4", "xrd4", SCOPE, names)
+
+        log.info(
+            "  Creating dataset %s:%s with %d files", SCOPE, dataset, len(registered)
+        )
+        rucio_client.add_dataset(
+            scope=SCOPE, name=dataset, rse="XRD3", files=registered
+        )
+        log.info("  ✓ Dataset registered")
+
+        rule_id = add_rule(rucio_client, SCOPE, dataset, "XRD4")
+        run_daemons(RUCIO_SVC)
+        validate_rule(rucio_client, rule_id, "add_dataset XRD3→XRD4", RUCIO_SVC)
+
+    def test_add_files_to_dataset(self, rucio_client):
+        """Append two files to an existing dataset on XRD3, replicate to XRD4."""
+        ts = int(time.time())
+        dataset = f"oidc-existing-dataset-{ts}"
+        names = [f"{dataset}-v2-file1", f"{dataset}-v2-file2"]
+        log.info("[ add_files_to_dataset: extend existing dataset → XRD4 ]")
+
+        rucio_client.add_dataset(scope=SCOPE, name=dataset)
+        log.info("  Created empty dataset %s:%s", SCOPE, dataset)
+
+        registered = seed_and_register_files(rucio_client, "XRD3", SCOPE, names, "xrd3")
+        prepare_xrd_dest_files(rucio_client, "XRD4", "xrd4", SCOPE, names)
+
+        log.info("  Appending %d files to %s:%s", len(registered), SCOPE, dataset)
+        rucio_client.add_files_to_dataset(
+            scope=SCOPE, name=dataset, rse="XRD3", files=registered
+        )
+        log.info("  ✓ Files appended")
+
+        rule_id = add_rule(rucio_client, SCOPE, dataset, "XRD4")
+        run_daemons(RUCIO_SVC)
+        validate_rule(
+            rucio_client, rule_id, "add_files_to_dataset XRD3→XRD4", RUCIO_SVC
+        )

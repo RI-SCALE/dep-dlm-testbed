@@ -262,6 +262,40 @@ def prepare_xrd_dest(svc: str, pfn: str) -> None:
     svc_exec(svc, ["sh", "-c", script], user="root")
 
 
+def seed_and_register_files(
+    client,
+    rse: str,
+    scope: str,
+    names: list[str],
+    seed_svc: str,
+) -> list[dict]:
+    """Seed files into an XRootD RSE and return Rucio replica dicts."""
+    registered = []
+    for name in names:
+        pfn = compute_pfn(client, rse, scope, name)
+        size, adler32 = seed_xrd(seed_svc, pfn)
+        registered.append(
+            {
+                "scope": scope,
+                "name": name,
+                "bytes": size,
+                "adler32": adler32,
+                "pfn": pfn,
+            }
+        )
+        log.info("  seeded %s:%s → %s", scope, name, pfn)
+    return registered
+
+
+def prepare_xrd_dest_files(
+    client, rse: str, svc: str, scope: str, names: list[str]
+) -> None:
+    """Pre-create destination directories on an XRootD RSE for a list of DIDs."""
+    for name in names:
+        pfn = compute_pfn(client, rse, scope, name)
+        prepare_xrd_dest(svc, pfn)
+
+
 # ── Keycloak token helpers ────────────────────────────────────────────────
 
 
