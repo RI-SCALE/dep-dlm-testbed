@@ -44,7 +44,7 @@ make helm-install
 # 3. Initialize DEP DLM testbed
 RUNTIME=k8s make init
 
-# 4. Run transfer tests
+# 4. Run tests
 RUNTIME=k8s make test-rucio-transfers
 RUNTIME=k8s make test-rucio-deletion
 
