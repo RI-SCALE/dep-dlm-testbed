@@ -1,42 +1,59 @@
 # High-Level flows
 
-## OIDC Token Flow
+## OIDC TPC Transfer Flow
 
 The testbed exclusively supports token-based authentication. The sequence
 below shows how Rucio, FTS3 and the storage endpoints coordinate token
-acquisition and refresh for a single third-party copy (TPC) transfer.
+acquisition and refresh for a single third-party copy (TPC) transfer,
+including the Rucio conveyor daemons that drive the pipeline.
+
+Exercised by [test_rucio_transfers.py](../shared/tests/test_rucio_transfers.py):
+`add_replication_rule` → judge-evaluator → conveyor-submitter → conveyor-poller
+→ conveyor-finisher → rule state OK.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User
     participant KC as Keycloak (IdP)
-    participant RS as Rucio (OIDC)
+    participant RS as Rucio
+    participant JE as Judge-Evaluator
+    participant CS as Conveyor-Submitter
+    participant CP as Conveyor-Poller
+    participant CF as Conveyor-Finisher
     participant FTS as FTS3 (OIDC)
     participant SE as Storage (Bearer Auth)
 
-    User->>KC: Login (Get JWT)
-    User->>RS: Add Rule + JWT
+    User->>RS: add_replication_rule(did, rse_expression)
+    NOTE over RS: Rule created in REPLICATING state
 
-    NOTE over RS: Conveyor identifies need for transfer
-    RS->>KC: Request FTS-audience token (f)
-    KC-->>RS: Token f
-    RS->>KC: Request source RSE token (s)
-    KC-->>RS: Token s
-    RS->>KC: Request destination RSE token (d)
-    KC-->>RS: Token d
+    JE->>RS: Evaluate rule → create transfer request
+    RS-->>JE: Request queued
 
-    RS->>FTS: Submit transfer + tokens (f, s, d)
+    CS->>RS: Fetch queued transfer requests
+    CS->>KC: Request FTS-audience token (f)
+    KC-->>CS: Token f
+    CS->>KC: Request source RSE token (s)
+    KC-->>CS: Token s
+    CS->>KC: Request destination RSE token (d)
+    KC-->>CS: Token d
+    CS->>FTS: Submit transfer job + tokens (f, s, d)
+    FTS-->>CS: Job ID
 
     NOTE over FTS,KC: FTS refreshes s and d<br/>for the job lifetime
     FTS->>KC: Refresh token s
     KC-->>FTS: Renewed s
     FTS->>KC: Refresh token d
     KC-->>FTS: Renewed d
-
-    FTS->>SE: TPC Request + tokens s, d
+    FTS->>SE: HTTP COPY (TPC) + tokens s, d
     SE->>KC: Validate token (Introspection/JWKS)
-    SE-->>FTS: Transfer Started
+    SE-->>FTS: Transfer complete
+
+    CP->>FTS: Poll job state
+    FTS-->>CP: FINISHED
+
+    CF->>RS: Mark transfer done → lock state OK
+    NOTE over RS: Rule transitions to OK state
 ```
 
 > Token orchestration follows the design described in
@@ -46,6 +63,15 @@ sequenceDiagram
 > for refreshing the storage-scoped tokens during the transfer lifetime.
 
 ## OIDC Deletion Flow
+
+Rule-based deletion path, as exercised by
+[test_rucio_deletion.py](../shared/tests/test_rucio_deletion.py):
+`update_replication_rule(lifetime=-1)` expires the rule; Judge-Cleaner sets
+the tombstone; Reaper physically deletes from storage.
+
+**NOTE:** DID-based deletion (Undertaker) is a separate flow triggered by
+DID expiration, not rule expiration. The Undertaker is not involved in the
+flow below.
 
 ```mermaid
 sequenceDiagram
@@ -72,4 +98,5 @@ sequenceDiagram
     RP->>RS: Mark replica removed from catalogue
 ```
 
-For reference checkout [the official Deletion Overview Rucio document](https://rucio.github.io/documentation/started/concepts/deletion_overview/).
+> For reference see the
+> [official Rucio Deletion Overview](https://rucio.github.io/documentation/started/concepts/deletion_overview/).
