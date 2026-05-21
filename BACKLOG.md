@@ -5,7 +5,9 @@
     - [x] `test_add_files_to_dataset` test
     - [x] XRootD-to-Storm WebDAV transfer test
 - [x] Test replication rule deletion lifecycle via Rucio daemons
-- [ ] Document patches applied to FTS, Rucio and Teapot in `shared/patches/README.md` and iteratively replace patches with proper configuration where possible
+- [ ] Patches
+    - [x] Document patches applied to FTS, Rucio and Teapot
+    - [ ] Revert patches where possible
 - [x] Add configuration reference links for the technologies in use (FTS, Rucio, XrootD and Teapot), with emphasis on token-based authentication
 - [ ] Deploy Rucio daemons in both Compose and Kubernetes setups and allow tests to utilise these instead of invoking `kubectl` or `docker` CLI
 - [ ] Add GitOps workflows (e.g. Argo CD or Flux) referencing the existing Helm charts as a blueprint for a DEP DLM production deployment, with environment-specific value overlays for staging and production
