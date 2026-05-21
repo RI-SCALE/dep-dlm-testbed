@@ -488,10 +488,9 @@ async def _start_webdav_instance(username, port, sub, iss, external_identities):
     loc = f"/var/lib/{APP_NAME}/user-{username}/config/application.yml"
     # trunk-ignore(bandit/B108)
     cmd = f"sudo --preserve-env={','.join(env_pass)} -u {username} \
-    /usr/bin/java $STORM_WEBDAV_JVM_OPTS \
+    /usr/bin/java -jar $STORM_WEBDAV_JAR $STORM_WEBDAV_JVM_OPTS \
     -Djava.io.tmpdir=/var/lib/{APP_NAME}/user-{username}/tmp \
     -Dlogging.config=$STORM_WEBDAV_LOG_CONFIGURATION \
-    -jar $STORM_WEBDAV_JAR \
     --spring.config.additional-location=optional:file:{loc} \
      1>$STORM_WEBDAV_OUT 2>$STORM_WEBDAV_ERR &"
 
@@ -540,17 +539,20 @@ async def _start_webdav_instance(username, port, sub, iss, external_identities):
 
 
 async def _get_proc(cmd):
-    # Extract the key identifying parts of the command
-    key_parts = [
-        p
-        for p in cmd.split()
-        if "storm-webdav-server.jar" in p or "java.io.tmpdir" in p
-    ]
+    # here we are simply looking through all processes and try to find a
+    # match for the full command that was issued to start the instance in
+    # question. then return the process handle. it should contain the process
+    # that is running as root and forked the storm instance for the user
+    # themselves. looking through all processes seems a bit of an overkill but
+    # at the moment this is the only halfway surefire method to accomplish this
+    #  task. shamelessly stolen from
+    # https://codereview.stackexchange.com/questions/183091/start-a-sub-process-with-sudo-as-head-of-new-process-group-kill-it-after-time
     for pid in psutil.pids():
         try:
             proc = psutil.Process(pid)
-            cmdline = " ".join(proc.cmdline())
-            if all(part in cmdline for part in key_parts):
+            if any("storm-webdav-server.jar" in p for p in proc.cmdline()) and any(
+                "java.io.tmpdir" in p for p in proc.cmdline()
+            ):
                 logger.debug("PID for the started storm-webdav server found: %d", pid)
                 return proc
         except (psutil.NoSuchProcess, psutil.AccessDenied):
