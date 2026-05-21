@@ -291,7 +291,6 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/userpass-client.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client-for-rucio.cfg:/opt/rucio/etc/userpass-client-for-rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
       - ${TESTBED_HOST_SOURCE}/shared/tests:/tests:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
