@@ -2,7 +2,7 @@
 # grant-token-exchange.sh
 # Grants the `fts` client permission to perform standard token-exchange
 # targeting the storage audience clients (xrd3, xrd4, teapot) in realm `rucio`.
-# Keycloak 23.0.1 — standard token exchange V2.
+# Keycloak 23.0.1 — legacy token exchange V1.
 set -euo pipefail
 
 KC=compose-keycloak-1
