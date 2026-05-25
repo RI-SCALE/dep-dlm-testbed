@@ -23,7 +23,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - start-dev
-            - --features=token-exchange
+            - --features=token-exchange,admin-fine-grained-authz,dynamic-scopes
             - --health-enabled=true
             - --import-realm
           env:

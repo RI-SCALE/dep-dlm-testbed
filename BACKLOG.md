@@ -6,9 +6,14 @@
     - [x] XRootD-to-Storm WebDAV transfer test
 - [x] Test replication rule deletion lifecycle via Rucio daemons
 - [x] Add configuration reference links for the technologies in use (FTS, Rucio, XrootD and Teapot), with emphasis on token-based authentication
-- [ ] Patches
+- [x] Patches
     - [x] Document patches applied to FTS, Rucio and Teapot
-    - [ ] Revert patches where possible once the proper configurations are in place (e.g. Keycloak token exchange configuration)
+- [ ] Revert patches where possible:
+    - [ ] `extra_scopes` (`openid`) — upstream to Rucio
+    - [ ] `_TOKEN_CAPABLE_SCHEMES` — drop once Teapot serves `davs://`
+    - [x] `unmanaged_tokens` / `AllowNonManagedTokens` — kept by design;
+          managed-mode exchange not achievable by config alone
+          (see [fts-token-exchange-constraints.md](docs/fts-token-exchange-constraints.md))
 - [ ] Deploy Rucio daemons in both Compose and Kubernetes setups and allow tests to utilise these instead of invoking `kubectl` or `docker` CLI
 - [ ] Add GitOps workflows (e.g. Argo CD or Flux) referencing the existing Helm charts as a blueprint for a DEP DLM production deployment, with environment-specific value overlays for staging and production
 - [ ] Ensure internal Helm charts follow Helm and Kubernetes best practices for consistency, security, maintainability and CI validation

@@ -68,7 +68,81 @@
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "fts-secret",
-      "defaultClientScopes": [ "openid", "wlcg", "fts" ]
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": [
+        "openid", "wlcg", "fts",
+        "storage.read", "storage.modify",
+        "storage.read:/data", "storage.modify:/data",
+        "storage.read:/", "storage.modify:/",
+        "aud:xrd3", "aud:xrd4", "aud:teapot"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true",
+        "can.delegate.tokens": "true"
+      }
+    },
+    {
+      "clientId": "https://xrd3:1094",
+      "name": "xrd3 storage endpoint (token-exchange audience target)",
+      "description": "Registered so FTS token-exchange requests carrying audience=https://xrd3:1094 resolve to a client. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "xrd3-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [ "aud:xrd3" ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
+    },
+    {
+      "clientId": "https://xrd4:1094",
+      "name": "xrd4 storage endpoint (token-exchange audience target)",
+      "description": "Registered so FTS token-exchange requests carrying audience=https://xrd4:1094 resolve to a client. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "xrd4-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [ "aud:xrd4" ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
+    },
+    {
+      "clientId": "teapot",
+      "name": "teapot storage endpoint (token-exchange audience target)",
+      "description": "Registered so FTS token-exchange requests carrying audience=teapot resolve to a client. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "teapot-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [ "aud:teapot" ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
     }
   ],
   "users": [
@@ -76,8 +150,11 @@
       "username": "randomaccount",
       "id": "33ec5a95-4955-484d-9b21-818e19a8d749",
       "enabled": true,
+      "firstName": "Random",
+      "lastName": "Account",
       "email": "randomaccount@rucio",
       "emailVerified": true,
+      "requiredActions": [],
       "realmRoles": [ "offline_access" ],
       "credentials": [
         { "type": "password", "value": "secret", "temporary": false }
@@ -87,8 +164,11 @@
     {
       "username": "adminuser",
       "enabled": true,
+      "firstName": "Admin",
+      "lastName": "User",
       "email": "admin@rucio",
       "emailVerified": true,
+      "requiredActions": [],
       "realmRoles": [ "offline_access" ],
       "credentials": [
         { "type": "password", "value": "admin123", "temporary": false }

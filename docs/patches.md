@@ -65,16 +65,9 @@ extra_scopes=["offline_access", "openid"]
 extra_scopes=['offline_access']
 ```
 
-**4. Formatting only** — all other diff hunks are cosmetic (Black-style
-reformatting: multi-line function signatures, f-strings, dict literals).
-No semantic changes.
-
 ### Replacement path
 
-The `unmanaged_tokens` and `extra_scopes` changes are candidates for
-upstreaming. The `_TOKEN_CAPABLE_SCHEMES` change should be replaced by
-configuring Teapot/Storm-WebDAV to serve on `davs://` (TLS) rather than
-`http://`.
+`extra_scopes` (`openid`) is a candidate for upstreaming to Rucio. `_TOKEN_CAPABLE_SCHEMES` should be replaced by configuring Teapot/Storm-WebDAV to serve on `davs://` (TLS) rather than `http://`. `unmanaged_tokens` correctly implements the intended architecture and should remain for the testbed.
 
 ---
 
