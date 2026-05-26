@@ -48,7 +48,7 @@
         "storage.read:/data", "storage.modify:/data",
         "storage.read:/", "storage.modify:/",
         "aud:fts", "aud:xrd3", "aud:xrd4",
-        "aud:teapot"
+        "aud:teapot", "aud:rucio"
       ],
       "optionalClientScopes": [
         "offline_access"
@@ -85,9 +85,9 @@
       }
     },
     {
-      "clientId": "https://xrd3:1094",
+      "clientId": "xrd3",
       "name": "xrd3 storage endpoint (token-exchange audience target)",
-      "description": "Registered so FTS token-exchange requests carrying audience=https://xrd3:1094 resolve to a client. Not used for interactive login.",
+      "description": "Registered so FTS token-exchange requests carrying audience=xrd3 resolve to a client. Not used for interactive login.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "xrd3-secret",
@@ -105,9 +105,9 @@
       }
     },
     {
-      "clientId": "https://xrd4:1094",
+      "clientId": "xrd4",
       "name": "xrd4 storage endpoint (token-exchange audience target)",
-      "description": "Registered so FTS token-exchange requests carrying audience=https://xrd4:1094 resolve to a client. Not used for interactive login.",
+      "description": "Registered so FTS token-exchange requests carrying audience=xrd4 resolve to a client. Not used for interactive login.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "xrd4-secret",
@@ -282,7 +282,7 @@
     },
     {
       "name": "aud:xrd3",
-      "description": "Adds https://xrd3:1094 to the token's aud claim for SciTokens validation on xrd3.",
+      "description": "Adds xrd3 to the token's aud claim for SciTokens validation on xrd3.",
       "protocol": "openid-connect",
       "attributes": {
         "display.on.consent.screen": "false",
@@ -294,7 +294,7 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "https://xrd3:1094",
+            "included.custom.audience": "xrd3",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -303,7 +303,7 @@
     },
     {
       "name": "aud:xrd4",
-      "description": "Adds https://xrd4:1094 to the token's aud claim for SciTokens validation on xrd4.",
+      "description": "Adds xrd4 to the token's aud claim for SciTokens validation on xrd4.",
       "protocol": "openid-connect",
       "attributes": {
         "display.on.consent.screen": "false",
@@ -315,7 +315,28 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "https://xrd4:1094",
+            "included.custom.audience": "xrd4",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+     "name": "aud:rucio",
+      "description": "Adds rucio to the token's aud claim. Required so a subject token satisfies the Rucio server's expected_audience gate in get_token_for_account_operation.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-rucio",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "rucio",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }

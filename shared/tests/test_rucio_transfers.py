@@ -58,7 +58,7 @@ class TestXRootDOIDC:
     The transfer uses davs:// (HTTP-TPC) rather than xroot:// because
     XRootD SciTokens auth for third-party copy requires HTTP/WebDAV.
     FTS issues a storage.read + storage.modify token from Keycloak
-    (audience: https://xrd3:1094 / https://xrd4:1094) and performs
+    (audience: xrd3 / xrd4) and performs
     an HTTP COPY between the two XRootD endpoints.
 
     To answer Andrea Manzi's question: the XRootD TPC here uses the
@@ -170,7 +170,7 @@ class TestCrossProtocolOIDC:
 
     These tests exercise FTS obtaining tokens for two different audiences
     simultaneously:
-      - XRD3 audience:    https://xrd3:1094  (SciTokens)
+      - XRD3 audience:    xrd3  (SciTokens)
       - TEAPOT1 audience: teapot             (WebDAV bearer)
 
     FTS uses the t_token_provider Keycloak entry to perform token exchange

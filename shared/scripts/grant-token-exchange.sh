@@ -9,7 +9,7 @@ KC=compose-keycloak-1
 KCADM="/opt/keycloak/bin/kcadm.sh"
 REALM=rucio
 REQUESTER_CLIENT_ID=fts          # the client making the exchange request
-TARGETS=( "https://xrd3:1094" "https://xrd4:1094" "teapot" )
+TARGETS=( "xrd3" "xrd4" "teapot" )
 
 # --- 1. Authenticate kcadm -------------------------------------------------
 docker exec "$KC" "$KCADM" config credentials \
@@ -88,7 +88,7 @@ done
 SUBJECT=$(docker exec compose-fts-1 curl -sk -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" https://keycloak:8443/realms/rucio/protocol/openid-connect/token | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 echo "${SUBJECT:0:30}..."
 
-for AUD in "https://xrd3:1094" "https://xrd4:1094" "teapot"; do
+for AUD in "xrd3" "xrd4" "teapot"; do
   echo "--- $AUD ---"
   docker exec compose-fts-1 curl -sk -u "fts:fts-secret" \
     -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
