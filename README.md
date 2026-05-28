@@ -82,6 +82,7 @@ Helm / Kubernetes lifecycle (helm-*, k8s-*)
 Tests
   test-rucio-transfers       Rucio E2E TPC transfer test
   test-rucio-deletion        Rucio E2E deletion test
+  probe-teapot               Teapot WebDAV probe with OIDC tokens
 
 Cleanup
   clean                      Remove generated certs and volumes; keep CA (rucio_ca.pem + key)

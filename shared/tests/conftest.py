@@ -429,12 +429,21 @@ def oidc_token():
 
 
 @pytest.fixture(scope="session")
-def teapots_ready(oidc_token):
-    """
-    Warm up both Teapot Storm-WebDAV JVMs before any transfer test runs.
-    This fixture is a session-level precondition — request it in any test
-    that talks to teapot1 or teapot2.
-    """
-    webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", oidc_token)
-    webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", oidc_token)
+def teapot_token():
+    """Token specifically for Teapot WebDAV — carries teapot audiences."""
+    return fetch_token_password(
+        KEYCLOAK_TOKEN_URL,
+        client_id="rucio",
+        client_secret="rucio-secret",
+        username="randomaccount",
+        password="secret",
+        scope="openid storage.read:/ storage.modify:/ aud:teapot1 aud:teapot2",
+    )
+
+
+@pytest.fixture(scope="session")
+def teapots_ready(teapot_token):
+    """Warm up both Teapot Storm-WebDAV JVMs before any transfer test runs."""
+    webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token)
+    webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token)
     return True

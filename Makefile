@@ -113,6 +113,11 @@ test-rucio-transfers: ## Rucio E2E TPC transfer test
 test-rucio-deletion: ## Rucio E2E deletion test
 	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
+.PHONY: probe-teapot
+probe-teapot: ## Teapot WebDAV probe with OIDC tokens
+	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+
+
 ## Cleanup
 
 .PHONY: clean

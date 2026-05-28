@@ -13,7 +13,7 @@ Exercised by [test_rucio_transfers.py](../shared/tests/test_rucio_transfers.py):
 
 FTS can run in two token modes. The testbed currently uses **managed mode**.
 
-### Managed mode
+### Managed mode (current testbed config)
 
 Rucio delegates short-lived access tokens; FTS owns the lifecycle, performing a
 **token-exchange** (the `TOKEN_PREP` step) to obtain refresh tokens, then
@@ -53,7 +53,7 @@ sequenceDiagram
     NOTE over RS: Rule transitions to OK state
 ```
 
-### Unmanaged mode (current testbed config)
+### Unmanaged mode
 
 Rucio delegates **long-lived per-file tokens** sized to cover scheduling +
 transfer duration. FTS does **no** exchange and **no** refresh — no `TOKEN_PREP`.

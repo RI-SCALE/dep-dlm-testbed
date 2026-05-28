@@ -114,7 +114,7 @@ class TestTeapotOIDC:
     exec available for Teapot) rather than svc_exec/seed.
     """
 
-    def test_teapot1_to_teapot2(self, rucio_client, oidc_token, teapots_ready):
+    def test_teapot1_to_teapot2(self, rucio_client, teapot_token, teapots_ready):
         """Replicate a file from TEAPOT1 to TEAPOT2 via bearer token + FTS OIDC."""
         name = f"teapot-{int(time.time())}"
         seed_content = b"rucio-teapot-oidc-test\n"
@@ -130,17 +130,17 @@ class TestTeapotOIDC:
         src_path = urlparse(src_pfn).path  # e.g. /data/ddmlab/ab/cd/teapot-...
 
         # Clean up any stale file from a previous run
-        webdav_delete(f"{TEAPOT1_URL}{src_path}", oidc_token)
+        webdav_delete(f"{TEAPOT1_URL}{src_path}", teapot_token)
 
         # Seed via authenticated WebDAV PUT
-        resp = webdav_put(f"{TEAPOT1_URL}{src_path}", oidc_token, seed_content)
+        resp = webdav_put(f"{TEAPOT1_URL}{src_path}", teapot_token, seed_content)
         assert resp.status_code in {200, 201, 204}, (
             f"Seed PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
         )
         log.info("  ✓ Seeded via WebDAV PUT (HTTP %s)", resp.status_code)
 
         # Verify seed is readable
-        verify = webdav_get(f"{TEAPOT1_URL}{src_path}", oidc_token)
+        verify = webdav_get(f"{TEAPOT1_URL}{src_path}", teapot_token)
         assert verify.status_code == 200, (
             f"Seed not readable: GET {TEAPOT1_URL}{src_path} → HTTP {verify.status_code}"
         )
@@ -179,7 +179,7 @@ class TestCrossProtocolOIDC:
     of cross-protocol cross-audience TPC in the dep-dlm-testbed.
     """
 
-    def test_xrd3_to_teapot1(self, rucio_client, oidc_token, teapots_ready):
+    def test_xrd3_to_teapot1(self, rucio_client, teapots_ready):
         """XRD3 (SciTokens) → TEAPOT1 (WebDAV): seed via xrd3 exec, dest via Teapot."""
         name = f"xrd-to-teapot-{int(time.time())}"
         log.info("[ XRD3 → TEAPOT1  name=%s ]", name)
@@ -202,7 +202,7 @@ class TestCrossProtocolOIDC:
         run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "XRD3→TEAPOT1 cross-protocol", RUCIO_SVC)
 
-    def test_teapot1_to_xrd3(self, rucio_client, oidc_token, teapots_ready):
+    def test_teapot1_to_xrd3(self, rucio_client, teapot_token, teapots_ready):
         """TEAPOT1 (WebDAV) → XRD3 (SciTokens): seed via WebDAV PUT, dest via xrd3 exec."""
         name = f"teapot-to-xrd-{int(time.time())}"
         seed_content = b"rucio-teapot-to-xrd-test\n"
@@ -216,14 +216,14 @@ class TestCrossProtocolOIDC:
 
         # Seed via authenticated WebDAV PUT
         src_path = urlparse(src_pfn).path
-        webdav_delete(f"{TEAPOT1_URL}{src_path}", oidc_token)
-        resp = webdav_put(f"{TEAPOT1_URL}{src_path}", oidc_token, seed_content)
+        webdav_delete(f"{TEAPOT1_URL}{src_path}", teapot_token)
+        resp = webdav_put(f"{TEAPOT1_URL}{src_path}", teapot_token, seed_content)
         assert resp.status_code in {200, 201, 204}, (
             f"Seed PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
         )
         log.info("  ✓ Seeded via WebDAV PUT (HTTP %s)", resp.status_code)
 
-        verify = webdav_get(f"{TEAPOT1_URL}{src_path}", oidc_token)
+        verify = webdav_get(f"{TEAPOT1_URL}{src_path}", teapot_token)
         assert verify.status_code == 200, (
             f"Seed not readable: GET {TEAPOT1_URL}{src_path} → HTTP {verify.status_code}"
         )

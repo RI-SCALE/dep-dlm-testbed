@@ -31,8 +31,35 @@ from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 from vo_mapping import VOMapping
 
+import jwt  # PyJWT
+from jwt import PyJWKClient
+
 config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
 config.read("/etc/teapot/config.ini")
+
+JWKS_URL = "https://keycloak:8443/realms/rucio/protocol/openid-connect/certs"
+TRUSTED_ISS = config["Teapot"]["trusted_OP"]
+_jwk_client = PyJWKClient(JWKS_URL)
+
+
+def verify_token(request):
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="No bearer token")
+    token = auth.split(None, 1)[1]
+    try:
+        signing_key = _jwk_client.get_signing_key_from_jwt(token).key
+        claims = jwt.decode(
+            token,
+            signing_key,
+            algorithms=["RS256"],
+            issuer=TRUSTED_ISS,
+            options={"verify_aud": False},  # aud checked in root()
+        )
+    except jwt.PyJWTError as e:
+        logger.warning("JWT verification failed: %s", e)
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+    return claims
 
 
 # lifespan function for startup and shutdown functions
@@ -1152,49 +1179,50 @@ def get_encoding_from_headers(headers):
         "MOVE",
     ],
 )
-@flaat.is_authenticated()
 async def root(request: Request):
     """
-    This function serves as the root endpoint for the application.
-    It authenticates users using the flaat library and handles requests
-    accordingly.
+    Root endpoint. Authenticates the bearer token by verifying its JWT
+    signature offline against the trusted OP's JWKS (no /userinfo or
+    introspection call), then proxies the request to the user's
+    Storm-WebDAV instance.
 
-    Parameters:
-        filepath (str): The path requested by the client.
-        request (Request): The HTTP request object.
-        response (Response): The HTTP response object.
-
-    Returns:
-        StreamingResponse: The response to the client's request.
+    Offline verification is required because FTS presents RFC 8693
+    token-exchanged tokens: these are valid signed JWTs but are not
+    "live-session" tokens, so Keycloak's /userinfo and /introspect both
+    reject them. WLCG storage endpoints validate such tokens offline.
     """
-    # get data from userinfo endpoint
-    user_infos = flaat.get_user_infos_from_request(request)
-    if not user_infos:
-        raise HTTPException(status_code=403)
+    # --- authenticate: verify JWT signature + iss + exp offline ---
+    claims = verify_token(request)
 
-    logger.info("user's sub is: %s", user_infos["sub"])
-    sub = user_infos.get("sub", None)
-    logger.debug("user's issuer is: %s", user_infos["iss"])
-    iss = user_infos.get("iss", None)
+    sub = claims.get("sub")
+    iss = claims.get("iss")
+    if not sub or not iss:
+        raise HTTPException(status_code=401, detail="Token missing sub/iss")
+
+    # --- audience check: token must be addressed to this teapot ---
+    auds = claims.get("aud")
+    if isinstance(auds, str):
+        auds = [auds]
+    elif auds is None:
+        auds = []
+    expected_aud = config["Teapot"].get("audience", fallback=None)
+    if expected_aud and expected_aud not in auds:
+        logger.warning(
+            "Token audience %s does not include expected audience %s",
+            auds,
+            expected_aud,
+        )
+        raise HTTPException(status_code=401, detail="Invalid token audience")
+
+    # FILE mapping only needs sub/iss; the other mapping modes are unused here.
+    eduperson_entitlement = None
+    preferred_username = None
     if mapping == "VO":
-        logger.debug(
-            "User's eduperson entitlements are %s", user_infos["eduperson_entitlement"]
-        )
-        eduperson_entitlement = user_infos.get("eduperson_entitlement", None)
-    else:
-        eduperson_entitlement = None
+        eduperson_entitlement = claims.get("eduperson_entitlement")
+    elif mapping == "KEYCLOAK":
+        preferred_username = claims.get("preferred_username")
 
-    if mapping == "KEYCLOAK":
-        logger.debug(
-            "User's 'preferred_username' is %s", user_infos["preferred_username"]
-        )
-        preferred_username = user_infos.get("preferred_username", None)
-    else:
-        preferred_username = None
-
-    if not sub:
-        # if there is no sub, user can not be authenticated
-        raise HTTPException(status_code=403)
+    logger.info("authenticated sub=%s iss=%s", sub, iss)
 
     # user is valid, so check if a storm instance is running for this sub
     redirect_host, redirect_port, local_user = await storm_webdav_state(
@@ -1207,23 +1235,17 @@ async def root(request: Request):
     )
 
     if not redirect_host and not redirect_port:
-        # no mapping between federated and local user identity found
         raise HTTPException(status_code=403)
     if redirect_port == -1:
         logger.info("no instance for user %s created...", local_user)
         raise HTTPException(status_code=500, detail="Problem supporting user.")
     if not redirect_port:
-        # no port returned, should not happen
         raise HTTPException(
             status_code=500, detail="Failed to establish internal connection."
         )
     if not redirect_host:
         redirect_host = "localhost"
-    logger.debug(
-        "redirect_host: %s, redirect_port: %d",
-        redirect_host,
-        redirect_port,
-    )
+    logger.debug("redirect_host: %s, redirect_port: %d", redirect_host, redirect_port)
     logger.debug("request path: %s", request.url.path)
 
     redirect_url = f"https://{redirect_host}:{redirect_port}{request.url.path}"
@@ -1257,7 +1279,6 @@ async def root(request: Request):
                 await save_session_state()
         raise
 
-    # Get the original request host and port for URL rewriting
     original_host = request.url.hostname
     original_port = request.url.port
 
@@ -1300,7 +1321,6 @@ async def root(request: Request):
         else:
             rewritten_content_bytes = response_body
 
-        # Calculate new content-length
         content_length = len(rewritten_content_bytes)
 
         rewritten_headers = await rewrite_response_headers(
@@ -1312,7 +1332,6 @@ async def root(request: Request):
             skip_content_length=(request.method.upper() == "PROPFIND"),
         )
 
-        # Remove any old content-length headers (case insensitive)
         rewritten_headers = {
             k: v for k, v in rewritten_headers.items() if k.lower() != "content-length"
         }
