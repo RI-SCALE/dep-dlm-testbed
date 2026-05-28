@@ -161,6 +161,11 @@ def request_token(
             )
             if result and "token" in result:
                 return result["token"]
+            logging.warning(
+                "request_token: exchange returned no token for account=%s aud=%s",
+                account,
+                audience,
+            )
         except Exception:
             logging.warning(
                 "Token exchange failed for account %s", account, exc_info=True
@@ -1199,6 +1204,7 @@ def __exchange_token_oidc(
 
     except Exception:
         # raise CannotAuthorize(traceback.format_exc())
+        logging.warning("oidc exchange failure", exc_info=True)
         logging.debug(traceback.format_exc())
         return None
 
