@@ -89,6 +89,13 @@ wait_for_infrastructure() {
 
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
 
+# Every Rucio account that can OWN a transfer needs a seeded OIDC subject
+# token, because the conveyor submitter calls request_token(account=<rule
+# owner>) and get_token_for_account_operation walks that account's
+# identity->subject-token chain. compose submits as root; the k8s rucio-client
+# is configured account=ddmlab. Seed both so the testbed works under either.
+SEED_ACCOUNTS=( root ddmlab )
+
 setup_accounts_and_identities() {
     echo "=== Configuring Rucio Accounts ==="
 
@@ -165,27 +172,26 @@ except Exception as e:
     print(f'  ⚠ Registration failed: {e}')
 "
 
-    seed_subject_token_for_root
+    seed_subject_tokens
 }
 
 # ── Subject-token seeding (managed-mode token exchange) ──────────
 #
-# The conveyor submitter runs transfers as account 'root'. In managed-token
-# mode (oidc.token_strategy = exchange), Rucio mints per-file FTS tokens by
-# exchanging that account's stored OIDC *subject token* (RFC 8693). An
-# unattended account never acquires one on its own, so we seed it here:
+# In managed-token mode (oidc.token_strategy = exchange), Rucio mints per-file
+# FTS tokens by exchanging the *transfer-owning account's* stored OIDC subject
+# token (RFC 8693). The owning account is whoever created the rule: compose
+# submits as root, the k8s rucio-client is account=ddmlab. An unattended
+# account never acquires a subject token on its own, so we seed one for each
+# account in SEED_ACCOUNTS here:
 #
 #   1. obtain a user access token via the password grant, WITH offline_access
-#      in scope (required for the exchange to be able to mint a refresh token);
-#   2. map the corresponding OIDC identity to the root account;
-#   3. persist the token into the Rucio `tokens` table.
+#      in scope (required for the exchange to mint a refresh token);
+#   2. map the corresponding OIDC identity to each account;
+#   3. persist the token into the Rucio `tokens` table for each account.
 #
-# Step 3 deliberately does NOT use validate_jwt(): that function is built for
-# *external* tokens and resolves the account through get_default_account(),
-# which is ambiguous here because this one OIDC identity is mapped to more than
-# one account. Instead it calls save_subject_token() - a thin wrapper added in
-# shared/patches/rucio/managed-token/oidc.py around the same internal saver
-# validate_jwt would have used - with the account known explicitly.
+# One OIDC identity (randomaccount's) is intentionally mapped to multiple
+# Rucio accounts — Rucio supports this, and get_token_for_account_operation
+# resolves the issuer from the identity string, not from a 1:1 mapping.
 #
 # The token row MUST have:
 #   - identity in Rucio's internal "SUB=<sub>, ISS=<iss>" form (NOT iss#sub),
@@ -193,22 +199,22 @@ except Exception as e:
 #     identity.split(", ")[1].split("=")[1];
 #   - a non-empty oidc_scope containing offline_access;
 #   - a non-empty audience.
-#
-# Without this row, get_token_for_account_operation() finds no subject token
-# and logs "No valid token exists for account root".
 
-seed_subject_token_for_root() {
-    echo "=== Seeding OIDC subject token for account 'root' ==="
+seed_subject_tokens() {
+    local accounts_csv
+    accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
+    echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    _exec rucio python3 -c "
-import urllib.request, urllib.parse, json, base64, sys
+    _exec rucio env SEED_ACCOUNTS="$accounts_csv" OIDC_SEED_SCOPE="${OIDC_SEED_SCOPE}" python3 -c "
+import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
 from rucio.core.identity import add_account_identity
 from rucio.core import oidc
 from rucio.common.types import InternalAccount
 from rucio.common import exception
 
-SEED_SCOPE = '${OIDC_SEED_SCOPE}'
+SEED_SCOPE = os.environ['OIDC_SEED_SCOPE']
+ACCOUNTS   = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
 TOKEN_URL  = 'https://keycloak:8443/realms/rucio/protocol/openid-connect/token'
 
 
@@ -216,11 +222,10 @@ def _b64json(segment):
     return json.loads(base64.urlsafe_b64decode(segment + '=='))
 
 
-try:
-    # 1. password grant for the Keycloak user 'randomaccount', explicitly
-    #    requesting offline_access. 'randomaccount' is a real Keycloak user;
-    #    'root' is the Rucio-side account the conveyor submits under. We map
-    #    this user's OIDC identity onto root and store its token for root.
+def _mint_token():
+    # Each call is a fresh password grant -> a distinct JWT (different jti/iat),
+    # so each account gets its own token string. The tokens table PK is the
+    # token column, so reusing one JWT across accounts violates TOKENS_PK.
     data = urllib.parse.urlencode({
         'grant_type': 'password',
         'username': 'randomaccount',
@@ -230,63 +235,71 @@ try:
     _auth = base64.b64encode(b'rucio:rucio-secret').decode()
     req = urllib.request.Request(TOKEN_URL, data=data,
                                  headers={'Authorization': f'Basic {_auth}'})
-    resp = json.loads(urllib.request.urlopen(req).read())
+    return json.loads(urllib.request.urlopen(req).read())['access_token']
 
-    access_token = resp['access_token']
+
+def _ensure_mapped(identity_internal, account):
+    try:
+        add_account_identity(identity_internal, 'OIDC', InternalAccount(account), f'{account}@rucio')
+        print(f'  ✓ OIDC identity mapped to {account}: {identity_internal}')
+    except exception.Duplicate:
+        print(f'  ✓ OIDC identity already mapped to {account}')
+    except Exception as e:
+        msg = str(e).lower()
+        if 'duplicate key' in msg or 'already exists' in msg or 'unique constraint' in msg:
+            print(f'  ✓ OIDC identity already mapped to {account} (pre-existing)')
+        else:
+            raise
+
+
+def _store(account, access_token):
     claims = _b64json(access_token.split('.')[1])
-
     sub = claims['sub']
     iss = claims['iss']
     granted_scope = claims.get('scope', '')
     granted_aud   = claims.get('aud', '')
     exp           = claims.get('exp')
-
-    print(f'  token scope = {granted_scope!r}')
-    print(f'  token aud   = {granted_aud!r}')
     if 'offline_access' not in granted_scope:
         print('  ⚠ offline_access NOT granted by Keycloak - the exchange will '
               'not be able to mint a refresh token. Check that offline_access '
               'is an allowed scope on the rucio client.')
-
-    # 2. map the OIDC identity to the root account, in Rucio's internal
-    #    'SUB=..., ISS=...' form. This MUST be the same string used for the
-    #    tokens row in step 3 — get_token_for_account_operation joins the
-    #    identities table to the tokens table by exact string equality
-    #    (Token.identity.in_(identities)), so the two must not differ.
-    identity_internal = oidc.oidc_identity_string(sub, iss)
-    try:
-        add_account_identity(identity_internal, 'OIDC', InternalAccount('root'), 'root@rucio')
-        print(f'  ✓ OIDC identity mapped to root: {identity_internal}')
-    except exception.Duplicate:
-        print(f'  ✓ OIDC identity already mapped to root: {identity_internal}')
-    except Exception as e:
-        msg = str(e).lower()
-        if 'duplicate key' in msg or 'already exists' in msg or 'unique constraint' in msg:
-            print('  ✓ OIDC identity already mapped to root (pre-existing)')
-        else:
-            raise
-
-    # 3. persist the access token into the tokens table for account root.
-    #    NOTE the identity format: the tokens row must use Rucio's internal
-    #    'SUB=<sub>, ISS=<iss>' string, which oidc_identity_string() builds,
-    #    NOT the iss#sub form used for the identities table above.
     identity_internal = oidc.oidc_identity_string(sub, iss)
     audience = ' '.join(granted_aud) if isinstance(granted_aud, list) else granted_aud
     lifetime = datetime.utcfromtimestamp(float(exp)) if exp else None
 
-    oidc.save_subject_token(
-        token=access_token,
-        account=InternalAccount('root'),
-        identity=identity_internal,
-        scope=granted_scope,
-        audience=audience,
-        lifetime=lifetime,
-    )
-    print(f'  ✓ Subject token saved for root')
-    print(f'      identity = {identity_internal}')
-    print(f'      scope    = {granted_scope!r}')
-    print(f'      audience = {audience!r}')
-    print(f'      expires  = {lifetime}')
+    _ensure_mapped(identity_internal, account)
+    try:
+        oidc.save_subject_token(
+            token=access_token,
+            account=InternalAccount(account),
+            identity=identity_internal,
+            scope=granted_scope,
+            audience=audience,
+            lifetime=lifetime,
+        )
+        print(f'  ✓ Subject token saved for {account}')
+    except Exception as e:
+        msg = str(e).lower()
+        if 'duplicate key' in msg or 'tokens_pk' in msg or 'unique constraint' in msg:
+            # token row already present for this account (idempotent re-run)
+            print(f'  ✓ Subject token already present for {account}')
+        else:
+            raise
+    return identity_internal, granted_scope, audience, lifetime
+
+
+try:
+    last = None
+    for account in ACCOUNTS:
+        # fresh grant per account -> unique token string -> no PK collision
+        last = _store(account, _mint_token())
+
+    if last:
+        identity_internal, granted_scope, audience, lifetime = last
+        print(f'      identity = {identity_internal}')
+        print(f'      scope    = {granted_scope!r}')
+        print(f'      audience = {audience!r}')
+        print(f'      expires  = {lifetime}')
 
 except urllib.error.HTTPError as e:
     print(f'  ✗ Keycloak token request failed: HTTP {e.code} {e.read().decode()[:300]}')
@@ -295,7 +308,7 @@ except AttributeError as e:
     print(f'  ✗ Subject-token seeding failed: {e}')
     print('    This usually means save_subject_token() is missing from the')
     print('    patched oidc.py - add the wrapper to')
-    print('    shared/patches/rucio/managed-token/oidc.py and re-run.')
+    print('    shared/patches/rucio/managed-tokens/oidc.py and re-run.')
     sys.exit(1)
 except Exception as e:
     import traceback
@@ -303,21 +316,24 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 "
-    # Remove non-OIDC token rows for root. The ra() helper authenticates via
-    # rucio-admin userpass, which mints session tokens with identity='ddmlab'
-    # (not 'SUB=..., ISS=...') under account=root. The patched
-    # get_token_for_account_operation now filters these out defensively, but
-    # they are pure cruft for managed-mode TPC, so drop them to keep root's
-    # token set to exactly the seeded OIDC subject token.
-    echo "  Removing non-OIDC token rows for root..."
-    _exec ruciodb psql -U rucio -tAc \
-      "DELETE FROM tokens WHERE account='root' AND identity NOT LIKE 'SUB=%';"
+
+    # Remove non-OIDC (userpass session) token rows for every seeded account,
+    # so each account's token set is exactly the seeded OIDC subject token.
+    echo "  Removing non-OIDC token rows for seeded accounts..."
+    local acct
+    for acct in "${SEED_ACCOUNTS[@]}"; do
+        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+          "DELETE FROM tokens WHERE account='${acct}' AND identity NOT LIKE 'SUB=%';"
+    done
 }
 
-cleanup_root_session_tokens() {
-    echo "=== Removing non-OIDC session tokens for root ==="
-    _exec ruciodb psql -U rucio -tAc \
-      "DELETE FROM tokens WHERE account='root' AND identity NOT LIKE 'SUB=%';"
+cleanup_session_tokens() {
+    echo "=== Removing non-OIDC session tokens for seeded accounts ==="
+    local acct
+    for acct in "${SEED_ACCOUNTS[@]}"; do
+        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+          "DELETE FROM tokens WHERE account='${acct}' AND identity NOT LIKE 'SUB=%';"
+    done
 }
 
 # ── RSE Configuration ─────────────────────────────────────────────
@@ -428,7 +444,7 @@ main() {
     configure_rses
     setup_scopes_and_quotas
     setup_fts_oidc_provider
-    cleanup_root_session_tokens
+    cleanup_session_tokens
 
     echo -e "\n=== Initialization Complete ==="
 }

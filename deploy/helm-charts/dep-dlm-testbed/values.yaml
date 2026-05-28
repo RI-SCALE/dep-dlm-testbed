@@ -126,10 +126,18 @@ rucio:
       subPath: idpsecrets.json
 
     # Python patches
+    # - secretFullName: testbed-patches
+    #   volumeName: fts3-patch
+    #   mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
+    #   subPath: rucio--fts3.py
     - secretFullName: testbed-patches
       volumeName: fts3-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
-      subPath: rucio--fts3.py
+      subPath: rucio--managed-tokens--fts3.py
+    - secretFullName: testbed-patches
+      volumeName: oidc-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
+      subPath: rucio--managed-tokens--oidc.py
     - secretFullName: testbed-patches
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
