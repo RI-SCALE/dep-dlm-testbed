@@ -45,7 +45,7 @@ sequenceDiagram
     KC-->>FTS: Refresh tokens stored
     NOTE over FTS,KC: FTS refreshes s and d on demand<br/>for the job lifetime
     FTS->>SE: HTTP COPY (TPC) + fresh tokens s, d
-    SE->>KC: Validate token (Introspection/JWKS)
+    SE->>SE: Validate token offline (JWKS signature + iss/aud/exp)
     SE-->>FTS: Transfer complete
     CP->>FTS: Poll job state
     FTS-->>CP: FINISHED
