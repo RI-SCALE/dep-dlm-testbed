@@ -5,6 +5,26 @@ RUNTIME="${RUNTIME:-compose}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-testbed}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.yml}"
 
+OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
+
+# Every Rucio account that can OWN a transfer needs a seeded OIDC subject
+# token, because the conveyor submitter calls request_token(account=<rule
+# owner>) and get_token_for_account_operation walks that account's
+# identity->subject-token chain. compose submits as root; the k8s rucio-client
+# is configured account=ddmlab. Seed both so the testbed works under either.
+SEED_ACCOUNTS=( root ddmlab )
+
+# ── Token-exchange (FGAP) configuration ──────────────────────────
+# Clients that PERFORM token-exchange (need the FGAP permission):
+#   - rucio: submission-time exchange (core/oidc.py) -> per-RSE source/dest tokens
+#   - fts:   FTS-server TokenExchangeService -> refresh tokens
+# Targets are the storage-audience clients the exchange is allowed to mint for.
+KCADM="/opt/keycloak/bin/kcadm.sh"
+KC_REALM=rucio
+EXCHANGE_REQUESTERS=( fts rucio )
+EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
+declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
+
 # ─── Cross-runtime helpers ───────────────────────────────────────
 
 _exec() {
@@ -61,10 +81,14 @@ _http_probe_local() {
     esac
 }
 
+
 # ── Service URLs ─────────────────────────────────────────────────
 FTS_OIDC="https://fts:8446"
 
 ra() { _exec rucio rucio-admin -S userpass -u ddmlab --password secret "$@"; }
+
+# Run kcadm inside the keycloak service (compose container or k8s pod).
+_kc() { _exec keycloak "$KCADM" "$@"; }
 
 # ── Infrastructure Readiness ─────────────────────────────────────
 
@@ -86,16 +110,6 @@ wait_for_infrastructure() {
 }
 
 # ── Identity & Account Setup ─────────────────────────────────────
-
-OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
-
-# Every Rucio account that can OWN a transfer needs a seeded OIDC subject
-# token, because the conveyor submitter calls request_token(account=<rule
-# owner>) and get_token_for_account_operation walks that account's
-# identity->subject-token chain. compose submits as root; the k8s rucio-client
-# is configured account=ddmlab. Seed both so the testbed works under either.
-SEED_ACCOUNTS=( root ddmlab )
-
 setup_accounts_and_identities() {
     echo "=== Configuring Rucio Accounts ==="
 
@@ -436,11 +450,136 @@ setup_scopes_and_quotas() {
     done
 }
 
+# ── Token-exchange grant (merged from grant-token-exchange.sh) ────
+#
+# Grants EXCHANGE_REQUESTERS (rucio, fts) permission to perform standard
+# (legacy V1) token-exchange targeting each storage-audience client
+# (EXCHANGE_TARGETS). For each target: enable management permissions, create
+# (or update) a client policy whose members are all requesters, and bind that
+# policy to the target's token-exchange scope permission. Idempotent.
+# Keycloak 23.0.1.
+grant_token_exchange() {
+    echo "=== Granting token-exchange permissions ==="
+
+    # 1. authenticate kcadm against the master realm
+    _kc config credentials \
+        --server http://localhost:8080 \
+        --realm master --user admin --password admin
+
+    # 2. resolve every requester client UUID
+    local rc uuid
+    local requester_uuids=()
+    for rc in "${EXCHANGE_REQUESTERS[@]}"; do
+        uuid=$(_kc get clients -r "$KC_REALM" \
+            -q clientId="$rc" --fields id --format csv --noquotes | tr -d '\r')
+        if [ -z "$uuid" ]; then
+            echo "  ERROR: requester client '$rc' not found" >&2
+            exit 1
+        fi
+        echo "  requester $rc UUID: $uuid"
+        requester_uuids+=( "$uuid" )
+    done
+    local requester_uuids_json
+    requester_uuids_json=$(printf '"%s",' "${requester_uuids[@]}")
+    requester_uuids_json="[${requester_uuids_json%,}]"
+
+    # 3. per target: enable permissions, create/refresh policy, bind it
+    local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
+    for target in "${EXCHANGE_TARGETS[@]}"; do
+        echo "  === target: $target ==="
+
+        target_uuid=$(_kc get clients -r "$KC_REALM" \
+            -q clientId="$target" --fields id --format csv --noquotes | tr -d '\r')
+        if [ -z "$target_uuid" ]; then
+            echo "  ERROR: target client '$target' not found — is it imported?" >&2
+            exit 1
+        fi
+        echo "    target UUID: $target_uuid"
+
+        _kc update "clients/$target_uuid/management/permissions" -r "$KC_REALM" \
+            -s enabled=true
+        echo "    management permissions enabled"
+
+        rm_uuid=$(_kc get clients -r "$KC_REALM" \
+            -q clientId=realm-management --fields id --format csv --noquotes | tr -d '\r')
+
+        policy_name="exchange-to-${target}"
+        policy_name=$(echo "$policy_name" | tr -c 'A-Za-z0-9_.-' '_')
+
+        echo "    creating client policy: $policy_name  members=$requester_uuids_json"
+        _kc create "clients/$rm_uuid/authz/resource-server/policy/client" -r "$KC_REALM" \
+            -s "name=$policy_name" \
+            -s "clients=$requester_uuids_json" \
+            -s "logic=POSITIVE" \
+            || echo "    (policy may already exist — updating it instead)"
+
+        policy_id=$(_kc get \
+            "clients/$rm_uuid/authz/resource-server/policy?name=$policy_name" \
+            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
+
+        # ensure an existing policy lists BOTH requesters (a stale single-client
+        # policy from an earlier run would otherwise permit only fts).
+        if [ -n "$policy_id" ]; then
+            _kc update \
+                "clients/$rm_uuid/authz/resource-server/policy/client/$policy_id" \
+                -r "$KC_REALM" -s "clients=$requester_uuids_json" \
+                || echo "    (could not update policy membership — check manually)"
+        fi
+
+        perm_name="token-exchange.permission.client.$target_uuid"
+        perm_id=$(_kc get \
+            "clients/$rm_uuid/authz/resource-server/permission?name=$perm_name" \
+            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
+
+        if [ -z "$perm_id" ] || [ -z "$policy_id" ]; then
+            echo "  ERROR: could not resolve perm_id ($perm_id) or policy_id ($policy_id)." >&2
+            exit 1
+        fi
+
+        _kc update \
+            "clients/$rm_uuid/authz/resource-server/permission/scope/$perm_id" \
+            -r "$KC_REALM" -s "policies=[\"$policy_id\"]"
+        echo "    policy bound to token-exchange permission"
+    done
+}
+
+# ── Token-exchange self-test (optional, gated) ───────────────────
+# Set INIT_VERIFY_EXCHANGE=1 to exchange as each requester for each target and
+# assert a refresh_token comes back. Off by default to keep init fast.
+verify_token_exchange() {
+    [ "${INIT_VERIFY_EXCHANGE:-0}" = "1" ] || return 0
+    echo "=== Self-test: token-exchange as each requester -> each target ==="
+
+    local subject
+    subject=$(_exec fts curl -sk \
+        -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" \
+        https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+        | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+    echo "  subject token: ${subject:0:30}..."
+
+    local rc aud
+    for rc in "${EXCHANGE_REQUESTERS[@]}"; do
+        for aud in "${EXCHANGE_TARGETS[@]}"; do
+            echo -n "  --- exchange as $rc -> $aud : "
+            _exec fts curl -sk -u "$rc:${EXCHANGE_SECRET[$rc]}" \
+                -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+                -d "requested_token_type=urn:ietf:params:oauth:token-type:refresh_token" \
+                -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
+                -d "subject_token=$subject" \
+                -d "audience=$aud" \
+                https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+                | python3 -c "import sys,json;r=json.load(sys.stdin);print('OK' if 'refresh_token' in r else r)"
+        done
+    done
+}
+
 # ── Main ──────────────────────────────────────────────────────────
 
 main() {
     wait_for_infrastructure
     setup_accounts_and_identities
+    grant_token_exchange
+    verify_token_exchange
     configure_rses
     setup_scopes_and_quotas
     setup_fts_oidc_provider
