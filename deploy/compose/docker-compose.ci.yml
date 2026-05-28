@@ -253,7 +253,9 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      # - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/managed-tokens/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/managed-tokens/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
     healthcheck:

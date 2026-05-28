@@ -46,12 +46,12 @@
         "wlcg", "fts",
         "storage.read", "storage.modify",
         "storage.read:/data", "storage.modify:/data",
-        "storage.read:/", "storage.modify:/",
-        "aud:fts", "aud:xrd3", "aud:xrd4",
-        "aud:teapot", "aud:rucio"
+        "storage.read:/", "storage.modify:/"
       ],
       "optionalClientScopes": [
-        "offline_access"
+        "offline_access",
+        "aud:fts", "aud:xrd3", "aud:xrd4",
+        "aud:teapot1", "aud:teapot2", "aud:rucio"
       ],
       "attributes": {
         "oidc.ciba.grant.enabled": "false",
@@ -70,14 +70,15 @@
       "secret": "fts-secret",
       "serviceAccountsEnabled": true,
       "defaultClientScopes": [
-        "openid", "wlcg", "fts",
+        "wlcg", "fts",
         "storage.read", "storage.modify",
         "storage.read:/data", "storage.modify:/data",
-        "storage.read:/", "storage.modify:/",
-        "aud:xrd3", "aud:xrd4", "aud:teapot"
+        "storage.read:/", "storage.modify:/"
       ],
       "optionalClientScopes": [
-        "offline_access"
+        "offline_access",
+        "aud:fts", "aud:xrd3", "aud:xrd4",
+        "aud:teapot1", "aud:teapot2"
       ],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true",
@@ -125,12 +126,12 @@
       }
     },
     {
-      "clientId": "teapot",
-      "name": "teapot storage endpoint (token-exchange audience target)",
-      "description": "Registered so FTS token-exchange requests carrying audience=teapot resolve to a client. Not used for interactive login.",
+      "clientId": "teapot1",
+      "name": "teapot1 storage endpoint (token-exchange audience target)",
+      "description": "Registered so FTS token-exchange requests carrying audience=teapot1 resolve to a client. Not used for interactive login.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "teapot-secret",
+      "secret": "teapot1-secret",
       "publicClient": false,
       "bearerOnly": false,
       "standardFlowEnabled": false,
@@ -138,7 +139,27 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "defaultClientScopes": [ "aud:teapot" ],
+      "defaultClientScopes": [ "aud:teapot1" ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
+    },
+    {
+      "clientId": "teapot2",
+      "name": "teapot2 storage endpoint (token-exchange audience target)",
+      "description": "Registered so FTS token-exchange requests carrying audience=teapot2 resolve to a client. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "teapot2-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [ "aud:teapot2" ],
       "optionalClientScopes": [],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true"
@@ -260,8 +281,8 @@
       ]
     },
     {
-      "name": "aud:teapot",
-      "description": "Adds teapot to the token's aud claim for Teapot validation.",
+      "name": "aud:teapot1",
+      "description": "Adds teapot1 to the token's aud claim for Teapot validation.",
       "protocol": "openid-connect",
       "attributes": {
         "display.on.consent.screen": "false",
@@ -269,11 +290,32 @@
       },
       "protocolMappers": [
         {
-          "name": "aud-teapot",
+          "name": "aud-teapot1",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "teapot",
+            "included.custom.audience": "teapot1",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud:teapot2",
+      "description": "Adds teapot2 to the token's aud claim for Teapot validation.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-teapot2",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "teapot2",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }

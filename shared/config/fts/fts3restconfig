@@ -13,7 +13,6 @@ AuthorizedAudiences=fts,rucio
 Alias=rucio/fts
 MonitoringMessaging=false
 VerifyAudience=False
-AllowNonManagedTokens=True
 
 [roles]
 Public=all:transfer;all:datamanagement;all:config

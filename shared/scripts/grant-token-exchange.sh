@@ -1,25 +1,45 @@
 #!/usr/bin/env bash
 # grant-token-exchange.sh
-# Grants the `fts` client permission to perform standard token-exchange
-# targeting the storage audience clients (xrd3, xrd4, teapot) in realm `rucio`.
+# Grants the `rucio` and `fts` clients permission to perform standard
+# token-exchange targeting the storage audience clients (xrd3, xrd4,
+# teapot1, teapot2) in realm `rucio`.
+#
+# Two exchanges happen in the managed-token flow, by two different clients:
+#   1. Rucio, at submission time (core/oidc.py), authenticates as `rucio`
+#      and exchanges the seeded subject token into per-RSE-audienced
+#      source/destination tokens for FTS.
+#   2. FTS-server TokenExchangeService authenticates as `fts` (per the
+#      t_token_provider row) and exchanges those into refresh tokens.
+# Both requesters therefore need the FGAP token-exchange permission.
 # Keycloak 23.0.1 — legacy token exchange V1.
 set -euo pipefail
 
 KC=compose-keycloak-1
 KCADM="/opt/keycloak/bin/kcadm.sh"
 REALM=rucio
-REQUESTER_CLIENT_ID=fts          # the client making the exchange request
-TARGETS=( "xrd3" "xrd4" "teapot" )
+REQUESTERS=( "fts" "rucio" )       # every client that performs token-exchange
+TARGETS=( "xrd3" "xrd4" "teapot1" "teapot2" )
 
 # --- 1. Authenticate kcadm -------------------------------------------------
 docker exec "$KC" "$KCADM" config credentials \
   --server http://localhost:8080 \
   --realm master --user admin --password admin
 
-# --- 2. Resolve the requester (fts) client UUID ----------------------------
-FTS_UUID=$(docker exec "$KC" "$KCADM" get clients -r "$REALM" \
-  -q clientId="$REQUESTER_CLIENT_ID" --fields id --format csv --noquotes | tr -d '\r')
-echo "fts client UUID: $FTS_UUID"
+# --- 2. Resolve every requester client UUID --------------------------------
+REQUESTER_UUIDS=()
+for RC in "${REQUESTERS[@]}"; do
+  UUID=$(docker exec "$KC" "$KCADM" get clients -r "$REALM" \
+    -q clientId="$RC" --fields id --format csv --noquotes | tr -d '\r')
+  if [ -z "$UUID" ]; then
+    echo "  ERROR: requester client '$RC' not found" >&2
+    exit 1
+  fi
+  echo "requester $RC UUID: $UUID"
+  REQUESTER_UUIDS+=( "$UUID" )
+done
+# JSON array of all requester UUIDs, e.g. ["uuid1","uuid2"]
+REQUESTER_UUIDS_JSON=$(printf '"%s",' "${REQUESTER_UUIDS[@]}")
+REQUESTER_UUIDS_JSON="[${REQUESTER_UUIDS_JSON%,}]"
 
 # --- 3. For each target client: enable permissions, create policy, bind ----
 for TARGET in "${TARGETS[@]}"; do
@@ -33,39 +53,40 @@ for TARGET in "${TARGETS[@]}"; do
   fi
   echo "  target UUID: $TARGET_UUID"
 
-  # 3a. Enable management permissions on the target client.
-  #     This auto-creates the authz resource + the `token-exchange` scope
-  #     permission scaffold on the realm-management client.
   docker exec "$KC" "$KCADM" update \
     "clients/$TARGET_UUID/management/permissions" -r "$REALM" \
     -s enabled=true
   echo "  management permissions enabled"
 
-  # 3b. Find the realm-management client UUID (host of the authz config).
   RM_UUID=$(docker exec "$KC" "$KCADM" get clients -r "$REALM" \
     -q clientId=realm-management --fields id --format csv --noquotes | tr -d '\r')
 
-  # 3c. Create a Client policy whose member is the fts client.
-  #     Name is unique per target so re-runs are idempotent-ish.
-  POLICY_NAME="fts-may-exchange-to-${TARGET}"
-  # kcadm rejects some characters in resource names; sanitize for the name only.
+  # Client policy whose members are ALL requester clients (fts + rucio).
+  POLICY_NAME="exchange-to-${TARGET}"
   POLICY_NAME_SAFE=$(echo "$POLICY_NAME" | tr -c 'A-Za-z0-9_.-' '_')
 
-  echo "  creating client policy: $POLICY_NAME_SAFE"
+  echo "  creating client policy: $POLICY_NAME_SAFE  members=$REQUESTER_UUIDS_JSON"
   docker exec "$KC" "$KCADM" create \
     "clients/$RM_UUID/authz/resource-server/policy/client" -r "$REALM" \
     -s "name=$POLICY_NAME_SAFE" \
-    -s "clients=[\"$FTS_UUID\"]" \
+    -s "clients=$REQUESTER_UUIDS_JSON" \
     -s "logic=POSITIVE" \
-    || echo "  (policy may already exist — continuing)"
+    || echo "  (policy may already exist — updating it instead)"
 
-  # 3d. Locate the auto-created token-exchange permission for this target,
-  #     and the policy we just made, then bind the policy to the permission.
   POLICY_ID=$(docker exec "$KC" "$KCADM" get \
     "clients/$RM_UUID/authz/resource-server/policy?name=$POLICY_NAME_SAFE" \
     -r "$REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
 
-  # The permission is named like: token-exchange.permission.client.<TARGET_UUID>
+  # If the policy already existed, make sure it lists BOTH requesters
+  # (a stale single-client policy from an earlier run would still permit
+  # only fts — update it in place).
+  if [ -n "$POLICY_ID" ]; then
+    docker exec "$KC" "$KCADM" update \
+      "clients/$RM_UUID/authz/resource-server/policy/client/$POLICY_ID" -r "$REALM" \
+      -s "clients=$REQUESTER_UUIDS_JSON" \
+      || echo "  (could not update policy membership — check manually)"
+  fi
+
   PERM_NAME="token-exchange.permission.client.$TARGET_UUID"
   PERM_ID=$(docker exec "$KC" "$KCADM" get \
     "clients/$RM_UUID/authz/resource-server/permission?name=$PERM_NAME" \
@@ -73,31 +94,35 @@ for TARGET in "${TARGETS[@]}"; do
 
   if [ -z "$PERM_ID" ] || [ -z "$POLICY_ID" ]; then
     echo "  ERROR: could not resolve PERM_ID ($PERM_ID) or POLICY_ID ($POLICY_ID)." >&2
-    echo "  Inspect manually:" >&2
-    echo "    kcadm get clients/$RM_UUID/authz/resource-server/permission -r $REALM" >&2
     exit 1
   fi
 
-  # 3e. Attach the policy to the permission (preserving any existing policies).
   docker exec "$KC" "$KCADM" update \
     "clients/$RM_UUID/authz/resource-server/permission/scope/$PERM_ID" -r "$REALM" \
     -s "policies=[\"$POLICY_ID\"]"
   echo "  policy bound to token-exchange permission"
 done
 
-SUBJECT=$(docker exec compose-fts-1 curl -sk -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" https://keycloak:8443/realms/rucio/protocol/openid-connect/token | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
-echo "${SUBJECT:0:30}..."
+# --- 4. Self-test: exchange as EACH requester, for each target -------------
+SUBJECT=$(docker exec compose-fts-1 curl -sk \
+  -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" \
+  https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+echo "subject token: ${SUBJECT:0:30}..."
 
-for AUD in "xrd3" "xrd4" "teapot"; do
-  echo "--- $AUD ---"
-  docker exec compose-fts-1 curl -sk -u "fts:fts-secret" \
-    -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
-    -d "requested_token_type=urn:ietf:params:oauth:token-type:refresh_token" \
-    -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
-    -d "subject_token=$SUBJECT" \
-    -d "audience=$AUD" \
-    https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
-    | python3 -c "import sys,json;r=json.load(sys.stdin);print('OK' if 'refresh_token' in r else r)"
+declare -A SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
+for RC in "${REQUESTERS[@]}"; do
+  for AUD in "${TARGETS[@]}"; do
+    echo -n "--- exchange as $RC -> $AUD : "
+    docker exec compose-fts-1 curl -sk -u "$RC:${SECRET[$RC]}" \
+      -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
+      -d "requested_token_type=urn:ietf:params:oauth:token-type:refresh_token" \
+      -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
+      -d "subject_token=$SUBJECT" \
+      -d "audience=$AUD" \
+      https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+      | python3 -c "import sys,json;r=json.load(sys.stdin);print('OK' if 'refresh_token' in r else r)"
+  done
 done
 
 echo "=== Done ==="
