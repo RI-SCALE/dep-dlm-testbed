@@ -75,7 +75,7 @@ jobs:
           kubectl -n dep-dlm-testbed describe pod -l app=rucio | grep -A 5 "Events:"
           exit 1
 
-      - name: Initialize DE DLM testbed
+      - name: Initialize DEP DLM testbed
         run: make init
 
       - name: Wait for fts (compose)
