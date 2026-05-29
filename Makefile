@@ -96,7 +96,7 @@ helm-template: ## Render manifests locally (helm template …) without installin
 helm-install: ## Create the namespace and install the umbrella chart
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	$(HELM) dependency update $(HELM_CHART)
-	$(HELM) install --set tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 
 .PHONY: helm-upgrade
 helm-upgrade: ## Apply local chart changes to the running release

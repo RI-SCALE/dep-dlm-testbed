@@ -50,8 +50,9 @@ dependencies:
 
   - name: rucio-client
     version: "0.1.0"
+    alias: "rucio-client"
     repository: "file://../rucio-client"
-    condition: rucioClient.enabled
+    condition: "rucio-client.enabled"
 
   - name: teapot
     version: "0.1.0"

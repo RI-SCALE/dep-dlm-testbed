@@ -22,14 +22,8 @@ env:
   - name: REQUESTS_CA_BUNDLE
     value: /etc/grid-security/certificates/rucio_ca.pem
 
-# Shared artifacts provided by the umbrella chart.
-certsSecret: testbed-certs
-# Contains userpass-client.cfg and userpass-client.cfg
-configsConfigMap: testbed-configs
-# Contains general scripts (init-testbed.sh, etc.)
-scriptsConfigMap: testbed-scripts
-# Contains all test scripts
-testsConfigMap: testbed-tests
+volumes: []
+volumeMounts: []
 
 resources: {}
 

@@ -49,18 +49,16 @@ spec:
             - name: https
               containerPort: 8443
           volumeMounts:
-            - name: certs
-              mountPath: /etc/x509/https/keycloakcert.pem
-              subPath: keycloakcert.pem
-              readOnly: true
-            - name: certs
-              mountPath: /etc/x509/https/keycloakkey.pem
-              subPath: keycloakkey.pem
-              readOnly: true
-            - name: configs
-              mountPath: /opt/keycloak/data/import/realm.json
-              subPath: realm.json
-              readOnly: true
+            {{- range $mount := .Values.volumeMounts }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              {{- if hasKey $mount "subPath" }}
+              subPath: {{ tpl $mount.subPath $ }}
+              {{- end }}
+              {{- if hasKey $mount "readOnly" }}
+              readOnly: {{ $mount.readOnly }}
+              {{- end }}
+            {{- end }}
           # readinessProbe:
           #   exec:
           #     command: ["sh", "-c", "curl -sk --fail https://localhost:8443/health/ready || exit 1"]
@@ -69,12 +67,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        - name: certs
-          secret:
-            secretName: {{ .Values.certsSecret }}
-        - name: configs
-          configMap:
-            name: {{ .Values.configsConfigMap }}
+        {{- toYaml .Values.volumes | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
