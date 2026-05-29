@@ -3,7 +3,8 @@ set -euo pipefail
 
 RUNTIME="${RUNTIME:-compose}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-testbed}"
-COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.yml}"
+TOKEN_MODE="${TOKEN_MODE:-managed}"
+COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.${TOKEN_MODE}.yml}"
 
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
 
@@ -185,8 +186,6 @@ try:
 except Exception as e:
     print(f'  ⚠ Registration failed: {e}')
 "
-
-    seed_subject_tokens
 }
 
 # ── Subject-token seeding (managed-mode token exchange) ──────────
@@ -322,7 +321,7 @@ except AttributeError as e:
     print(f'  ✗ Subject-token seeding failed: {e}')
     print('    This usually means save_subject_token() is missing from the')
     print('    patched oidc.py - add the wrapper to')
-    print('    shared/patches/rucio/managed-tokens/oidc.py and re-run.')
+    print('    shared/patches/rucio/oidc.py and re-run.')
     sys.exit(1)
 except Exception as e:
     import traceback
@@ -412,6 +411,7 @@ setup_fts_oidc_provider() {
         fi
         sleep 5
     done
+
 
     _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
     INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
@@ -578,8 +578,10 @@ verify_token_exchange() {
 main() {
     wait_for_infrastructure
     setup_accounts_and_identities
-    grant_token_exchange
-    verify_token_exchange
+    if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
+        grant_token_exchange
+        seed_subject_tokens
+    fi
     configure_rses
     setup_scopes_and_quotas
     setup_fts_oidc_provider
