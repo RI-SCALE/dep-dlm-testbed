@@ -176,7 +176,15 @@ def request_token(
         if OIDC_CONFIGURATION_RUN or not __load_oidc_configuration():
             return None
 
-    key = hashlib.md5(f"audience={audience};scope={scope}".encode()).hexdigest()
+    requested_scope = scope
+    if audience:
+        aud_scope = f"aud:{audience}"
+        if aud_scope not in requested_scope.split():
+            requested_scope = f"{requested_scope} {aud_scope}".strip()
+
+    key = hashlib.md5(
+        f"audience={audience};scope={requested_scope}".encode()
+    ).hexdigest()
     if use_cache and (token := _token_cache_get(key)):
         return token
     try:
@@ -186,7 +194,7 @@ def request_token(
             data={
                 "grant_type": "client_credentials",
                 "audience": audience,
-                "scope": scope,
+                "scope": requested_scope,
             },
         )
         response.raise_for_status()

@@ -2,12 +2,15 @@ SHELL       := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
-RUNTIME ?= compose
-
 # Anchor for compose bind-mounts. Override if running from an unusual shell.
 export TESTBED_HOST_SOURCE ?= $(CURDIR)
 
-COMPOSE_FILE ?= deploy/compose/docker-compose.yml
+RUNTIME ?= compose
+
+# FTS token exchange mode
+TOKEN_MODE ?= managed
+
+COMPOSE_FILE ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
 COMPOSE      := docker compose -f $(COMPOSE_FILE)
 
 # Helm / Kubernetes
@@ -16,6 +19,10 @@ HELM_RELEASE ?= testbed
 K8S_NAMESPACE ?= dep-dlm-testbed
 KUBECTL      := kubectl -n $(K8S_NAMESPACE)
 HELM         := helm
+
+ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
+  $(error TOKEN_MODE must be 'managed' or 'unmanaged', got '$(TOKEN_MODE)')
+endif
 
 # Execution wrappers based on RUNTIME (Defined after variables they depend on)
 ifeq ($(RUNTIME), k8s)
@@ -89,7 +96,7 @@ helm-template: ## Render manifests locally (helm template …) without installin
 helm-install: ## Create the namespace and install the umbrella chart
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	$(HELM) dependency update $(HELM_CHART)
-	$(HELM) install $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(HELM) install --set tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 
 .PHONY: helm-upgrade
 helm-upgrade: ## Apply local chart changes to the running release

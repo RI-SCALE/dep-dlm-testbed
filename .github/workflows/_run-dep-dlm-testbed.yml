@@ -20,10 +20,14 @@ jobs:
     runs-on: ${{ inputs.runner }}
     name: ${{ inputs.label }}
     timeout-minutes: 45
+    strategy:
+      matrix:
+        mode: [managed, unmanaged]
     env:
       TESTBED_HOST_SOURCE: ${{ github.workspace }}
       RUNTIME: ${{ inputs.runtime }}
-      COMPOSE_FILE: deploy/compose/docker-compose.ci.yml
+      TOKEN_MODE: ${{ matrix.mode }}
+      COMPOSE_FILE: deploy/compose/docker-compose.${{ matrix.mode }}.ci.yml
     steps:
       - name: Checkout
         uses: actions/checkout@v6

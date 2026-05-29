@@ -79,7 +79,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3config:/etc/fts3/fts3config:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3restconfig:/etc/fts3/fts3restconfig:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/managed.fts3restconfig:/etc/fts3/fts3restconfig:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
@@ -245,7 +245,7 @@ services:
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.token-exchange.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
@@ -253,9 +253,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
-      # - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/managed-tokens/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/managed-tokens/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
     healthcheck:

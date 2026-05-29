@@ -45,50 +45,16 @@ spec:
               containerPort: 8449
               protocol: TCP
           volumeMounts:
-            # Certs
-            - name: certs
-              mountPath: /etc/grid-security/hostcert.pem
-              subPath: hostcert.pem
-            - name: certs
-              mountPath: /etc/grid-security/hostkey.pem
-              subPath: hostkey.pem
-            - name: certs
-              mountPath: /etc/grid-security/certificates/5fca1cb1.0
-              subPath: 5fca1cb1.0
-            - name: certs
-              mountPath: /etc/grid-security/certificates/5fca1cb1.signing_policy
-              subPath: 5fca1cb1.signing_policy
-            - name: certs
-              mountPath: /etc/grid-security/certificates/b96dc756.0
-              subPath: b96dc756.0
-            - name: certs
-              mountPath: /etc/grid-security/certificates/b96dc756.signing_policy
-              subPath: b96dc756.signing_policy
-            - name: certs
-              mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
-              subPath: rucio_ca.pem
-              readOnly: false
-            - name: scripts
-              mountPath: /scripts
-            - name: configs
-              mountPath: /etc/fts3/fts3config
-              subPath: fts3config
-            - name: configs
-              mountPath: /etc/fts3/fts3restconfig
-              subPath: fts3restconfig
-            - name: configs
-              mountPath: /etc/gfal2.d/http_plugin.conf
-              subPath: gfal2_http_plugin.conf
-            - name: scripts-fts
-              mountPath: /docker-entrypoint.sh
-              subPath: docker-entrypoint.sh
-            # Python patches for fts-rest-flask
-            - name: patches
-              mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py
-              subPath: fts--middleware.py
-            - name: patches
-              mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py
-              subPath: fts--openidconnect.py
+            {{- range $mount := .Values.volumeMounts }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              {{- if hasKey $mount "subPath" }}
+              subPath: {{ tpl $mount.subPath $ }}
+              {{- end }}
+              {{- if hasKey $mount "readOnly" }}
+              readOnly: {{ $mount.readOnly }}
+              {{- end }}
+            {{- end }}
           {{- if .Values.healthcheck.enabled }}
           readinessProbe:
             exec:
@@ -99,46 +65,10 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        - name: certs
-          secret:
-            secretName: {{ .Values.certsSecret }}
-            defaultMode: 0600
-            items:
-              - key: hostcert.pem
-                path: hostcert.pem
-                mode: 0600
-              - key: hostkey.pem
-                path: hostkey.pem
-                mode: 0600
-              - key: rucio_ca.pem
-                path: rucio_ca.pem
-                mode: 0644
-              - key: 5fca1cb1.0
-                path: 5fca1cb1.0
-                mode: 0644
-              - key: 5fca1cb1.signing_policy
-                path: 5fca1cb1.signing_policy
-                mode: 0644
-              - key: b96dc756.0
-                path: b96dc756.0
-                mode: 0644
-              - key: b96dc756.signing_policy
-                path: b96dc756.signing_policy
-                mode: 0644
-        - name: scripts
-          configMap:
-            name: {{ .Values.scriptsConfigMap }}
-            defaultMode: 0755
-        - name: scripts-fts
-          configMap:
-            name: {{ .Values.scriptsConfigMap }}-fts
-            defaultMode: 0755
-        - name: configs
-          configMap:
-            name: {{ .Values.configsConfigMap }}
-        - name: patches
-          secret:
-            secretName: {{ .Values.patchesSecret }}
+        {{- range $name, $spec := .Values.volumes }}
+        - name: {{ $name }}
+          {{- toYaml $spec | nindent 10 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

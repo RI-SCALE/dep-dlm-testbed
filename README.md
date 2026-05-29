@@ -1,6 +1,8 @@
 # dep-dlm-testbed
 
-Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`). Extensible toward data discovery, popularity and preparation services and a full Rucio + FTS3 setup for external system integration.
+Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`).
+
+The testbed supports both managed and unmanaged token flows and is extensible toward data discovery, popularity and preparation services, as well as broader integration scenarios with external Rucio and FTS3 deployments.
 
 ## Backlog
 
@@ -18,15 +20,18 @@ The recommended setup is to use the provided [dev container](./.devcontainer/dev
 # 1. Generate certificates
 make certs
 
+export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
+export RUNTIME=compose
+
 # 2. Start the stack
 make compose-up
 
 # 3. Initialize DEP DLM testbed
-RUNTIME=compose make init
+make init
 
 # 4. Run tests
-RUNTIME=compose make test-rucio-transfers
-RUNTIME=compose make test-rucio-deletion
+make test-rucio-transfers
+make test-rucio-deletion
 
 # 5. Stop the stack and remove volumes
 make compose-down
@@ -41,12 +46,15 @@ make certs
 # 2. Install the Helm chart
 make helm-install
 
+export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
+export RUNTIME=k8s
+
 # 3. Initialize DEP DLM testbed
-RUNTIME=k8s make init
+make init
 
 # 4. Run tests
-RUNTIME=k8s make test-rucio-transfers
-RUNTIME=k8s make test-rucio-deletion
+make test-rucio-transfers
+make test-rucio-deletion
 
 # 5. Stop the stack and remove volumes
 make helm-uninstall

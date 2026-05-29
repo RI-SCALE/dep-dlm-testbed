@@ -11,9 +11,9 @@ Exercised by [test_rucio_transfers.py](../shared/tests/test_rucio_transfers.py):
 `add_replication_rule` → judge-evaluator → conveyor-submitter → conveyor-poller
 → conveyor-finisher → rule state OK.
 
-FTS can run in two token modes. The testbed currently uses **managed mode**.
+FTS can run in two token modes. The testbed currently supports both **managed and unmanaged token flows**.
 
-### Managed mode (current testbed config)
+### Managed mode
 
 Rucio delegates short-lived access tokens; FTS owns the lifecycle, performing a
 **token-exchange** (the `TOKEN_PREP` step) to obtain refresh tokens, then
