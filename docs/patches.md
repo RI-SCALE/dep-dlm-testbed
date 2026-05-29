@@ -9,65 +9,161 @@ inside the container (Compose) or via a ConfigMap volume mount (Kubernetes).
 
 ## Rucio — `transfertool/fts3.py`
 
-**Source:** `rucio/rucio-server` image, Python package
-`rucio.transfertool.fts3`
-
-**Upstream ref:**
-[rucio/rucio @ main — transfertool/fts3.py](https://github.com/rucio/rucio/blob/master/lib/rucio/transfertool/fts3.py)
+**Source:** `rucio/rucio-server` image, Python package `rucio.transfertool.fts3`
+**Upstream ref:** [rucio/rucio @ main — transfertool/fts3.py](https://github.com/rucio/rucio/blob/master/lib/rucio/transfertool/fts3.py)
 
 ### Changes
 
-**1. `_TOKEN_CAPABLE_SCHEMES` — accept `http://` and `https://` in addition to `davs://`**
+**1. `_file_from_transfer` — pass `account` and per-RSE `audience` to `request_token`**
 
-Upstream `_use_tokens()` only attaches `source_tokens` / `destination_tokens`
-to FTS file submissions when the endpoint scheme is `davs`. Teapot's
-Storm-WebDAV instance is reachable via `http://` (CANL bypass for
-self-signed cert trust). Without this patch, `_use_tokens` returns `False`
-for `http://` sources, no per-file tokens are set in `t_file`, and FTS falls
-back to presenting the X.509 host cert during TLS handshake — which
-Storm-WebDAV rejects with `ssl/tls alert certificate_unknown`. With the patch,
-`source_tokens` and `destination_tokens` are populated for `http://`,
-`https://`, and `davs://` schemes.
-
-```python
-# Patch
-_TOKEN_CAPABLE_SCHEMES = frozenset({"davs", "https", "http"})
-
-# Upstream
-# endpoint.scheme != 'davs'
-```
-
-**2. `job_params` — add `unmanaged_tokens: True`**
-
-Required for FTS to accept pre-fetched bearer tokens supplied by Rucio
-rather than managing token exchange itself. Without this flag, FTS ignores
-the `source_tokens`/`destination_tokens` fields.
-
-```python
-job_params = {
-    ...
-    "unmanaged_tokens": True,  # patch — not in upstream
-}
-```
-
-**3. `determine_scope_for_rse` — add `openid` to `extra_scopes`**
-
-Upstream passes `extra_scopes=['offline_access']`; the patch adds `openid`
-so the token exchange with Keycloak returns a proper OIDC token with the
-`openid` claim, which is required by the testbed's Keycloak realm
-configuration.
+Upstream calls `request_token(audience, scope)` for source and destination
+storage tokens. The testbed adds `account=rws.account` and uses the
+per-RSE audience derived via `determine_audience_for_rse(rse_id)`. The
+`account` argument routes the call through the exchange path in the
+patched `oidc.py` (managed mode); in unmanaged mode the same call falls
+through to `client_credentials`, where the patched `oidc.py` activates
+the matching `aud:<audience>` optional scope. The patch also raises
+`TransferToolWrongAnswer` when `request_token` returns `None`, so
+silent token-acquisition failures become visible.
 
 ```python
 # Patch
-extra_scopes=["offline_access", "openid"]
-
+src_token = request_token(src_audience, src_scope, account=rws.account)
+if src_token is None:
+    raise TransferToolWrongAnswer(
+        f"Could not procure source token for {transfer.src.rse.name}"
+    )
 # Upstream
-extra_scopes=['offline_access']
+t_file["source_tokens"].append(request_token(src_audience, src_scope))
 ```
 
-### Replacement path
+**2. `build_job_params` — set `unmanaged_tokens` based on `oidc.token_strategy`**
 
-`extra_scopes` (`openid`) is a candidate for upstreaming to Rucio. `_TOKEN_CAPABLE_SCHEMES` should be replaced by configuring Teapot/Storm-WebDAV to serve on `davs://` (TLS) rather than `http://`. `unmanaged_tokens` correctly implements the intended architecture and should remain for the testbed.
+In unmanaged mode FTS must accept pre-fetched bearer tokens as-is and
+skip the `TOKEN_PREP` exchange and refresh. In managed mode FTS owns
+the lifecycle and the flag must be absent. The patch reads
+`oidc.token_strategy` and sets the flag conditionally:
+
+```python
+token_strategy = config_get(
+    "oidc", "token_strategy", raise_exception=False, default="client_credentials"
+)
+if token_strategy != "exchange":
+    job_params["unmanaged_tokens"] = True
+```
+
+This is paired with `AllowNonManagedTokens=True` in
+`unmanaged.fts3restconfig`. The two settings must agree.
+
+## Rucio — `core/oidc.py`
+
+**Source:** `rucio/rucio-server` image, Python package `rucio.core.oidc`
+**Upstream ref:** [rucio/rucio @ main — core/oidc.py](https://github.com/rucio/rucio/blob/master/lib/rucio/core/oidc.py)
+
+### Changes
+
+**1. OIDC discovery URL — string concatenation instead of `urljoin`**
+
+Upstream constructs the discovery URL with
+`urljoin(issuer, '.well-known/openid-configuration')`, which strips the
+last path segment when `issuer` lacks a trailing slash — for the
+Keycloak issuer `https://keycloak:8443/realms/rucio` it yields
+`/realms/.well-known/openid-configuration` (HTTP 404). The patch uses
+`issuer.rstrip('/') + '/.well-known/openid-configuration'`, which is
+both `urljoin`-safe and trailing-slash-agnostic.
+
+**2. `request_token` — route through `get_token_for_account_operation` for exchange**
+
+When `oidc.token_strategy == 'exchange'` and an `account` is provided,
+the patch routes through `get_token_for_account_operation`, performing
+RFC 8693 token-exchange against the account's seeded subject token.
+Without an account or exchange strategy the call falls through to the
+upstream `client_credentials` path.
+
+**3. `request_token` — append `aud:<audience>` scope in the `client_credentials` branch**
+
+Keycloak's `audience` POST parameter on a `client_credentials` grant
+does **not** activate an audience-mapper that lives inside an *optional*
+client scope. In this testbed the per-RSE `aud:*` scopes are optional
+(so managed-mode exchanged tokens can carry a single audience). To make
+unmanaged-mode tokens carry the audience, the patch appends
+`aud:<audience>` to the requested scope so Keycloak activates the
+optional scope and runs its mapper:
+
+```python
+requested_scope = scope
+if audience:
+    aud_scope = f"aud:{audience}"
+    if aud_scope not in requested_scope.split():
+        requested_scope = f"{requested_scope} {aud_scope}".strip()
+```
+
+The cache key uses `requested_scope`, not `scope`, to avoid serving an
+audience-less cached token when an audience-bearing one is requested.
+
+**4. `__exchange_token_oidc` — caller's audience wins; guarantee `openid` scope**
+
+Upstream's exchange used the subject token's audience by default; the
+patch inverts the precedence so the caller's per-RSE audience (set in
+`fts3.py`) takes priority. The patch also guarantees `openid` is in
+the requested scope so exchanged tokens are accepted by OIDC
+userinfo-based validators (Teapot's pre-offline-JWT auth path; not
+needed once Teapot validates JWTs offline, but harmless).
+
+**5. `save_subject_token` — wrapper to seed subject tokens with an explicit account**
+
+A thin wrapper around the internal token-saver used by `validate_jwt`,
+exposed so `init-testbed.sh` can persist subject tokens for an
+explicitly-named account. `validate_jwt` resolves accounts via
+`get_default_account`, which is ambiguous when one OIDC identity maps
+to multiple accounts.
+
+**6. Permanent WARNING logging on swallowed exceptions**
+
+Two `except` blocks in the exchange path previously logged at `DEBUG`
+and silently returned `None`. The patch promotes them to `WARNING` and
+logs when `request_token` returns `None`, so token-acquisition failures
+surface in production logs rather than vanishing.
+
+### Realm coupling
+
+Patch changes 3 and 4 above only work because the testbed's Keycloak
+realm exposes per-RSE audience scopes (`aud:xrd3`, `aud:xrd4`,
+`aud:teapot1`, `aud:teapot2`) as **optional** client scopes on the
+`rucio` and `fts` clients, with `include.in.token.scope: false` on
+each mapper. Switching them to default scopes would put every audience
+on every token (breaks managed-mode single-audience tokens); removing
+the optional declaration breaks unmanaged-mode entirely. See
+`shared/config/keycloak/realm.json`.
+
+## Replacement paths
+
+**Candidates for upstreaming to Rucio:**
+
+- Discovery-URL `urljoin` fix in `oidc.py` (correctness bug for issuers
+  without trailing slashes; affects any non-Keycloak IdP whose issuer
+  omits the slash too).
+- `account` and per-RSE `audience` passthrough in `fts3.py` storage
+  token requests (required for any token-exchange or
+  audience-scoped-client deployment, not specific to this testbed).
+- Audience-precedence inversion in `__exchange_token_oidc` (per-RSE
+  audience is the more useful default than the subject token's
+  audience).
+- WARNING-level logging on the previously silent failure paths.
+
+**Testbed-specific, retained by design:**
+
+- `unmanaged_tokens` is the documented FTS mechanism for pre-fetched
+  long-lived tokens; the conditional setting based on `token_strategy`
+  is how Rucio is expected to integrate with both modes.
+- The `aud:<audience>` scope-append in `oidc.py`'s `client_credentials`
+  branch is a workaround for Keycloak's optional-scope semantics; it's
+  correct behaviour for *this* realm topology, but other IdPs may not
+  need it. Worth keeping behind the existing patched path rather than
+  upstreaming as default.
+- `save_subject_token` exists only to support the testbed's seeding
+  flow; production deployments use the auth-code flow to populate
+  subject tokens.
 
 ---
 
