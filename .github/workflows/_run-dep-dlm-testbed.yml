@@ -6,9 +6,6 @@ on:
       runner:
         required: true
         type: string
-      label:
-        required: true
-        type: string
       runtime:
         required: false
         type: string
@@ -18,9 +15,10 @@ on:
 jobs:
   test:
     runs-on: ${{ inputs.runner }}
-    name: ${{ inputs.label }}
+    name: ${{ inputs.runtime }} | ${{ matrix.mode }}
     timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         mode: [managed, unmanaged]
     env:
