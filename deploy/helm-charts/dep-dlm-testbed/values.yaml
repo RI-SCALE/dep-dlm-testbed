@@ -5,8 +5,8 @@
 # below corresponds to a dependency alias in Chart.yaml and is passed directly
 # to that subchart as its .Values.
 #
-# Three shared resources are created by templates in this chart and consumed
-# by all subcharts:
+# Shared resources are created by templates in this chart and consumed
+# by all subcharts, e.g.:
 #   - Secret      "testbed-certs"   (all PEMs)
 #   - ConfigMap   "testbed-configs" (all non-secret config files)
 #   - ConfigMap   "testbed-scripts" (all entrypoint/test scripts)
@@ -15,7 +15,8 @@
 # place your source tree before running `helm install`.
 
 # Options: unmanaged, managed
-tokenMode: managed
+global:
+  tokenMode: managed
 
 certs:
   create: true
@@ -153,30 +154,54 @@ fts:
   ftsdbHost: ftsdb
 
   volumes:
-    certs:
+    - name: certs
       secret:
         secretName: testbed-certs
         defaultMode: 0600
         items:
-          - { key: hostcert.pem,             path: hostcert.pem,             mode: 0600 }
-          - { key: hostkey.pem,              path: hostkey.pem,              mode: 0600 }
-          - { key: rucio_ca.pem,             path: rucio_ca.pem,             mode: 0644 }
-          - { key: 5fca1cb1.0,               path: 5fca1cb1.0,               mode: 0644 }
-          - { key: 5fca1cb1.signing_policy,  path: 5fca1cb1.signing_policy,  mode: 0644 }
-          - { key: b96dc756.0,               path: b96dc756.0,               mode: 0644 }
-          - { key: b96dc756.signing_policy,  path: b96dc756.signing_policy,  mode: 0644 }
-    scripts:
+          - key: hostcert.pem
+            path: hostcert.pem
+            mode: 0600
+
+          - key: hostkey.pem
+            path: hostkey.pem
+            mode: 0600
+
+          - key: rucio_ca.pem
+            path: rucio_ca.pem
+            mode: 0644
+
+          - key: 5fca1cb1.0
+            path: 5fca1cb1.0
+            mode: 0644
+
+          - key: 5fca1cb1.signing_policy
+            path: 5fca1cb1.signing_policy
+            mode: 0644
+
+          - key: b96dc756.0
+            path: b96dc756.0
+            mode: 0644
+
+          - key: b96dc756.signing_policy
+            path: b96dc756.signing_policy
+            mode: 0644
+
+    - name: scripts
       configMap:
         name: testbed-scripts
         defaultMode: 0755
-    scripts-fts:
+
+    - name: scripts-fts
       configMap:
         name: testbed-scripts-fts
         defaultMode: 0755
-    configs:
+
+    - name: configs
       configMap:
         name: testbed-configs
-    patches:
+
+    - name: patches
       secret:
         secretName: testbed-patches
 
@@ -240,50 +265,435 @@ keycloak:
   enabled: true
   fullnameOverride: keycloak
 
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+  volumeMounts:
+    - name: certs
+      mountPath: /etc/x509/https/keycloakcert.pem
+      subPath: keycloakcert.pem
+      readOnly: true
+
+    - name: certs
+      mountPath: /etc/x509/https/keycloakkey.pem
+      subPath: keycloakkey.pem
+      readOnly: true
+
+    - name: configs
+      mountPath: /opt/keycloak/data/import/realm.json
+      subPath: realm.json
+      readOnly: true
+
 # XRootD storage endpoints
 
 xrd3:
   enabled: true
   fullnameOverride: xrd3
-  certFile: xrd3cert.pem
-  keyFile: xrd3key.pem
-  scitokens:
-    enabled: true
+
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+        defaultMode: 0600
+        items:
+          - key: xrd3cert.pem
+            path: xrd3cert.pem
+            mode: 0600
+
+          - key: xrd3key.pem
+            path: xrd3key.pem
+            mode: 0600
+
+          - key: rucio_ca.pem
+            path: rucio_ca.pem
+            mode: 0644
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+    - name: scripts
+      configMap:
+        name: testbed-scripts-xrootd
+        defaultMode: 0755
+
+  volumeMounts:
+    - name: certs
+      mountPath: /etc/grid-security/certificates/5fca1cb1.0
+      subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /tmp/xrdcert.pem
+      subPath: xrd3cert.pem
+    - name: certs
+      mountPath: /tmp/xrdkey.pem
+      subPath: xrd3key.pem
+    - name: certs
+      mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
+      subPath: rucio_ca.pem
+    - name: scripts
+      mountPath: /usr/local/bin/docker-entrypoint.sh
+      subPath: docker-entrypoint.sh
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/xrdrucio.cfg
+      subPath: xrdrucio-scitokens.cfg
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/authdb
+      subPath: authdb
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/scitokens.conf
+      subPath: scitokens.conf
+      readOnly: true
 
 xrd4:
   enabled: true
   fullnameOverride: xrd4
-  certFile: xrd4cert.pem
-  keyFile: xrd4key.pem
-  scitokens:
-    enabled: true
+
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+        defaultMode: 0600
+        items:
+          - key: xrd4cert.pem
+            path: xrd4cert.pem
+            mode: 0600
+
+          - key: xrd4key.pem
+            path: xrd4key.pem
+            mode: 0600
+
+          - key: rucio_ca.pem
+            path: rucio_ca.pem
+            mode: 0644
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+    - name: scripts
+      configMap:
+        name: testbed-scripts-xrootd
+        defaultMode: 0755
+
+  volumeMounts:
+    - name: certs
+      mountPath: /etc/grid-security/certificates/5fca1cb1.0
+      subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /tmp/xrdcert.pem
+      subPath: xrd4cert.pem
+    - name: certs
+      mountPath: /tmp/xrdkey.pem
+      subPath: xrd4key.pem
+    - name: certs
+      mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
+      subPath: rucio_ca.pem
+    - name: scripts
+      mountPath: /usr/local/bin/docker-entrypoint.sh
+      subPath: docker-entrypoint.sh
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/xrdrucio.cfg
+      subPath: xrdrucio-scitokens.cfg
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/authdb
+      subPath: authdb
+      readOnly: true
+    - name: configs
+      mountPath: /etc/xrootd/scitokens.conf
+      subPath: scitokens.conf
+      readOnly: true
 
 # Rucio client pod
 
-rucioClient:
+"rucio-client":
   enabled: true
   fullnameOverride: rucio-client
+
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+        defaultMode: 0600
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+    - name: scripts
+      configMap:
+        name: testbed-scripts
+        defaultMode: 0755
+
+    - name: tests
+      configMap:
+        name: testbed-tests
+        defaultMode: 0755
+
+  volumeMounts:
+    - name: certs
+      mountPath: /etc/grid-security/hostcert.pem
+      subPath: hostcert.pem
+      readOnly: true
+    - name: certs
+      mountPath: /etc/grid-security/hostkey.pem
+      subPath: hostkey.pem
+      readOnly: true
+    - name: certs
+      mountPath: /etc/grid-security/certificates/5fca1cb1.0
+      subPath: rucio_ca.pem
+      readOnly: true
+    - name: certs
+      mountPath: /etc/grid-security/certificates/rucio_ca.pem
+      subPath: rucio_ca.pem
+      readOnly: true
+    - name: configs
+      mountPath: /opt/rucio/etc/userpass-client.cfg
+      subPath: userpass-client.cfg
+      readOnly: true
+    - name: configs
+      mountPath: /opt/rucio/etc/rucio.cfg
+      subPath: userpass-client.cfg
+      readOnly: true
+    - name: scripts
+      mountPath: /scripts
+      readOnly: true
+    - name: tests
+      mountPath: /tests
+      readOnly: true
 
 # Teapot pod
 
 teapot1:
   enabled: true
   fullnameOverride: teapot1
-  trustSecret: testbed-certs
-  certFiles:
-    teapotcert: teapot1cert.pem
-    teapotkey: teapot1key.pem
-    stormLocalcert: storm-webdav-localhostcert.pem
-    stormLocalkey: storm-webdav-localhostkey.pem
-    ca: rucio_ca.pem
+
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+        defaultMode: 0600
+        items:
+          - key: teapot1cert.pem
+            path: teapot1cert.pem
+            mode: 0600
+
+          - key: teapot1key.pem
+            path: teapot1key.pem
+            mode: 0600
+
+          - key: storm-webdav-localhostcert.pem
+            path: storm-webdav-localhostcert.pem
+            mode: 0644
+
+          - key: storm-webdav-localhostkey.pem
+            path: storm-webdav-localhostkey.pem
+            mode: 0644
+
+          - key: rucio_ca.pem
+            path: rucio_ca.pem
+            mode: 0644
+
+    - name: trust
+      secret:
+        secretName: testbed-certs
+        items:
+          - key: rucio_ca.pem
+            path: 5fca1cb1.0
+
+          - key: rucio_ca.pem
+            path: b96dc756.0
+
+          - key: 5fca1cb1.signing_policy
+            path: 5fca1cb1.signing_policy
+
+          - key: b96dc756.signing_policy
+            path: b96dc756.signing_policy
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+    - name: patches
+      secret:
+        secretName: testbed-patches
+
+    - name: teapot-data
+      persistentVolumeClaim:
+        claimName: teapot1-data
+
+  volumeMounts:
+    # Teapot config files
+    - name: configs
+      mountPath: /etc/teapot/config.ini
+      subPath: config.ini
+      readOnly: true
+    - name: configs
+      mountPath: /etc/teapot/user-mapping.csv
+      subPath: user-mapping.csv
+      readOnly: true
+    - name: configs
+      mountPath: /etc/teapot/logback.xml
+      subPath: logback.xml
+      readOnly: true
+    # Teapot TLS cert + key
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/teapot.crt
+      subPath: teapot1cert.pem
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/teapot.key
+      subPath: teapot1key.pem
+    # Rucio CA (Teapot-testing CA + system trust)
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/Teapot-testing.crt
+      subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /usr/local/share/ca-certificates/rucio-ca.crt
+      subPath: rucio_ca.pem
+    # Storm-WebDAV internal TLS
+    - name: certs
+      mountPath: /etc/storm/webdav/localhost.crt
+      subPath: storm-webdav-localhostcert.pem
+    - name: certs
+      mountPath: /etc/storm/webdav/localhost.key
+      subPath: storm-webdav-localhostkey.pem
+    # canl trust anchors
+    - name: trust
+      mountPath: /etc/grid-security/certificates
+      readOnly: true
+    # Storm-WebDAV application.yml + storage area
+    - name: configs
+      mountPath: /var/lib/teapot/user-teapot/config/application.yml
+      subPath: application.yml
+      readOnly: true
+    - name: configs
+      mountPath: /var/lib/teapot/user-teapot/sa.d/data.properties
+      subPath: data.properties
+      readOnly: true
+    # Patched teapot.py
+    - name: patches
+      mountPath: /usr/share/teapot/teapot.py
+      subPath: teapot--teapot.py
+      readOnly: true
 
 teapot2:
   enabled: true
   fullnameOverride: teapot2
-  trustSecret: testbed-certs
-  certFiles:
-    teapotcert: teapot2cert.pem
-    teapotkey: teapot2key.pem
-    stormLocalcert: storm-webdav-localhostcert.pem
-    stormLocalkey: storm-webdav-localhostkey.pem
-    ca: rucio_ca.pem
+
+  volumes:
+    - name: certs
+      secret:
+        secretName: testbed-certs
+        defaultMode: 0600
+        items:
+          - key: teapot2cert.pem
+            path: teapot2cert.pem
+            mode: 0600
+
+          - key: teapot2key.pem
+            path: teapot2key.pem
+            mode: 0600
+
+          - key: storm-webdav-localhostcert.pem
+            path: storm-webdav-localhostcert.pem
+            mode: 0644
+
+          - key: storm-webdav-localhostkey.pem
+            path: storm-webdav-localhostkey.pem
+            mode: 0644
+
+          - key: rucio_ca.pem
+            path: rucio_ca.pem
+            mode: 0644
+
+    - name: trust
+      secret:
+        secretName: testbed-certs
+        items:
+          - key: rucio_ca.pem
+            path: 5fca1cb1.0
+
+          - key: rucio_ca.pem
+            path: b96dc756.0
+
+          - key: 5fca1cb1.signing_policy
+            path: 5fca1cb1.signing_policy
+
+          - key: b96dc756.signing_policy
+            path: b96dc756.signing_policy
+
+    - name: configs
+      configMap:
+        name: testbed-configs
+
+    - name: patches
+      secret:
+        secretName: testbed-patches
+
+    - name: teapot-data
+      persistentVolumeClaim:
+        claimName: teapot2-data
+
+  volumeMounts:
+    # Teapot config files
+    - name: configs
+      mountPath: /etc/teapot/config.ini
+      subPath: config.ini
+      readOnly: true
+    - name: configs
+      mountPath: /etc/teapot/user-mapping.csv
+      subPath: user-mapping.csv
+      readOnly: true
+    - name: configs
+      mountPath: /etc/teapot/logback.xml
+      subPath: logback.xml
+      readOnly: true
+    # Teapot TLS cert + key
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/teapot.crt
+      subPath: teapot2cert.pem
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/teapot.key
+      subPath: teapot2key.pem
+    # Rucio CA (Teapot-testing CA + system trust)
+    - name: certs
+      mountPath: /var/lib/teapot/webdav/Teapot-testing.crt
+      subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /usr/local/share/ca-certificates/rucio-ca.crt
+      subPath: rucio_ca.pem
+    # Storm-WebDAV internal TLS
+    - name: certs
+      mountPath: /etc/storm/webdav/localhost.crt
+      subPath: storm-webdav-localhostcert.pem
+    - name: certs
+      mountPath: /etc/storm/webdav/localhost.key
+      subPath: storm-webdav-localhostkey.pem
+    # canl trust anchors
+    - name: trust
+      mountPath: /etc/grid-security/certificates
+      readOnly: true
+    # Storm-WebDAV application.yml + storage area
+    - name: configs
+      mountPath: /var/lib/teapot/user-teapot/config/application.yml
+      subPath: application.yml
+      readOnly: true
+    - name: configs
+      mountPath: /var/lib/teapot/user-teapot/sa.d/data.properties
+      subPath: data.properties
+      readOnly: true
+    # Patched teapot.py
+    - name: patches
+      mountPath: /usr/share/teapot/teapot.py
+      subPath: teapot--teapot.py
+      readOnly: true

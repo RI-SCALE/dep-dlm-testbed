@@ -15,11 +15,8 @@ admin:
   username: admin
   password: admin
 
-# Shared artifacts from the umbrella chart:
-# - testbed-certs holds keycloakcert.pem / keycloakkey.pem
-# - testbed-configs holds realm.json
-certsSecret: testbed-certs
-configsConfigMap: testbed-configs
+volumes: []
+volumeMounts: []
 
 resources: {}
 

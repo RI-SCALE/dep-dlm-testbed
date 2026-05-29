@@ -21,15 +21,8 @@ scitokens:
   # Set to false (default) for xrd1/xrd2 (GSI/VOMS).
   enabled: false
 
-# ── Shared artifacts (managed by umbrella chart) ──────────────────────────
-certsSecret: testbed-certs
-
-# Holds: xrdrucio-gsi.cfg, xrdrucio-scitokens.cfg, grid-mapfile,
-#        authdb, scitokens.conf
-configsConfigMap: testbed-configs
-
-# Holds docker-entrypoint.sh (in the -xrootd sub-ConfigMap)
-scriptsConfigMap: testbed-scripts
+volumes: []
+volumeMounts: []
 
 resources: {}
 

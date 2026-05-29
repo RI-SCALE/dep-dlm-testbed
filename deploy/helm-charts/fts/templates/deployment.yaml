@@ -65,10 +65,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        {{- range $name, $spec := .Values.volumes }}
-        - name: {{ $name }}
-          {{- toYaml $spec | nindent 10 }}
-        {{- end }}
+        {{- toYaml .Values.volumes | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

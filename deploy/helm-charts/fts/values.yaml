@@ -25,7 +25,7 @@ ftsdb:
   storage: 2Gi
   resources: {}
 
-volumes: {}
+volumes: []
 volumeMounts: []
 
 env:

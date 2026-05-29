@@ -51,118 +51,27 @@ spec:
                 - -o
                 - /dev/null
                 - -w
-                - "%{http_code}"
+                - "'%{http_code}'"
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 10
           volumeMounts:
-            # Teapot config
-            - name: configs
-              mountPath: /etc/teapot/config.ini
-              subPath: config.ini
-              readOnly: true
-            # User mapping
-            - name: configs
-              mountPath: /etc/teapot/user-mapping.csv
-              subPath: user-mapping.csv
-              readOnly: true
-            # Logback config (eu.emi.security DEBUG + file appender)
-            - name: configs
-              mountPath: /etc/teapot/logback.xml
-              subPath: logback.xml
-              readOnly: true
-            # Teapot TLS cert + key
-            - name: certs
-              mountPath: /var/lib/teapot/webdav/teapot.crt
-              subPath: {{ .Values.certFiles.teapotcert }}
-            - name: certs
-              mountPath: /var/lib/teapot/webdav/teapot.key
-              subPath: {{ .Values.certFiles.teapotkey }}
-            # Rucio CA (Teapot-testing CA + system trust)
-            - name: certs
-              mountPath: /var/lib/teapot/webdav/Teapot-testing.crt
-              subPath: {{ .Values.certFiles.ca }}
-            - name: certs
-              mountPath: /usr/local/share/ca-certificates/rucio-ca.crt
-              subPath: {{ .Values.certFiles.ca }}
-            # Storm-WebDAV internal TLS cert + key
-            - name: certs
-              mountPath: /etc/storm/webdav/localhost.crt
-              subPath: {{ .Values.certFiles.stormLocalcert }}
-            - name: certs
-              mountPath: /etc/storm/webdav/localhost.key
-              subPath: {{ .Values.certFiles.stormLocalkey }}
-            # canl trust anchors — both hash variants required by
-            # OpensslCertChainValidator for TPC peer cert validation
-            - name: trust
-              mountPath: /etc/grid-security/certificates
-              readOnly: true
-            # Pre-rendered Storm-WebDAV application.yml and storage area
-            - name: configs
-              mountPath: /var/lib/teapot/user-teapot/config/application.yml
-              subPath: application.yml
-              readOnly: true
-            - name: configs
-              mountPath: /var/lib/teapot/user-teapot/sa.d/data.properties
-              subPath: data.properties
-              readOnly: true
-            # Patched teapot.py (JVM arg order fix + _get_proc fix)
-            - name: patches
-              mountPath: /usr/share/teapot/teapot.py
-              subPath: teapot--teapot.py
-              readOnly: true
-            # Data volume
+            {{- range $mount := .Values.volumeMounts }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath }}
+              {{- if hasKey $mount "subPath" }}
+              subPath: {{ tpl $mount.subPath $ }}
+              {{- end }}
+              {{- if hasKey $mount "readOnly" }}
+              readOnly: {{ $mount.readOnly }}
+              {{- end }}
+            {{- end }}
             - name: teapot-data
               mountPath: /data
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        - name: certs
-          secret:
-            secretName: {{ .Values.certsSecret }}
-            defaultMode: 0600
-            items:
-              - key: {{ .Values.certFiles.teapotcert }}
-                path: {{ .Values.certFiles.teapotcert }}
-                mode: 0600
-              - key: {{ .Values.certFiles.teapotkey }}
-                path: {{ .Values.certFiles.teapotkey }}
-                mode: 0600
-              - key: {{ .Values.certFiles.stormLocalcert }}
-                path: {{ .Values.certFiles.stormLocalcert }}
-                mode: 0644
-              - key: {{ .Values.certFiles.stormLocalkey }}
-                path: {{ .Values.certFiles.stormLocalkey }}
-                mode: 0644
-              - key: {{ .Values.certFiles.ca }}
-                path: {{ .Values.certFiles.ca }}
-                mode: 0644
-        # canl trust anchor directory — both OpenSSL hash variants + signing policies
-        - name: trust
-          secret:
-            secretName: {{ .Values.trustSecret }}
-            items:
-              - key: rucio_ca.pem
-                path: 5fca1cb1.0
-              - key: rucio_ca.pem
-                path: b96dc756.0
-              - key: 5fca1cb1.signing_policy
-                path: 5fca1cb1.signing_policy
-              - key: b96dc756.signing_policy
-                path: b96dc756.signing_policy
-        - name: configs
-          configMap:
-            name: {{ .Values.configsConfigMap }}
-        - name: patches
-          secret:
-            secretName: {{ .Values.patchesSecret }}
-        - name: teapot-data
-          {{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "teapot.fullname" . }}-data
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
+        {{- toYaml .Values.volumes | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
