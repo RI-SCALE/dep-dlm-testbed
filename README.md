@@ -2,7 +2,7 @@
 
 Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`).
 
-The testbed supports both managed and unmanaged token flows and is extensible toward data discovery, popularity and preparation services, as well as broader integration scenarios with external Rucio and FTS3 deployments.
+The testbed supports both managed and unmanaged token flows and can be extended to support data discovery, popularity, and preparation services, as well as broader integration scenarios involving external token providers and external WebDAV or XRootD interfaces.
 
 ## Backlog
 
