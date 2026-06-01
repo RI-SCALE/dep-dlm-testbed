@@ -24,7 +24,7 @@ export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
 export RUNTIME=compose
 
 # 2. Start the stack
-make compose-up
+make start
 
 # 3. Initialize DEP DLM testbed
 make init
@@ -34,7 +34,7 @@ make test-rucio-transfers
 make test-rucio-deletion
 
 # 5. Stop the stack and remove volumes
-make compose-down
+make stop
 ```
 
 ### Kubernetes
@@ -44,7 +44,7 @@ make compose-down
 make certs
 
 # 2. Install the Helm chart
-make helm-install
+make start
 
 export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
 export RUNTIME=k8s
@@ -57,43 +57,45 @@ make test-rucio-transfers
 make test-rucio-deletion
 
 # 5. Stop the stack and remove volumes
-make helm-uninstall
+make stop
 ```
 
 ## Make Targets
 
 ```bash
-  help                       Show this help (default target)
+dep-dlm-testbed
+
+  RUNTIME    = compose    (compose | k8s)
+  TOKEN_MODE = managed (managed | unmanaged)
+
+Usage:
+  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [SERVICES="svc1 svc2"]
+
+  help                 Show this help (default target)
 
 Setup
-  certs                      Generate certificates (e.g. CA, hosts)
-  init                       Initialize DEP DLM testbed (uses $RUNTIME — set RUNTIME=k8s for kubernetes)
+  certs                Generate certificates (CA, host certs)
+  init                 Initialize the testbed (accounts, RSEs, OIDC seed)
 
-Docker Compose lifecycle (compose-*)
-  compose-up                 Start the full stack in the background
-  compose-down               Stop the stack and remove volumes
-  compose-restart            Tear down and restart the stack
-  compose-rebuild            Rebuild and restart one or more services: make compose-rebuild SERVICES="teapot fts"
-  compose-ps                 List running containers
-  compose-logs               Tail logs from all services (Ctrl-C to exit)
-  compose-logs-%             Tail logs from a single service, e.g. `make compose-logs-rucio`
-  compose-build              Build local Docker images (e.g. fts, teapot)
+Lifecycle
+  start                Start the stack
+  stop                 Stop the stack and remove volumes / PVCs
+  restart              Tear down and start again
+  rebuild              Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
+  ps                   Show running services / pods
+  logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
 
-Helm / Kubernetes lifecycle (helm-*, k8s-*)
-  helm-lint                  Lint the umbrella chart
-  helm-template              Render manifests locally (helm template …) without installing
-  helm-install               Create the namespace and install the umbrella chart
-  helm-upgrade               Apply local chart changes to the running release
-  helm-uninstall             Uninstall the release and delete its PVCs
-  helm-reinstall             Uninstall + install (full reset)
+Helm-only
+  helm-lint            Lint the umbrella chart
+  helm-template        Render manifests without installing
 
 Tests
-  test-rucio-transfers       Rucio E2E TPC transfer test
-  test-rucio-deletion        Rucio E2E deletion test
-  probe-teapot               Teapot WebDAV probe with OIDC tokens
+  test-rucio-transfers Rucio E2E TPC transfer test
+  test-rucio-deletion  Rucio E2E deletion test
+  probe-teapot         Teapot WebDAV probe with OIDC tokens
 
 Cleanup
-  clean                      Remove generated certs and volumes; keep CA (rucio_ca.pem + key)
+  clean                Remove generated certs and compose volumes (keeps CA)
 ```
 
 ## Documentation

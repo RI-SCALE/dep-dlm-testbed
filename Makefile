@@ -5,110 +5,123 @@ SHELL       := /usr/bin/env bash
 # Anchor for compose bind-mounts. Override if running from an unusual shell.
 export TESTBED_HOST_SOURCE ?= $(CURDIR)
 
-RUNTIME ?= compose
-
-# FTS token exchange mode
+RUNTIME    ?= compose
 TOKEN_MODE ?= managed
+SERVICES   ?=
 
-COMPOSE_FILE ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
-COMPOSE      := docker compose -f $(COMPOSE_FILE)
+COMPOSE_FILE  ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
+COMPOSE       := docker compose -f $(COMPOSE_FILE)
 
-# Helm / Kubernetes
-HELM_CHART   := deploy/helm-charts/dep-dlm-testbed
-HELM_RELEASE ?= testbed
+HELM_CHART    := deploy/helm-charts/dep-dlm-testbed
+HELM_RELEASE  ?= testbed
 K8S_NAMESPACE ?= dep-dlm-testbed
-KUBECTL      := kubectl -n $(K8S_NAMESPACE)
-HELM         := helm
+KUBECTL       := kubectl -n $(K8S_NAMESPACE)
+HELM          := helm
+
+# ── Validation ─────────────────────────────────────────────────────
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
-  $(error TOKEN_MODE must be 'managed' or 'unmanaged', got '$(TOKEN_MODE)')
+$(error TOKEN_MODE must be 'managed' or 'unmanaged', got '$(TOKEN_MODE)')
 endif
 
-# Execution wrappers based on RUNTIME (Defined after variables they depend on)
-ifeq ($(RUNTIME), k8s)
-  EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+ifeq ($(filter $(RUNTIME),compose k8s),)
+$(error RUNTIME must be 'compose' or 'k8s', got '$(RUNTIME)')
+endif
+
+# ── Runtime-specific execution wrappers ────────────────────────────
+
+ifeq ($(RUNTIME),k8s)
+EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
 else
-  EXEC_RUCIO := docker exec compose-rucio-client-1
+EXEC_RUCIO := docker exec compose-rucio-client-1
 endif
 
-# ── Help ──────────────────────────────────────────────────────────────────
+# ── Help ───────────────────────────────────────────────────────────
+
 .PHONY: help
 help: ## Show this help (default target)
+	@echo ''
+	@echo 'dep-dlm-testbed'
+	@echo ''
+	@echo '  RUNTIME    = $(RUNTIME)    (compose | k8s)'
+	@echo '  TOKEN_MODE = $(TOKEN_MODE) (managed | unmanaged)'
+	@echo ''
+	@echo 'Usage:'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [SERVICES="svc1 svc2"]'
+	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
-	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2 } \
+	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
 	    /^## / { sub(/^## /, ""); printf "\n\033[1m%s\033[0m\n", $$0 }' $(MAKEFILE_LIST)
 
 ## Setup
 
 .PHONY: certs
-certs: ## Generate certificates (e.g. CA, hosts)
+certs: ## Generate certificates (CA, host certs)
 	./shared/scripts/generate-certs.sh
 
 .PHONY: init
-init: ## Initialize DEP DLM testbed (uses $RUNTIME — set RUNTIME=k8s for kubernetes)
+init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
 	./shared/scripts/init-testbed.sh
 
-## Docker Compose lifecycle (compose-*)
+## Lifecycle
 
-.PHONY: compose-up
-compose-up: ## Start the full stack in the background
-	$(COMPOSE) up -d
+.PHONY: start
+start: ## Start the stack
+ifeq ($(RUNTIME),compose)
+	$(COMPOSE) up -d $(SERVICES)
+else
+	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	$(HELM) dependency update $(HELM_CHART)
+	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+endif
 
-.PHONY: compose-down
-compose-down: ## Stop the stack and remove volumes
+.PHONY: stop
+stop: ## Stop the stack and remove volumes / PVCs
+ifeq ($(RUNTIME),compose)
 	$(COMPOSE) down -v
+else
+	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
+	$(KUBECTL) delete pvc --all --ignore-not-found
+endif
 
-.PHONY: compose-restart
-compose-restart: compose-down compose-up ## Tear down and restart the stack
+.PHONY: restart
+restart: stop start ## Tear down and start again
 
-.PHONY: compose-rebuild
-compose-rebuild: ## Rebuild and restart one or more services: make compose-rebuild SERVICES="teapot fts"
+.PHONY: rebuild
+rebuild: ## Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
+ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
+else
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+endif
 
-.PHONY: compose-ps
-compose-ps: ## List running containers
+.PHONY: ps
+ps: ## Show running services / pods
+ifeq ($(RUNTIME),compose)
 	$(COMPOSE) ps
+else
+	$(KUBECTL) get pods,svc
+endif
 
-.PHONY: compose-logs
-compose-logs: ## Tail logs from all services (Ctrl-C to exit)
-	$(COMPOSE) logs -f --tail=50
+.PHONY: logs
+logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
+ifeq ($(RUNTIME),compose)
+	$(COMPOSE) logs -f --tail=100 $(SERVICES)
+else
+	@echo "k8s: use 'kubectl -n $(K8S_NAMESPACE) logs deploy/<name> -f'"
+	@$(KUBECTL) get deploy -o name
+endif
 
-.PHONY: compose-logs-%
-compose-logs-%: ## Tail logs from a single service, e.g. `make compose-logs-rucio`
-	$(COMPOSE) logs -f --tail=100 $*
-
-.PHONY: compose-build
-compose-build: ## Build local Docker images (e.g. fts, teapot)
-	$(COMPOSE) build
-
-## Helm / Kubernetes lifecycle (helm-*, k8s-*)
+## Helm-only
 
 .PHONY: helm-lint
 helm-lint: ## Lint the umbrella chart
 	$(HELM) lint $(HELM_CHART)
 
 .PHONY: helm-template
-helm-template: ## Render manifests locally (helm template …) without installing
-	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
-
-.PHONY: helm-install
-helm-install: ## Create the namespace and install the umbrella chart
-	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	$(HELM) dependency update $(HELM_CHART)
-	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
-
-.PHONY: helm-upgrade
-helm-upgrade: ## Apply local chart changes to the running release
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
-
-.PHONY: helm-uninstall
-helm-uninstall: ## Uninstall the release and delete its PVCs
-	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
-	$(KUBECTL) delete pvc --all --ignore-not-found
-
-.PHONY: helm-reinstall
-helm-reinstall: helm-uninstall helm-install ## Uninstall + install (full reset)
+helm-template: ## Render manifests without installing
+	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE)
 
 ## Tests
 
@@ -124,15 +137,15 @@ test-rucio-deletion: ## Rucio E2E deletion test
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
 	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
 
-
 ## Cleanup
 
 .PHONY: clean
-clean: ## Remove generated certs and volumes; keep CA (rucio_ca.pem + key)
+clean: ## Remove generated certs and compose volumes (keeps CA)
 	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
 	find certs \
-	! -name 'rucio_ca.pem' \
-	! -name 'rucio_ca.key.pem' \
-	\( -name '*.pem' -o -name '*.namespaces' -o -name '*.signing_policy' -o -name '*.csr' -o -name '*.r0' -o -name '*.0' \) \
-	-delete 2>/dev/null || true
+	    ! -name 'rucio_ca.pem' \
+	    ! -name 'rucio_ca.key.pem' \
+	    \( -name '*.pem' -o -name '*.namespaces' -o -name '*.signing_policy' \
+	     -o -name '*.csr' -o -name '*.r0' -o -name '*.0' \) \
+	    -delete 2>/dev/null || true
 	@echo "Cleaned certs (preserved rucio_ca.pem and rucio_ca.key.pem) and volumes"
