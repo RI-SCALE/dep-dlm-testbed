@@ -38,10 +38,6 @@ jobs:
       - name: Generate certificates
         run: make certs
 
-      - name: Start stack (compose)
-        if: inputs.runtime == 'compose'
-        run: make compose-up
-
       - name: Set up kind cluster
         if: inputs.runtime == 'k8s'
         uses: helm/kind-action@v1
@@ -52,11 +48,8 @@ jobs:
         if: inputs.runtime == 'k8s'
         uses: azure/setup-helm@v4
 
-      - name: Install testbed (k8s)
-        if: inputs.runtime == 'k8s'
-        run: |
-          kubectl create namespace dep-dlm-testbed
-          make helm-install
+      - name: Start stack
+        run: make start
 
       - name: Wait for rucio server ready (k8s)
         if: inputs.runtime == 'k8s'
@@ -89,7 +82,7 @@ jobs:
             [[ "$code" == "200" ]] && { echo "fts REST ready"; exit 0; }
             echo "  [$i] HTTP $code"; sleep 5
           done
-          make compose-logs-fts; exit 1
+          make logs SERVICES=fts; exit 1
 
       - name: Wait for fts (k8s)
         if: inputs.runtime == 'k8s'
@@ -149,8 +142,8 @@ jobs:
         if: failure() && inputs.runtime == 'compose'
         run: |
           for svc in fts rucio keycloak xrd3 xrd4 teapot1 teapot2; do
-            echo "=== $svc ===" && \
-            make compose-logs $svc 2>/dev/null || true
+            echo "=== $svc ==="
+            make logs SERVICES=$svc 2>/dev/null || true
           done
 
       - name: Dump logs on failure (k8s)
@@ -165,11 +158,6 @@ jobs:
             kubectl -n dep-dlm-testbed logs deploy/$deploy --tail=200 2>/dev/null || true
           done
 
-      - name: Tear down (compose)
-        if: always() && inputs.runtime == 'compose'
-        run: make compose-down
-
-      - name: Tear down (k8s)
-        if: always() && inputs.runtime == 'k8s'
-        run: |
-          make helm-uninstall
+      - name: Tear down
+        if: always()
+        run: make stop
