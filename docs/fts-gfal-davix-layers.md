@@ -79,7 +79,35 @@ Both are required; either alone is inert.
   ```
 
   Both should return hits. If only the first does, the davix capability
-  is present but gfal2 never enables it.
+  is present but gfal2 never enables it. To verify end-to-end activation,
+  run a `gfal-copy` with `SIGV4_HEADER_MODE=true` against a known Copernicus object:
+
+  ```bash
+  export RUNTIME=compose
+  export TOKEN_MODE=managed
+  make start
+  make init
+  export S3_ACCESS_KEY="<valid access key>"
+  export S3_SECRET_KEY="<valid secrets key>"
+  docker exec compose-fts-1 gfal-copy -vvv   -D"S3:EODATA.DATASPACE.COPERNICUS.EU:ACCESS_KEY=$S3_ACCESS_KEY"   -D"S3:EODATA.DATASPACE.COPERNICUS.EU:SECRET_KEY=$S3_SECRET_KEY"   -D"S3:EODATA.DATASPACE.COPERNICUS.EU:ALTERNATE=true"   -D"S3:EODATA.DATASPACE.COPERNICUS.EU:REGION=default"   -D"S3:EODATA.DATASPACE.COPERNICUS.EU:SIGV4_HEADER_MODE=true"   s3s://eodata.dataspace.copernicus.eu/eodata/Sentinel-1/SAR/SLC/2019/10/13/S1B_IW_SLC__1SDV_20191013T155948_20191013T160015_018459_022C6B_13A2.SAFE/manifest.safe   file:///tmp/manifest.safe
+  ```
+
+  One should see:
+
+  ```bash
+  Setting S3 SigV4 header mode to: true [S3:EODATA.DATASPACE.COPERNICUS.EU]
+  ...
+  Using S3 v4 signature authentication (header mode)
+  ...
+  INFO Davix: > HEAD /eodata/Sentinel-1/SAR/SLC/2019/10/13/S1B_IW_SLC__1SDV_20191013T155948_20191013T160015_018459_022C6B_13A2.SAFE/manifest.safe HTTP/1.1
+  > User-Agent: gfal2-util/1.9.1 gfal2/2.23.5 neon/0.0.29
+  > TE: trailers
+  > Host: eodata.dataspace.copernicus.eu
+  > x-amz-date: 20260603T115904Z
+  > x-amz-content-sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  > Authorization: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  >
+  ```
 
 ## Where to look
 
