@@ -72,6 +72,8 @@ cannot be addressed by a davix change — for example, sources using
 auth models other than SigV4, or non-S3 protocols. It is not built
 now.
 
+> Note: the fix spans two libraries, not one. davix implements the v4 header-signing branch and the setAwsSigV4HeaderMode opt-in, but davix exposes that opt-in only as an API setting — it has no notion of gfal2's per-endpoint configuration. gfal2's HTTP plugin must therefore be patched in parallel to read a SIGV4_HEADER_MODE option from the [S3:HOST] config groups and call the new davix setter. Without the gfal2 change, the davix capability is present in the binary but never activated, and transfers continue to use presigned URLs. Both forks are built in the existing FTS image pipeline.
+
 ### Positive Consequences
 
 * Fixes the problem at the right architectural layer.
@@ -90,6 +92,9 @@ now.
 * Does not help with future sources whose problems are not davix
   signing-mode issues; for those, the staging-service pattern remains
   the fallback.
+* The fix touches two separately-released libraries (davix and gfal2);
+  a davix-only build silently fails to activate the feature,
+  so both must be version-matched in the image.
 
 ## Confirmation
 
@@ -102,8 +107,10 @@ now.
   consumers.
 * The Copernicus integration test
   (`tests/test_rucio_transfers_with_copernicus.py`) moves from `xfail`
-  to expected-pass once the patched library is in use. An unexpected
-  failure flags a regression.
+  to expected-pass both patched libraries are in use (`davix` with the
+  header-signing branch, `gfal2` with the `SIGV4_HEADER_MODE` reader).
+  With only the davix patch, the test still fails with `HTTP 403`,
+  because the header-signing path is never selected.
 
 ## Pros and Cons of the Options
 
