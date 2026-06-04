@@ -72,7 +72,18 @@ cannot be addressed by a davix change — for example, sources using
 auth models other than SigV4, or non-S3 protocols. It is not built
 now.
 
-> Note: the fix spans two libraries, not one. davix implements the v4 header-signing branch and the setAwsSigV4HeaderMode opt-in, but davix exposes that opt-in only as an API setting — it has no notion of gfal2's per-endpoint configuration. gfal2's HTTP plugin must therefore be patched in parallel to read a SIGV4_HEADER_MODE option from the [S3:HOST] config groups and call the new davix setter. Without the gfal2 change, the davix capability is present in the binary but never activated, and transfers continue to use presigned URLs. Both forks are built in the existing FTS image pipeline.
+> The fix in fact spans three layers. The FTS path does not read
+> the static gfal2 config for S3 credentials: at transfer time the server
+> writes a short-lived `--cloud-config` (via `writeS3Creds()` in
+> `CloudStorageConfig.cpp`) and passes it to the per-file `fts_url_copy`
+> executor — that file, not `/etc/gfal2.d`, is authoritative on the FTS
+> path. So `region`/`sigv4_header_mode` must also be modelled per storage
+> in FTS3 (`t_cloudStorage` → `CloudStorageAuth` → `writeS3Creds`) and
+> emitted into the generated cloud-config. The required changes therefore
+> are: **davix** (v4 header-signing branch + `setAwsSigV4HeaderMode`),
+> **gfal2** (read `SIGV4_HEADER_MODE`/`REGION` from `[S3:HOST]`, call the
+> setter), and **FTS3** (per-storage modelling + cloud-config emit). A mistake
+> at any layer leaves the feature compiled but inactive.
 
 ### Positive Consequences
 
