@@ -25,11 +25,9 @@ fix) turns out to span more than one of these projects.
 ## The call chain
 
 ```
-Rucio  ──submit──▶  FTS3  ──▶  gfal2 (http plugin)  ──▶  davix  ──▶  remote storage
-                                     │                      │
-                          reads [S3:HOST] config     builds + signs the
-                          and maps it onto davix      HTTP request
-                          RequestParams
+Rucio ──submit──▶ FTS3 server ────▶ fts_url_copy ──▶ gfal2 (http plugin) ──▶ davix ──▶ storage
+                  (scheduler)       (per file)        reads [S3:HOST]        builds +
+                                                      → davix params         signs request
 ```
 
 For an `s3s://` source in a Rucio pull transfer, FTS asks gfal2 to read
@@ -107,6 +105,29 @@ Both are required; either alone is inert.
   > x-amz-content-sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
   > Authorization: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   >
+  INFO    ... Davix: < HTTP/1.1 200 OK
+  ```
+
+- To reproduce the FTS path in isolation (no Rucio/tokens/WebDAV), run
+  `fts_url_copy` by hand — a `file://` destination is allowed here (the REST
+  submit layer rejects it):
+
+  ```bash
+  docker exec -e S3_ACCESS_KEY="$S3_ACCESS_KEY" -e S3_SECRET_KEY="$S3_SECRET_KEY" \
+    compose-fts-1 bash -c '
+  cat > /tmp/cc <<EOF
+  [S3:EODATA.DATASPACE.COPERNICUS.EU]
+  SECRET_KEY=${S3_SECRET_KEY}
+  ACCESS_KEY=${S3_ACCESS_KEY}
+  ALTERNATE=true
+  REGION=default
+  SIGV4_HEADER_MODE=true
+  EOF
+  fts_url_copy --job-id t1 --file-id 1 \
+    --source "s3s://eodata.dataspace.copernicus.eu:443/eodata/Sentinel-1/SAR/SLC/2019/10/13/S1B_IW_SLC__1SDV_20191013T155948_20191013T160015_018459_022C6B_13A2.SAFE/manifest.safe" \
+    --destination "file:///tmp/out.safe" \
+    --cloud-config /tmp/cc --copy-mode pull --overwrite --debug 3 --logDir /tmp/uclog
+  '
   ```
 
 ## Where to look
@@ -117,3 +138,5 @@ Both are required; either alone is inert.
 | Stat / read / copy dispatch | davix | `src/fileops/davmeta.cpp`, `src/fileops/S3IO.cpp` |
 | Per-endpoint config → davix params | gfal2 | `src/plugins/http/gfal_http_plugin.cpp` |
 | Job scheduling / delegation | FTS3 | (separate service; not usually patched for protocol behaviour) |
+| Per-transfer executor / copy loop | FTS3 | `src/url-copy/UrlCopyProcess.cpp` |
+| Cloud-config generation (S3 creds/opts) | FTS3 | `src/server/services/transfers/CloudStorageConfig.cpp`, `src/db/mysql/MySqlAPI.cpp` |
