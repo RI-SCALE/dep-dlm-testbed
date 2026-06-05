@@ -7,6 +7,67 @@ inside the container (Compose) or via a ConfigMap volume mount (Kubernetes).
 
 ---
 
+## FTS DB configuration — `t_se` and `t_cloudStorageUser` (applied by `init-testbed.sh`)
+
+These are not source patches but FTS-database rows set at init time. They are
+load-bearing and easy to lose on a rebuild (init reset them, costing days of
+re-diagnosis), so they are documented here alongside the code patches.
+
+### 1. `t_se.tpc_support = NONE` — force STREAMED copy mode for S3↔WebDAV
+
+`FileTransferExecutor` calls `getCopyMode(sourceSe, destSe)`
+(`fts3/src/db/mysql/Config.cpp`), which reads `t_se.tpc_support` for each side.
+A storage with **no row** is assumed to have FULL TPC support, so an
+`s3s://…` → `davs://…` pair resolves to `CopyMode::ANY` →
+`--copy-mode "pull"`. A third-party pull has the WebDAV destination fetch from
+S3, but Storm-WebDAV cannot SigV4-sign a Copernicus request and CDSE issues no
+pre-signed URLs → `HTTP 403`.
+
+The STREAMING branch (`Config.cpp`) is reached only when the **destination** is
+not FULL/PULL. Therefore both sides are marked `NONE`:
+
+```sql
+INSERT INTO t_se (storage, tpc_support) VALUES
+  ('s3s://eodata.dataspace.copernicus.eu', 'NONE'),  -- source (init)
+  ('davs://teapot2', 'NONE'), ('https://teapot2', 'NONE')  -- dest (test fixture)
+ON DUPLICATE KEY UPDATE tpc_support='NONE';
+```
+
+The `storage` value must exactly match what FTS records as `source_se`/`dest_se`
+in `t_file` (scheme + host, **no port** — `davs://teapot2`, not
+`davs://teapot2:8081`). TEAPOT2 is registered with both `davs` and `https`
+protocols, so both forms are set. The **source** row is set permanently in
+`configure_fts_cloud_storage`; the **destination** rows are set by a test
+fixture with teardown, so the davs↔davs TPC tests keep pull mode.
+
+**Replacement path:** testbed-specific. In production, per-SE `tpc_support` is
+the documented FTS knob for exactly this; the values belong in SE config, not a
+patch.
+
+### 2. `t_cloudStorageUser.user_dn` = OIDC subject — so SigV4 keys resolve
+
+FTS resolves the S3 SigV4 keys from `t_cloudStorageUser` by
+`(cloudStorage_name, user_dn, vo_name)`. For a token-authenticated (oauth2) job,
+the DN FTS sees is the **OIDC subject** (e.g.
+`e8af11a6-76bb-44dd-abf7-32988c769cfc`), not the default `/CN=fts-oidc`. If
+`user_dn` doesn't match, the cloud-storage lookup misses, davix signs the source
+request with an empty secret, and CDSE returns `403` — even though region, keys
+and canonical request are all correct (proven by an identical boto3 request
+succeeding).
+
+`configure_fts_cloud_storage` therefore defaults `user_dn` to the OIDC subject:
+
+```bash
+local user_dn="${FTS_USER_DN:-e8af11a6-76bb-44dd-abf7-32988c769cfc}"
+```
+
+**Replacement path:** the OIDC-subject value is testbed-specific (it's this
+realm's `rucio`/`fts` client subject); the *mechanism* — `user_dn` must equal
+the authenticated identity FTS sees — is general and worth a note in any
+token + cloud_storage deployment.
+
+---
+
 ## Rucio — `transfertool/fts3.py`
 
 **Source:** `rucio/rucio-server` image, Python package `rucio.transfertool.fts3`
@@ -283,6 +344,28 @@ def get_token_issuer(self, access_token):
 
 Same as `middleware.py` — the two patches are complementary halves of the
 same fix and must be applied or removed together.
+
+## FTS — `fts-rest-flask/JobBuilder.py`
+
+**Source:** `fts-rest-flask` package inside the FTS container
+**Upstream ref:** [fts/fts-rest-flask @ 3.14.x-release — JobBuilder.py](https://gitlab.cern.ch/fts/fts-rest-flask/-/blob/3.14.x-release/src/fts3rest/fts3rest/lib/JobBuilder.py)
+
+### Changes
+
+**Accept asymmetric token / cloud_storage transfers.** Upstream `_validate_transfer_tokens`
+requires a token on every side of an oauth2 transfer. An S3 source authenticates
+via `cloud_storage` (static keys), so it legitimately carries **no** source
+token. The patch validates per-side: a side whose URLs are all backed by a
+`cloud_storage` entry (`_all_cloud_storage` / `_cloud_storage_exists`, matching
+on host against `t_cloudStorage`) is treated as satisfied, and length/per-token
+checks apply only to a side that actually carries tokens. This allows
+`s3s://` source (cloud_storage, no token) → token-based WebDAV destination.
+
+### Replacement path
+
+Candidate for upstreaming: supporting an asymmetric cloud_storage-source /
+token-destination transfer is general, not testbed-specific. Pairs with the
+Rucio `fts3.py` change that omits empty `source_tokens` for `s3s` sources.
 
 ---
 

@@ -85,6 +85,32 @@ now.
 > setter), and **FTS3** (per-storage modelling + cloud-config emit). A mistake
 > at any layer leaves the feature compiled but inactive.
 
+## Subsequent findings (post-implementation)
+
+The three signing layers (davix + gfal2 + FTS3) make the **source read**
+succeed, but two further, independent concerns had to be resolved before an
+S3-source → token-WebDAV-destination transfer completed end-to-end. Both are
+documented in detail in `patches.md`:
+
+1. **Copy mode must be STREAMED, not third-party-pull.** An S3 (SigV4) source
+   and a token-WebDAV destination cannot do a direct TPC: neither endpoint can
+   present the other's credential, and CDSE issues no pre-signed URLs. FTS's
+   `getCopyMode()` defaults a row-less SE to full TPC support, yielding
+   `--copy-mode pull`. The streaming branch is gated on the *destination*'s
+   `t_se.tpc_support`, so both the S3 source and the WebDAV destination must be
+   marked `tpc_support=NONE` to force `CopyMode::STREAMING`.
+
+2. **Cloud-storage credential resolution is keyed on `user_dn`.** FTS resolves
+   the SigV4 keys from `t_cloudStorageUser` by `(cloudStorage_name, user_dn,
+   vo_name)`. For a token-authenticated job the DN FTS sees is the OIDC subject,
+   not `/CN=fts-oidc`; a mismatch makes the lookup miss, davix signs with an
+   empty secret, and CDSE returns 403 even though signing, region and keys are
+   all correct.
+
+Net: the davix signing fix is necessary but not sufficient. The end-to-end
+path also requires the copy-mode and `user_dn` configuration captured in
+`patches.md` and applied by `init-testbed.sh`.
+
 ### Positive Consequences
 
 * Fixes the problem at the right architectural layer.
