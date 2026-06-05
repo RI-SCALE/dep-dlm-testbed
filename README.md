@@ -4,6 +4,8 @@ Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak 
 
 The testbed supports both managed and unmanaged token flows and can be extended to support data discovery, popularity, and preparation services, as well as broader integration scenarios involving external token providers and external WebDAV or XRootD interfaces.
 
+The testbed also applies minimal source patches to upstream components (Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches and their rationale are documented in [patches.md](docs/patches.md).
+
 ## Backlog
 
 Tracked future improvements and planned work items are maintained in [BACKLOG.md](./BACKLOG.md).
@@ -58,6 +60,21 @@ make test-rucio-deletion
 
 # 5. Stop the stack and remove volumes
 make stop
+```
+
+### Copernicus S3 transfers
+
+`test-copernicus-transfers` validates an S3 source (Copernicus Data Space) →
+WebDAV destination streamed copy. It requires `S3_ACCESS_KEY`/`S3_SECRET_KEY`
+for the Copernicus endpoint and self-skips at init when they are unset.
+
+Export them **before `make init` and the test**. Init creates the S3 RSE and
+FTS cloud-storage rows from these credentials, and the test reads them back:
+
+```bash
+export S3_ACCESS_KEY=... S3_SECRET_KEY=...
+make init
+make test-copernicus-transfers
 ```
 
 ## Make Targets
