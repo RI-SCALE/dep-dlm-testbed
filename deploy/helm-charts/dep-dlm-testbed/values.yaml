@@ -257,6 +257,9 @@ fts:
     - name: patches
       mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py
       subPath: fts--openidconnect.py
+    - name: patches
+      mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py
+      subPath: fts--JobBuilder.py
 
 
 # Keycloak
