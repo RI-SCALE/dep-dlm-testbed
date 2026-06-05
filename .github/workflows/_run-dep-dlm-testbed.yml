@@ -11,6 +11,11 @@ on:
         type: string
         default: compose
         description: "compose | k8s"
+    secrets:
+      S3_ACCESS_KEY:
+        required: false
+      S3_SECRET_KEY:
+        required: false
 
 jobs:
   test:
@@ -71,6 +76,9 @@ jobs:
           exit 1
 
       - name: Initialize DEP DLM testbed
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make init
 
       - name: Wait for fts (compose)
@@ -133,6 +141,12 @@ jobs:
 
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
+
+      - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+        run: make test-copernicus-transfers
 
       - name: Rucio E2E deletion test
         run: make test-rucio-deletion

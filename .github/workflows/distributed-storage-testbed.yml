@@ -30,3 +30,6 @@ jobs:
     with:
       runner: ${{ matrix.runner }}
       runtime: ${{ matrix.runtime }}
+    secrets:
+      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
