@@ -30,7 +30,7 @@ spec:
                 --trusted-host pypi.org \
                 --trusted-host pypi.python.org \
                 --trusted-host files.pythonhosted.org \
-                pytest &&
+                pytest boto3 &&
 
               sleep infinity
           env:

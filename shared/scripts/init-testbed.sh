@@ -386,12 +386,137 @@ configure_rses() {
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
             --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+
+        ra rse add-protocol "$rse" --scheme https \
+            --hostname "${instance}" --port 8081 --prefix /data \
+            --impl rucio.rse.protocols.gfal.Default \
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
 
     ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
     ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+}
+
+# ── S3 source RSE (FTS-server-side credentials, per FTS S3 docs) ──
+# Rucio just registers the RSE + protocol with scheme=s3s. FTS resolves
+# credentials by matching the URL host against t_cloudStorage entries —
+# see configure_fts_cloud_storage() below for the FTS-side bits.
+#
+# Env vars:
+#   S3_ENDPOINT     hostname only, e.g. eodata.dataspace.copernicus.eu
+#                   (https:// scheme will be stripped automatically)
+#   S3_BUCKET       e.g. eodata
+#   S3_ACCESS_KEY   only used by configure_fts_cloud_storage
+#   S3_SECRET_KEY   only used by configure_fts_cloud_storage
+#   S3_REGION       optional; if set, FTS uses S3v4 signatures
+configure_s3_source_rse() {
+    if [ -z "${S3_ACCESS_KEY:-}" ] || [ -z "${S3_SECRET_KEY:-}" ]; then
+        echo "=== COPERNICUS_S3 skipped (ACCESS_KEY / SECRET_KEY not set) ==="
+        return 0
+    fi
+
+    # Normalise endpoint: strip scheme (https?://) and any /path tail.
+    # Mirrors configure_fts_cloud_storage so the two stay in sync — a stale
+    # https:// in $S3_ENDPOINT would otherwise produce a malformed hostname
+    # in the rse_protocols table and a PFN scheme mismatch at registration.
+    local raw_endpoint="${S3_ENDPOINT:-eodata.dataspace.copernicus.eu}"
+    local s3_endpoint="${raw_endpoint#*://}"
+    s3_endpoint="${s3_endpoint%%/*}"
+    local s3_bucket="${S3_BUCKET:-eodata}"
+
+    echo "=== Configuring S3 source RSE (COPERNICUS_S3) → s3s://${s3_endpoint}/${s3_bucket}/ ==="
+
+    ra rse add --non-deterministic COPERNICUS_S3 || true
+    ra rse set-attribute --rse COPERNICUS_S3 --key fts             --value "$FTS_OIDC"
+    ra rse set-attribute --rse COPERNICUS_S3 --key verify_checksum --value False
+
+    ra rse add-protocol COPERNICUS_S3 --scheme s3s \
+        --hostname "${s3_endpoint}" --port 443 \
+        --prefix "/${s3_bucket}" \
+        --impl rucio.rse.protocols.gfal.Default \
+        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
+
+    ra rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1 || true
+    ra rse add-distance COPERNICUS_S3 XRD4    --distance 1 || true
+
+    local acct
+    for acct in root ddmlab randomaccount; do
+        ra account set-limits "$acct" COPERNICUS_S3 -1 || true
+    done
+}
+
+# ── FTS server-side S3 configuration ─────────────────────────────
+# Per the FTS docs, three things are needed:
+#   1. t_cloudStorage row naming the storage as "S3:<hostname>"
+#   2. t_cloudStorageUser row mapping (user_dn, vo_name) → (access_key, secret_key)
+#   3. /etc/gfal2.d/s3.conf section setting ALTERNATE + optional REGION
+# Naming convention is "S3:" + the URL hostname (NOT an arbitrary label).
+# user_dn must match the DN/sub FTS sees when Rucio submits — check via
+# /whoami after delegation. We use "*" for vo_name so the mapping applies
+# regardless of VOMS attributes.
+configure_fts_cloud_storage() {
+    if [ -z "${S3_ACCESS_KEY:-}" ] || [ -z "${S3_SECRET_KEY:-}" ]; then
+        echo "=== FTS cloud_storage skipped (ACCESS_KEY / SECRET_KEY not set) ==="
+        return 0
+    fi
+
+    # Normalise: strip scheme (https?://) and any trailing path/slash, so
+    # callers can pass either "eodata.dataspace.copernicus.eu" or
+    # "https://eodata.dataspace.copernicus.eu" — FTS storage_name needs the
+    # bare hostname.
+    local raw_endpoint="${S3_ENDPOINT:-eodata.dataspace.copernicus.eu}"
+    local s3_endpoint="${raw_endpoint#*://}"   # strip any scheme://
+    s3_endpoint="${s3_endpoint%%/*}"           # strip any /path tail
+    local s3_region="${S3_REGION:-default}"
+    local storage_name="S3:${s3_endpoint}"
+    # FTS_USER_DN must match what /whoami returns when Rucio authenticates.
+    # Default matches the test cert used in this testbed.
+    local user_dn="${FTS_USER_DN:-e8af11a6-76bb-44dd-abf7-32988c769cfc}"
+
+    echo "=== Configuring FTS cloud_storage entry for ${storage_name} ==="
+
+    # 1 + 2: registry and credential mapping in the FTS DB.
+    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+    INSERT INTO t_cloudStorage (cloudStorage_name, region, sigv4_header_mode)
+      VALUES ('${storage_name}', '${s3_region}', 1)
+      ON DUPLICATE KEY UPDATE region = VALUES(region),
+                              sigv4_header_mode = VALUES(sigv4_header_mode);
+    DELETE FROM t_cloudStorageUser
+      WHERE cloudStorage_name = '${storage_name}' AND user_dn = '${user_dn}';
+    INSERT INTO t_cloudStorageUser
+      (cloudStorage_name, user_dn, vo_name, access_token, access_token_secret)
+      VALUES ('${storage_name}', '${user_dn}', '*',
+              '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}');"
+
+    local s3_se="s3s://${s3_endpoint}"
+    echo "  Marking ${s3_se} as tpc_support=NONE (force streamed copy mode)..."
+    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+    INSERT INTO t_se (storage, tpc_support)
+      VALUES ('${s3_se}', 'NONE')
+      ON DUPLICATE KEY UPDATE tpc_support = 'NONE';"
+
+    # 3: gfal2 config inside the FTS container. ALTERNATE=true → path-style
+    # buckets (required for non-AWS endpoints like Copernicus / MinIO).
+    # REGION=<value> switches gfal2 from S3v2 to S3v4 signatures.
+    local gfal_section
+    gfal_section="[S3:$(echo "$s3_endpoint" | tr '[:lower:]' '[:upper:]')]"
+    local region_line=""
+    [ -n "$s3_region" ] && region_line="REGION=${s3_region}"
+
+    # Filename also uses the normalised hostname (no slashes).
+    local conf_path="/etc/gfal2.d/s3-${s3_endpoint}.conf"
+
+    _exec fts bash -c "cat > '${conf_path}' <<CONF
+${gfal_section}
+ALTERNATE=true
+${region_line}
+SIGV4_HEADER_MODE=true
+CONF"
+
+    echo "  Restarting fts to pick up new cloud_storage entry..."
+    _restart fts
 }
 
 # ── FTS OIDC Provider Registration ───────────────────────────────
@@ -583,6 +708,8 @@ main() {
         seed_subject_tokens
     fi
     configure_rses
+    configure_s3_source_rse
+    configure_fts_cloud_storage
     setup_scopes_and_quotas
     setup_fts_oidc_provider
     cleanup_session_tokens

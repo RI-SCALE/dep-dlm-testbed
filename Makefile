@@ -90,7 +90,16 @@ restart: stop start ## Tear down and start again
 .PHONY: rebuild
 rebuild: ## Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) build $(SERVICES)
+	$(COMPOSE) build  $(SERVICES)
+	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
+else
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+endif
+
+.PHONY: rebuild-clean
+rebuild-clean: ## Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
+ifeq ($(RUNTIME),compose)
+	$(COMPOSE) build --no-cache $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
 	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
@@ -128,6 +137,15 @@ helm-template: ## Render manifests without installing
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
 	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+
+.PHONY: test-copernicus-transfers
+test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
+	$(EXEC_RUCIO) bash -c "\
+		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
+		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
+		RUNTIME=$(RUNTIME) \
+		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
