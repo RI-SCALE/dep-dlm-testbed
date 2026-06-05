@@ -4,7 +4,7 @@ Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak 
 
 The testbed supports both managed and unmanaged token flows and can be extended to support data discovery, popularity, and preparation services, as well as broader integration scenarios involving external token providers and external WebDAV or XRootD interfaces.
 
-The testbed also applies minimal source patches to upstream components (Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches and their rationale are documented in [patches.md](docs/patches.md).
+The testbed also applies minimal source patches to upstream components (e.g. Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches and their rationale are documented in [patches.md](docs/patches.md).
 
 ## Backlog
 
