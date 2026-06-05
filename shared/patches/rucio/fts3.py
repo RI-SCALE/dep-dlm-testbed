@@ -391,10 +391,13 @@ def _use_tokens(transfer_hop: "DirectTransfer") -> bool:
     and the protocol being used must be WebDAV.
     """
     for endpoint in [*transfer_hop.sources, transfer_hop.dst]:
-        if (
-            endpoint.rse.attributes.get(RseAttr.OIDC_SUPPORT) is not True
-            or endpoint.scheme != "davs"
-        ):
+        # S3 endpoints use static keys via cloud_storage, not OIDC.
+        if endpoint.scheme == "s3s":
+            continue
+        if endpoint.rse.attributes.get(RseAttr.OIDC_SUPPORT) is not True:
+            return False
+        # WebDAV may be rendered as davs or https; both are token-capable.
+        if endpoint.scheme not in ("davs", "https"):
             return False
     return True
 
@@ -1385,8 +1388,12 @@ class FTS3Transfertool(Transfertool):
         }
 
         if self.token:
-            t_file["source_tokens"] = []
+            source_tokens = []
             for source in transfer.sources:
+                # S3 sources authenticate via FTS cloud_storage (static keys),
+                # not OIDC tokens — don't mint/attach a source token for them.
+                if source.scheme == "s3s":
+                    continue
                 src_audience = determine_audience_for_rse(rse_id=source.rse.id)
                 src_scope = determine_scope_for_rse(
                     rse_id=source.rse.id,
@@ -1398,7 +1405,13 @@ class FTS3Transfertool(Transfertool):
                     raise TransferToolWrongAnswer(
                         f"Could not procure source token for {transfer.src.rse.name}"
                     )
-                t_file["source_tokens"].append(src_token)
+                source_tokens.append(src_token)
+
+            # Only attach source_tokens if a non-S3 source actually produced one.
+            # An all-S3 source set leaves this empty; omit the key so FTS uses the
+            # cloud_storage credential for the source rather than expecting a token.
+            if source_tokens:
+                t_file["source_tokens"] = source_tokens
 
             dst_audience = determine_audience_for_rse(transfer.dst.rse.id)
             dst_scope = determine_scope_for_rse(

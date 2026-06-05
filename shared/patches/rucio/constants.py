@@ -57,15 +57,11 @@ KEY_TYPES = ["ALL", "COLLECTION", "FILE", "DERIVED"]
 BASE_SCHEME_MAP = {
     "srm": ["srm", "gsiftp"],
     "gsiftp": ["srm", "gsiftp"],
-    "https": ["https", "http", "davs", "srm+https", "cs3s", "root"],
-    "davs": ["https", "http", "davs", "srm+https", "cs3s"],
-    "srm+https": ["https", "davs", "srm+https", "cs3s"],
-    "cs3s": ["https", "davs", "srm+https", "cs3s"],
-    # TESTBED PATCH: allow root ↔ https cross-protocol transfers so that
-    # XRootD → S3 (root:// source, https:// destination) and
-    # S3 → XRootD (https:// source, root:// destination) are accepted
-    # by the conveyor submitter. Without this, MISMATCH_SCHEME is raised
-    # and the request goes STUCK immediately.
+    "https": ["https", "http", "davs", "srm+https", "cs3s", "s3s", "root"],
+    "davs": ["https", "http", "davs", "srm+https", "cs3s", "s3s"],
+    "srm+https": ["https", "davs", "srm+https", "cs3s", "s3s"],
+    "cs3s": ["https", "davs", "srm+https", "cs3s", "s3s"],
+    "s3s": ["https", "davs", "srm+https", "cs3s", "s3s"],
     "root": ["root", "https"],
     "scp": ["scp"],
     "rsync": ["rsync"],
@@ -85,6 +81,7 @@ SUPPORTED_PROTOCOLS_LITERAL = Literal[
     "file",
     "storm",
     "srm+https",
+    "s3s",
     "scp",
     "rsync",
     "rclone",

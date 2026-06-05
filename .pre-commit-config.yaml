@@ -23,6 +23,7 @@ repos:
     hooks:
       - id: ruff-check
         args: [ --fix ]
+        exclude: ^shared/patches/fts/JobBuilder\.py$
       - id: ruff-format
 
   - repo: https://github.com/gruntwork-io/pre-commit

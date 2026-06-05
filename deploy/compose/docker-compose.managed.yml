@@ -86,6 +86,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/openidconnect.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/JobBuilder.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     entrypoint:
       - bash
@@ -286,6 +287,7 @@ services:
       - RUCIO_CFG_CLIENT_PASSWORD=secret
       - RUCIO_CFG_CLIENT_ACCOUNT=root
       - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+      - AWS_CA_BUNDLE=/etc/pki/tls/cert.pem
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
@@ -303,7 +305,7 @@ services:
           --trusted-host pypi.org \
           --trusted-host pypi.python.org \
           --trusted-host files.pythonhosted.org \
-          pytest &&
+          pytest boto3 &&
         sleep infinity
 
 networks:

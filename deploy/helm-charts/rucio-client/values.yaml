@@ -21,6 +21,8 @@ env:
     value: root
   - name: REQUESTS_CA_BUNDLE
     value: /etc/grid-security/certificates/rucio_ca.pem
+  - name: AWS_CA_BUNDLE
+    value: /etc/pki/tls/cert.pem
 
 volumes: []
 volumeMounts: []
