@@ -82,6 +82,7 @@ Lifecycle
   stop                 Stop the stack and remove volumes / PVCs
   restart              Tear down and start again
   rebuild              Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
+  rebuild-clean        Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
   ps                   Show running services / pods
   logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
 
@@ -91,6 +92,7 @@ Helm-only
 
 Tests
   test-rucio-transfers Rucio E2E TPC transfer test
+  test-copernicus-transfers Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
 
