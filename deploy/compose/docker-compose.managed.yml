@@ -313,6 +313,8 @@ services:
     depends_on:
       ruciodb:
         condition: service_healthy
+      rucio:
+        condition: service_healthy
       fts:
         condition: service_healthy
       keycloak:
@@ -329,12 +331,12 @@ services:
       - |
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
-        rucio-conveyor-submitter   &
-        rucio-conveyor-poller --older-than 0 &
-        rucio-conveyor-finisher    &
-        rucio-judge-evaluator      &
-        rucio-judge-cleaner        &
-        rucio-reaper --greedy      &
+        rucio-conveyor-submitter --sleep-time 5 &
+        rucio-conveyor-poller --sleep-time 5 &
+        rucio-conveyor-finisher --sleep-time 5 &
+        rucio-judge-evaluator --sleep-time 5 &
+        rucio-judge-cleaner --sleep-time 5 &
+        rucio-reaper --greedy --sleep-time 5 &
         wait
     volumes:
       # identical to the `rucio` service
