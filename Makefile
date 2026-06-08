@@ -7,6 +7,7 @@ export TESTBED_HOST_SOURCE ?= $(CURDIR)
 
 RUNTIME    ?= compose
 TOKEN_MODE ?= managed
+DAEMON_MODE ?= direct
 SERVICES   ?=
 
 COMPOSE_FILE  ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
@@ -22,6 +23,10 @@ HELM          := helm
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
 $(error TOKEN_MODE must be 'managed' or 'unmanaged', got '$(TOKEN_MODE)')
+endif
+
+ifeq ($(filter $(DAEMON_MODE),direct daemons),)
+$(error DAEMON_MODE must be 'direct' or 'daemons', got '$(DAEMON_MODE)')
 endif
 
 ifeq ($(filter $(RUNTIME),compose k8s),)
@@ -45,9 +50,10 @@ help: ## Show this help (default target)
 	@echo ''
 	@echo '  RUNTIME    = $(RUNTIME)    (compose | k8s)'
 	@echo '  TOKEN_MODE = $(TOKEN_MODE) (managed | unmanaged)'
+	@echo '  DAEMON_MODE = $(DAEMON_MODE) (direct | daemons)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
@@ -68,11 +74,13 @@ init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
 .PHONY: start
 start: ## Start the stack
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) up -d $(SERVICES)
+	COMPOSE_PROFILES=$(DAEMON_MODE) $(COMPOSE) up -d $(SERVICES)
 else
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	$(HELM) dependency update $(HELM_CHART)
-	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
+	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
+	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
@@ -130,30 +138,31 @@ helm-lint: ## Lint the umbrella chart
 
 .PHONY: helm-template
 helm-template: ## Render manifests without installing
-	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE)
+	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
 
 ## Tests
 
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
-	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
 	$(EXEC_RUCIO) bash -c "\
 		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
+		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
 		K8S_NAMESPACE=$(K8S_NAMESPACE) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
 
 ## Cleanup
 

@@ -23,6 +23,7 @@ The recommended setup is to use the provided [dev container](./.devcontainer/dev
 make certs
 
 export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
+export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
 export RUNTIME=compose
 
 # 2. Start the stack
@@ -49,6 +50,7 @@ make certs
 make start
 
 export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
+export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
 export RUNTIME=k8s
 
 # 3. Initialize DEP DLM testbed
@@ -87,9 +89,10 @@ dep-dlm-testbed
 
   RUNTIME    = compose    (compose | k8s)
   TOKEN_MODE = managed (managed | unmanaged)
+  DAEMON_MODE = direct (direct | daemons)
 
 Usage:
-  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [SERVICES="svc1 svc2"]
+  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]
 
   help                 Show this help (default target)
 

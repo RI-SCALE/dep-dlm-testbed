@@ -54,6 +54,12 @@ dependencies:
     repository: "file://../rucio-client"
     condition: "rucio-client.enabled"
 
+  - name: rucio-daemons
+    version: "0.1.0"
+    repository: "file://../rucio-daemons"
+    alias: rucio-daemons
+    condition: rucio-daemons.enabled
+
   - name: teapot
     version: "0.1.0"
     repository: "file://../teapot"

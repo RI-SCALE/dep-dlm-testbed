@@ -9,7 +9,7 @@
 - [x] Patches
     - [x] Document patches applied to FTS, Rucio and Teapot
 - [x] Adjust patches where possible to support managed configuration using token exchange instead of unmanaged configuration for FTS, allowing FTS to manage the token lifecycle
-- [ ] Deploy Rucio daemons in both Compose and Kubernetes setups and allow tests to utilise these instead of invoking `kubectl` or `docker` CLI
+- [x] Add a DAEMON_MODE flag (direct | daemons): run Rucio daemons as long-running services in Compose and Kubernetes, with the test harness switching between direct `--run-once` CLI invocation (deterministic, current behaviour) and polling the running daemons
 - [ ] Add GitOps workflows (e.g. Argo CD or Flux) referencing the existing Helm charts as a blueprint for a DEP DLM production deployment, with environment-specific value overlays for staging and production
 - [ ] Ensure internal Helm charts follow Helm and Kubernetes best practices for consistency, security, maintainability and CI validation
 - [ ] S3 setup and test coverage in `shared/tests/test-rucio-transfers.py`

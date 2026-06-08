@@ -31,6 +31,8 @@ from conftest import (
     seed_xrd,
     svc_exec,
     validate_rule,
+    advance_pipeline,
+    DELETION_DAEMONS,
 )
 
 log = logging.getLogger("test-deletion")
@@ -44,26 +46,11 @@ RUCIO_SVC = "rucio"
 
 
 def run_deletion_daemons(rucio_svc: str = RUCIO_SVC) -> None:
-    """Advance the deletion pipeline (judge-cleaner → reaper)."""
-    for daemon in (
-        [
-            "rucio-judge-cleaner",
-            "--run-once",
-        ],  # expires rule → releases lock → OBSOLETE tombstone
-        [
-            "rucio-reaper",
-            "--run-once",
-            "--greedy",
-        ],  # # OBSOLETE tombstone → physical deletion via davs://
-    ):
-        log.info("  → %s %s", rucio_svc, " ".join(daemon))
-        out = svc_exec(rucio_svc, daemon)
-        for line in out.decode(errors="replace").splitlines():
-            if any(
-                k in line.lower()
-                for k in ("warning", "error", "delet", "expir", "reap", "tomb")
-            ):
-                log.info("    | %s", line)
+    advance_pipeline(
+        rucio_svc,
+        DELETION_DAEMONS,
+        keywords=("warning", "error", "delet", "expir", "reap", "tomb"),
+    )
 
 
 def replica_exists_on_xrd(svc: str, pfn: str) -> bool:
