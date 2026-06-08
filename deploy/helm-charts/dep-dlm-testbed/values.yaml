@@ -153,7 +153,7 @@ rucio-daemons:
     tag: release-40.0.0
     pullPolicy: IfNotPresent
 
-  # Enable exactly the daemons the testbed needs (chart gates each on its count)
+  # Enable the daemons the testbed needs
   conveyorTransferSubmitterCount: 1
   conveyorPollerCount: 1
   conveyorFinisherCount: 1
@@ -162,7 +162,7 @@ rucio-daemons:
   reaperCount: 1
 
   reaper:
-    greedy: 1          # match the test's `rucio-reaper --run-once --greedy`
+    greedy: 1
     threads: 1
 
   useDeprecatedImplicitSecrets: false

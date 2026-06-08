@@ -55,8 +55,8 @@ dependencies:
     condition: "rucio-client.enabled"
 
   - name: rucio-daemons
-    version: "0.1.0"
-    repository: "file://../rucio-daemons"
+    version: "~40.0.0"
+    repository: "https://rucio.github.io/helm-charts"
     alias: rucio-daemons
     condition: rucio-daemons.enabled
 
