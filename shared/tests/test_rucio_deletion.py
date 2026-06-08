@@ -115,17 +115,27 @@ class TestDeletionLifecycle:
         log.info("  ✓ Rule deletion requested")
 
         # ── Step 3+4: judge-cleaner releases lock, reaper deletes physically ─
+        # In direct mode advance_pipeline runs the daemons synchronously;
+        # in daemon mode it's a no-op and the long-running daemons converge
+        # on their own loop — so poll until the replica is gone either way.
         run_deletion_daemons(RUCIO_SVC)
 
-        # ── Step 5: verify replica removed from catalogue ─────────────────
-        replicas = list(
-            rucio_client.list_replicas(
-                [{"scope": SCOPE, "name": name}], rse_expression="XRD4"
+        deadline = time.time() + 120
+        xrd4_pfns = None
+        while time.time() < deadline:
+            replicas = list(
+                rucio_client.list_replicas(
+                    [{"scope": SCOPE, "name": name}], rse_expression="XRD4"
+                )
             )
-        )
-        xrd4_pfns = [
-            pfn for r in replicas for pfn in r.get("pfns", {}) if "xrd4" in pfn
-        ]
+            xrd4_pfns = [
+                pfn for r in replicas for pfn in r.get("pfns", {}) if "xrd4" in pfn
+            ]
+            if not xrd4_pfns:
+                break
+            time.sleep(5)
+
+        # ── Step 5: verify replica removed from catalogue ─────────────────
         assert not xrd4_pfns, (
             f"Expected replica to be removed from Rucio catalogue on XRD4, "
             f"but found: {xrd4_pfns}"
