@@ -67,6 +67,9 @@ make stop
 `test-copernicus-transfers` validates an S3 source (Copernicus Data Space) →
 WebDAV destination streamed copy. It requires `S3_ACCESS_KEY`/`S3_SECRET_KEY`
 for the Copernicus endpoint and self-skips at init when they are unset.
+Refer to the following [link](https://documentation.dataspace.copernicus.eu/APIs/S3.html)
+for instructions on setting up an S3 account and generating the credentials required
+to access Copernicus Data Space EO Data.
 
 Export them **before `make init` and the test**. Init creates the S3 RSE and
 FTS cloud-storage rows from these credentials, and the test reads them back:
