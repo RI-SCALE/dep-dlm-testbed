@@ -153,6 +153,18 @@ rucio-daemons:
     tag: release-40.0.0
     pullPolicy: IfNotPresent
 
+  lifecycle:
+    postStart:
+      exec:
+        command:
+          - /bin/bash
+          - -c
+          - |
+            dnf -y install yum-utils epel-release.noarch &&
+            dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
+              python3-gfal2-util gfal2-plugin-http --skip-broken ||
+            echo "gfal2 install failed"
+
   # Enable the daemons the testbed needs
   conveyorTransferSubmitterCount: 1
   conveyorPollerCount: 1
@@ -161,9 +173,47 @@ rucio-daemons:
   judgeCleanerCount: 1
   reaperCount: 1
 
+  # Fast cadence + correct activity so the testbed converges within the
+  # test timeout. The chart defaults activities to "'test1' 'test2'", which
+  # would starve our default-activity rules; clear it so all activities run.
+  conveyorTransferSubmitter:
+    threads: 1
+    sleepTime: 5
+    activities: ""
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
+  conveyorPoller:
+    threads: 1
+    sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
+  conveyorFinisher:
+    threads: 1
+    sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
+  judgeEvaluator:
+    threads: 1
+    sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
+  judgeCleaner:
+    threads: 1
+    sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
   reaper:
     greedy: 1
     threads: 1
+    sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
 
   useDeprecatedImplicitSecrets: false
 
