@@ -16,20 +16,33 @@ jobs:
           - arch: amd64
             runner: ubuntu-latest
             runtime: compose
+            daemon_mode: direct
+          - arch: amd64
+            runner: ubuntu-latest
+            runtime: compose
+            daemon_mode: daemons
           - arch: amd64
             runner: ubuntu-latest
             runtime: k8s
+            daemon_mode: direct
+          - arch: amd64
+            runner: ubuntu-latest
+            runtime: k8s
+            daemon_mode: daemons
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: compose
+            daemon_mode: direct
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: k8s
-    name: ${{ matrix.arch }}
+            daemon_mode: direct
+    name: ${{ matrix.arch }} | ${{ matrix.runtime }} | ${{ matrix.daemon_mode }}
     uses: ./.github/workflows/_run-dep-dlm-testbed.yml
     with:
       runner: ${{ matrix.runner }}
       runtime: ${{ matrix.runtime }}
+      daemon_mode: ${{ matrix.daemon_mode }}
     secrets:
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}

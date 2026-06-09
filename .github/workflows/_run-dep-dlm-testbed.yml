@@ -11,6 +11,11 @@ on:
         type: string
         default: compose
         description: "compose | k8s"
+      daemon_mode:
+        required: false
+        type: string
+        default: direct
+        description: "direct | daemons"
     secrets:
       S3_ACCESS_KEY:
         required: false
@@ -20,7 +25,7 @@ on:
 jobs:
   test:
     runs-on: ${{ inputs.runner }}
-    name: ${{ inputs.runtime }} | ${{ matrix.mode }}
+    name: ${{ inputs.runtime }} | ${{ inputs.daemon_mode }} | ${{ matrix.mode }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -30,6 +35,7 @@ jobs:
       TESTBED_HOST_SOURCE: ${{ github.workspace }}
       RUNTIME: ${{ inputs.runtime }}
       TOKEN_MODE: ${{ matrix.mode }}
+      DAEMON_MODE: ${{ inputs.daemon_mode }}
       COMPOSE_FILE: deploy/compose/docker-compose.${{ matrix.mode }}.ci.yml
     steps:
       - name: Checkout
@@ -74,6 +80,26 @@ jobs:
           echo "ERROR: gfal2 not available after 240s — postStart hook may have failed"
           kubectl -n dep-dlm-testbed describe pod -l app=rucio | grep -A 5 "Events:"
           exit 1
+
+      - name: Wait for rucio daemons ready (k8s, daemon mode)
+        if: inputs.runtime == 'k8s' && inputs.daemon_mode == 'daemons'
+        run: |
+          # In daemon mode the long-running daemons must converge before tests.
+          # Their postStart also installs gfal2 asynchronously, and they race
+          # the bootstrap job on first start, so wait for the deployments to
+          # report available rather than assuming immediate readiness.
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            echo "Waiting for rucio-daemons-$d..."
+            kubectl -n dep-dlm-testbed rollout status \
+              deploy/rucio-daemons-$d --timeout=300s || {
+                echo "ERROR: rucio-daemons-$d did not become available"
+                kubectl -n dep-dlm-testbed describe deploy/rucio-daemons-$d | grep -A 5 "Events:" || true
+                kubectl -n dep-dlm-testbed logs deploy/rucio-daemons-$d --tail=50 || true
+                exit 1
+              }
+          done
+          echo "All daemons available"
 
       - name: Initialize DEP DLM testbed
         env:
@@ -171,6 +197,14 @@ jobs:
             echo "=== $deploy ==="
             kubectl -n dep-dlm-testbed logs deploy/$deploy --tail=200 2>/dev/null || true
           done
+          # Daemon diagnostics only relevant in daemon mode
+          if [ "${{ inputs.daemon_mode }}" = "daemons" ]; then
+            for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                     judge-evaluator judge-cleaner reaper; do
+              echo "=== rucio-daemons-$d ==="
+              kubectl -n dep-dlm-testbed logs deploy/rucio-daemons-$d --tail=200 2>/dev/null || true
+            done
+          fi
 
       - name: Tear down
         if: always()
