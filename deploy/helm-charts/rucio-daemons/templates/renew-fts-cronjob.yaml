@@ -13,6 +13,10 @@
       {{- if $val.defaultMode }}
       defaultMode: {{ $val.defaultMode }}
       {{- end }}
+      {{- if $val.items }}
+          items:
+{{ toYaml $val.items | indent 12 }}
+          {{- end }}
   {{- end}}
   {{- end}}
   {{- if .Values.ftsRenewal.tlsSecretName }}

@@ -99,6 +99,10 @@ spec:
           {{- if $val.defaultMode }}
           defaultMode: {{ $val.defaultMode }}
           {{- end }}
+          {{- if $val.items }}
+          items:
+{{ toYaml $val.items | indent 12 }}
+          {{- end }}
       {{- end}}
       {{- end}}
       {{- range $key, $val := .Values.persistentVolumes }}
