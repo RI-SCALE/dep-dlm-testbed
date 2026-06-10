@@ -334,7 +334,7 @@ services:
         wait
     volumes:
       # identical to the `rucio` service
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.token-exchange.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
