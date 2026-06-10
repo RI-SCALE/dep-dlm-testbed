@@ -79,7 +79,6 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3config:/etc/fts3/fts3config:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/managed.fts3restconfig:/etc/fts3/fts3restconfig:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
@@ -263,7 +262,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/rucio/bootstrap-db.py:/scripts/rucio/bootstrap-db.py:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/ping"]
       interval: 10s
@@ -294,7 +293,6 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/userpass-client.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts:/scripts:ro
       - ${TESTBED_HOST_SOURCE}/shared/tests:/tests:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
@@ -307,6 +305,51 @@ services:
           --trusted-host files.pythonhosted.org \
           pytest boto3 &&
         sleep infinity
+
+  rucio-daemons:
+    image: rucio/rucio-daemons@sha256:b90c7b20601a3731d8fb956b4e46b55f28265b95ca7ec79319ce3866b338364a
+    hostname: rucio-daemons
+    profiles: ["daemons"]
+    depends_on:
+      ruciodb:
+        condition: service_healthy
+      rucio:
+        condition: service_healthy
+      fts:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    networks:
+      - dep-dlm-testbed
+    environment:
+      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+      # daemon image expects the daemon name + args via env
+      - RUCIO_ENABLE_LOGS=True
+    entrypoint:
+      - bash
+      - -c
+      - |
+        dnf -y install yum-utils epel-release.noarch &&
+        dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
+        rucio-conveyor-submitter --sleep-time 5 &
+        rucio-conveyor-poller --sleep-time 5 &
+        rucio-conveyor-finisher --sleep-time 5 &
+        rucio-judge-evaluator --sleep-time 5 &
+        rucio-judge-cleaner --sleep-time 5 &
+        rucio-reaper --greedy --sleep-time 5 &
+        wait
+    volumes:
+      # identical to the `rucio` service
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.token-exchange.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
 
 networks:
   dep-dlm-testbed:
