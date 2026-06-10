@@ -1,11 +1,10 @@
-name: Distributed Storage Testbed
+name: Distributed Storage Testbed (full)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+  schedule:
+    # Nightly at 02:00 UTC
+    - cron: "0 2 * * *"
 
 jobs:
   test:
@@ -19,8 +18,16 @@ jobs:
             daemon_mode: direct
           - arch: amd64
             runner: ubuntu-latest
+            runtime: compose
+            daemon_mode: daemons
+          - arch: amd64
+            runner: ubuntu-latest
             runtime: k8s
             daemon_mode: direct
+          - arch: amd64
+            runner: ubuntu-latest
+            runtime: k8s
+            daemon_mode: daemons
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: compose
