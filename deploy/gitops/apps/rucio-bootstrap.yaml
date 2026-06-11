@@ -3,6 +3,7 @@ kind: Application
 metadata:
   name: rucio-bootstrap
   namespace: argocd
+  labels: { dep-dlm.component: rucio-bootstrap }
   annotations: { argocd.argoproj.io/sync-wave: "9" }
 spec:
   project: default
@@ -10,7 +11,7 @@ spec:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: feat/gitops-deployment-blueprint
     path: deploy/gitops/base/bootstrap
-  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-PLACEHOLDER }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

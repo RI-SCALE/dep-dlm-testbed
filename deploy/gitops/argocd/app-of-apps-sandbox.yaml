@@ -1,18 +1,10 @@
 # ============================================================================
 # DEP DLM — Argo app-of-apps (SANDBOX)
 # ============================================================================
-# Two root Applications, because the two sources need DIFFERENT handling:
-#
-#   1. dep-dlm-sandbox-apps    — base/applications/*.yaml are plain Argo
-#      Application manifests; synced in DIRECTORY mode into the argocd namespace
-#      (this is the app-of-apps fan-out). This dir must contain ONLY Application
-#      manifests — no kustomization.yaml, or Argo tries to apply it as a resource.
-#
-#   2. dep-dlm-sandbox-secrets — overlays/sandbox is a KUSTOMIZE dir (it has a
-#      kustomization.yaml listing the ExternalSecrets + ClusterSecretStore).
-#      Argo auto-detects kustomize and BUILDS it; output lands in dep-dlm-sandbox.
-#      No `directory:` block here — that would force raw-manifest mode and break
-#      the same way.
+#   apps root    -> argocd/applicationsets (directory mode; applies the SANDBOX
+#                   ApplicationSet, which generates all component Applications)
+#   secrets root -> environments/sandbox/secrets (kustomize; ExternalSecrets +
+#                   dev Vault store + seed Job — directory-base, already working)
 #
 #   kubectl apply -n argocd -f app-of-apps-sandbox.yaml
 ---
@@ -27,8 +19,10 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: feat/gitops-deployment-blueprint
-    path: deploy/gitops/overlays/sandbox/applications
-    directory: { recurse: true }
+    path: deploy/gitops/argocd/applicationsets
+    directory:
+      recurse: false
+      include: 'sandbox.yaml'      # only the sandbox ApplicationSet
   destination: { server: https://kubernetes.default.svc, namespace: argocd }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
@@ -45,7 +39,7 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: feat/gitops-deployment-blueprint
-    path: deploy/gitops/overlays/sandbox            # kustomize dir (auto-detected)
+    path: deploy/gitops/environments/sandbox/secrets
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
   syncPolicy:
     automated: { prune: true, selfHeal: true }

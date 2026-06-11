@@ -1,19 +1,10 @@
-# Reproduces the umbrella's `testbed-configs` ConfigMap as a Secret.
-# ESO emits Secrets, not ConfigMaps; mounting config-as-Secret is identical
-# (a volume with items), so we use one mechanism for everything.
-# Seed: vault kv put secret/dep-dlm/configs <name>=@shared/config/<path> ...
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: testbed-configs
 spec:
   refreshInterval: 1h
-  secretStoreRef:
-    name: dep-dlm-vault
-    kind: ClusterSecretStore
-  target:
-    name: testbed-configs
-    creationPolicy: Owner
+  secretStoreRef: { name: dep-dlm-vault, kind: ClusterSecretStore }
+  target: { name: testbed-configs, creationPolicy: Owner }
   dataFrom:
-    - extract:
-        key: dep-dlm/configs
+    - extract: { key: dep-dlm/configs }

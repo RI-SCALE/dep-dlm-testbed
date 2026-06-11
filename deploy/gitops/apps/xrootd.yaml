@@ -1,23 +1,21 @@
-# teapot (bundled testbed chart) — chart + values both from this repo.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: teapot
+  name: xrootd
   namespace: argocd
+  labels: { dep-dlm.component: xrootd }
   annotations: { argocd.argoproj.io/sync-wave: "5" }
 spec:
   project: default
   sources:
     - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
       targetRevision: feat/gitops-deployment-blueprint
-      path: deploy/helm-charts/teapot
-      helm:
-        valueFiles:
-          - $values/deploy/gitops/base/values/teapot.yaml
+      path: deploy/helm-charts/xrootd
+      helm: { valueFiles: [ $values/deploy/gitops/base/values/xrootd.yaml ] }
     - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
       targetRevision: feat/gitops-deployment-blueprint
       ref: values
-  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-PLACEHOLDER }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

@@ -1,0 +1,16 @@
+# Flux Kustomization — deploys the staging environment. Equivalent to the Argo
+# app-of-apps-staging apps root. Reuses environments/staging unchanged.
+# NOTE: environments/staging emits Argo Application CRs, which Flux should NOT apply.
+# For a TRUE Flux port, point this at a Flux-native variant that emits
+# HelmRelease objects instead (see flux/README.md). This file shows the SHAPE.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: dep-dlm-staging
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/environments/staging/secrets   # the ESO secrets overlay reuses cleanly
+  prune: true
+  targetNamespace: dep-dlm-staging

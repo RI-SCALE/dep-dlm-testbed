@@ -1,10 +1,9 @@
 # ============================================================================
-# DEP DLM — Argo app-of-apps (STAGING)
+# DEP DLM — Argo app-of-apps (production)
 # ============================================================================
-# Same two-root structure as sandbox. Differences:
-#   - apps root points at overlays/production/applications (the SUBSET production wants
-#     — no keycloak/xrootd/teapot, external IdP + storage instead)
-#   - secrets root points at overlays/production (real Vault store, NO seed Job)
+#   apps root    -> argocd/applicationsets (directory; applies the production ApplicationSet)
+#   secrets root -> environments/production/secrets (ExternalSecrets + REAL Vault store,
+#                   k8s auth, NO seed Job — operator seeds the external Vault)
 #
 #   kubectl apply -n argocd -f app-of-apps-production.yaml
 ---
@@ -19,8 +18,10 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: feat/gitops-deployment-blueprint
-    path: deploy/gitops/overlays/production/applications
-    directory: { recurse: true }
+    path: deploy/gitops/argocd/applicationsets
+    directory:
+      recurse: false
+      include: 'production.yaml'
   destination: { server: https://kubernetes.default.svc, namespace: argocd }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
@@ -37,7 +38,7 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: feat/gitops-deployment-blueprint
-    path: deploy/gitops/overlays/production
+    path: deploy/gitops/environments/production/secrets
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
   syncPolicy:
     automated: { prune: true, selfHeal: true }

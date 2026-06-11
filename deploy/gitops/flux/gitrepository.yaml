@@ -1,0 +1,12 @@
+# Flux source — the same repo Argo uses. The workloads under base/ and
+# environments/ are reused verbatim; only these Flux controller objects differ.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: dep-dlm-testbed
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/ri-scale/dep-dlm-testbed.git
+  ref:
+    branch: feat/gitops-deployment-blueprint

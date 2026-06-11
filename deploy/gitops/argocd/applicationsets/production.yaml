@@ -1,0 +1,86 @@
+# ============================================================================
+# DEP DLM — ApplicationSet (production)
+# ============================================================================
+# Subset: omits vault (external), postgresql (external DB), keycloak/xrootd/
+# teapot (external IdP+storage). FIX: hasKey guard + no missingkey=error.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: dep-dlm-production
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elementsYaml: |
+          - name: external-secrets
+            wave: "-20"
+            spec:
+              source:
+                repoURL: https://charts.external-secrets.io
+                chart: external-secrets
+                targetRevision: 0.10.7
+                helm: { values: "installCRDs: true\n" }
+          - name: rucio-bootstrap
+            wave: "9"
+            spec:
+              source:
+                repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                targetRevision: feat/gitops-deployment-blueprint
+                path: deploy/gitops/base/bootstrap
+          - name: rucio-server
+            wave: "10"
+            spec:
+              sources:
+                - repoURL: https://rucio.github.io/helm-charts
+                  chart: rucio-server
+                  targetRevision: 40.0.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: rucio-daemons
+            wave: "11"
+            spec:
+              sources:
+                - repoURL: https://rucio.github.io/helm-charts
+                  chart: rucio-daemons
+                  targetRevision: 40.0.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: fts
+            wave: "8"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  path: deploy/helm-charts/fts
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+  template:
+    metadata:
+      name: '{{ .name }}-production'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{ .wave }}'
+    spec:
+      project: default
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dep-dlm-production
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
+  templatePatch: |
+    spec:
+      {{- if hasKey .spec "source" }}
+      source:
+        {{- toYaml .spec.source | nindent 8 }}
+      {{- end }}
+      {{- if hasKey .spec "sources" }}
+      sources:
+        {{- toYaml .spec.sources | nindent 8 }}
+      {{- end }}

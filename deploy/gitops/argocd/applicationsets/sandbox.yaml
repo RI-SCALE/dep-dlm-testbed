@@ -1,0 +1,148 @@
+# ============================================================================
+# DEP DLM — ApplicationSet (SANDBOX)
+# ============================================================================
+# One ApplicationSet generates all sandbox component Applications. Each element
+# carries its FULL source/sources block; templatePatch injects whichever it has.
+# FIX: use hasKey (not bare .spec.sources) and drop missingkey=error, so
+# single-source components don't trip "map has no entry for key sources".
+#   kubectl apply -n argocd -f applicationsets/sandbox.yaml   (via app-of-apps)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: dep-dlm-sandbox
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - list:
+        elementsYaml: |
+          - name: external-secrets
+            wave: "-20"
+            spec:
+              source:
+                repoURL: https://charts.external-secrets.io
+                chart: external-secrets
+                targetRevision: 0.10.7
+                helm: { values: "installCRDs: true\n" }
+          - name: vault
+            wave: "-15"
+            spec:
+              source:
+                repoURL: https://helm.releases.hashicorp.com
+                chart: vault
+                targetRevision: 0.28.1
+                helm:
+                  values: |
+                    fullnameOverride: vault   # pin service name to vault.<ns>.svc
+                    server:                   # (app is vault-sandbox, but svc stays vault)
+                      dev: { enabled: true, devRootToken: "root" }
+                      dataStorage: { enabled: false }
+                      ha: { enabled: false }
+          - name: ruciodb
+            wave: "0"
+            spec:
+              source:
+                repoURL: https://charts.bitnami.com/bitnami
+                chart: postgresql
+                targetRevision: 18.3.0
+                helm:
+                  values: |
+                    fullnameOverride: ruciodb
+                    auth: { username: rucio, password: rucio, database: rucio }
+                    primary: { persistence: { enabled: false } }
+          - name: rucio-bootstrap
+            wave: "9"
+            spec:
+              source:
+                repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                targetRevision: feat/gitops-deployment-blueprint
+                path: deploy/gitops/base/bootstrap
+          - name: rucio-server
+            wave: "10"
+            spec:
+              sources:
+                - repoURL: https://rucio.github.io/helm-charts
+                  chart: rucio-server
+                  targetRevision: 40.0.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: rucio-daemons
+            wave: "11"
+            spec:
+              sources:
+                - repoURL: https://rucio.github.io/helm-charts
+                  chart: rucio-daemons
+                  targetRevision: 40.0.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: keycloak
+            wave: "5"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  path: deploy/helm-charts/keycloak
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/keycloak.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: xrootd
+            wave: "5"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  path: deploy/helm-charts/xrootd
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/xrootd.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: teapot
+            wave: "5"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  path: deploy/helm-charts/teapot
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+          - name: fts
+            wave: "8"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  path: deploy/helm-charts/fts
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/gitops-deployment-blueprint
+                  ref: values
+  template:
+    metadata:
+      name: '{{ .name }}-sandbox'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{ .wave }}'
+    spec:
+      project: default
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dep-dlm-sandbox
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
+  templatePatch: |
+    spec:
+      {{- if hasKey .spec "source" }}
+      source:
+        {{- toYaml .spec.source | nindent 8 }}
+      {{- end }}
+      {{- if hasKey .spec "sources" }}
+      sources:
+        {{- toYaml .spec.sources | nindent 8 }}
+      {{- end }}
