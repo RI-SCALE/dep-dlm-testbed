@@ -1,0 +1,23 @@
+# Rucio server — UPSTREAM chart, values from base/values/rucio-server.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rucio-server
+  namespace: argocd
+  annotations: { argocd.argoproj.io/sync-wave: "10" }
+spec:
+  project: default
+  sources:
+    - repoURL: https://rucio.github.io/helm-charts
+      chart: rucio-server
+      targetRevision: 40.0.0
+      helm:
+        valueFiles:
+          - $values/deploy/gitops/base/values/rucio-server.yaml
+    - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+      targetRevision: feat/gitops-deployment-blueprint
+      ref: values
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
