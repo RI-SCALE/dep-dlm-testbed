@@ -9,10 +9,10 @@ metadata:
 spec:
   refreshInterval: 1h
   secretStoreRef:
-    name: dep-dlm-vault          # ClusterSecretStore; same name every env
+    name: dep-dlm-vault
     kind: ClusterSecretStore
   target:
-    name: testbed-certs          # the Secret pods mount (same as the umbrella)
+    name: testbed-certs
     creationPolicy: Owner
   dataFrom:
     - extract:

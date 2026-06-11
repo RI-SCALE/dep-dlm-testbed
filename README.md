@@ -88,8 +88,8 @@ make test-copernicus-transfers
 dep-dlm-testbed
 
   RUNTIME    = compose    (compose | k8s)
-  TOKEN_MODE = unmanaged (managed | unmanaged)
-  DAEMON_MODE = daemons (direct | daemons)
+  TOKEN_MODE = managed (managed | unmanaged)
+  DAEMON_MODE = direct (direct | daemons)
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]
@@ -110,8 +110,8 @@ Lifecycle
   logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
 
 GitOps
-  argocd-sandbox-install Install Argo CD and bootstrap the sandbox app-of-apps (override ARGOCD_REPO_URL / ARGOCD_REVISION to test from a fork/branch)
-  argocd-sandbox-uninstall Uninstall GitOps sandbox (Argo apps, workloads, store) and Argo CD itself
+  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+  argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
 
 Helm-only
   helm-lint            Lint the umbrella chart

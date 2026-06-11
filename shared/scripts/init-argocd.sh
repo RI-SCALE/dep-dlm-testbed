@@ -17,10 +17,12 @@
 #   APP_NS             (default: dep-dlm-sandbox) workload namespace
 #   REPO_URL           git repo Argo pulls from  (default: from app-of-apps-sandbox.yaml)
 #   REVISION           git ref Argo tracks       (default: current branch)
+#   GITOPS_ENV         gitops overlay to apply    (default: sandbox)
 #
 # Examples:
 #   # Test from your feature branch + fork
 #   shared/scripts/init-argocd.sh \
+#     --env sandbox \
 #     --repo-url https://github.com/ri-scale/dep-dlm-testbed.git \
 #     --revision feat/gitops-deployment-blueprint
 set -euo pipefail
@@ -30,12 +32,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GITOPS_DIR="${REPO_ROOT}/deploy/gitops"
-APP_OF_APPS="${GITOPS_DIR}/argocd/app-of-apps-sandbox.yaml"
+GITOPS_ENV="${GITOPS_ENV:-sandbox}"
+APP_OF_APPS="${GITOPS_DIR}/argocd/app-of-apps-${GITOPS_ENV}.yaml"
 
 # --- Config / defaults ------------------------------------------------------
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 ARGOCD_VERSION="${ARGOCD_VERSION:-stable}"
-APP_NS="${APP_NS:-dep-dlm-sandbox}"
+APP_NS="${APP_NS:-dep-dlm-${GITOPS_ENV}}"
 REPO_URL="${REPO_URL:-}"
 REVISION="${REVISION:-}"
 WAIT=1
@@ -44,6 +47,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-url) REPO_URL="$2"; shift 2 ;;
     --revision) REVISION="$2"; shift 2 ;;
+    --env) GITOPS_ENV="$2"; shift 2 ;;
     --no-wait)  WAIT=0; shift ;;
     -h|--help)  grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
@@ -57,7 +61,7 @@ die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 # --- Preflight --------------------------------------------------------------
 command -v kubectl >/dev/null || die "kubectl not found in PATH"
 kubectl cluster-info >/dev/null 2>&1 || die "kubectl cannot reach a cluster (check your context)"
-[[ -f "$APP_OF_APPS" ]] || die "app-of-apps-sandbox.yaml not found at $APP_OF_APPS"
+[[ -f "$APP_OF_APPS" ]] || die "app-of-apps-${GITOPS_ENV}.yaml not found at $APP_OF_APPS"
 
 log "Target cluster:"
 kubectl config current-context || true
@@ -91,7 +95,7 @@ if [[ "$WAIT" -eq 1 ]]; then
   done
 fi
 
-# --- 3. Patch app-of-apps-sandbox.yaml repo/revision if overrides given ------------------
+# --- 3. Patch app-of-apps-$(GITOPS_ENV).yaml repo/revision if overrides given ------------------
 APPLY_FILE="$APP_OF_APPS"
 if [[ -n "$REPO_URL" || -n "$REVISION" ]]; then
   TMP="$(mktemp)"
@@ -105,14 +109,14 @@ if [[ -n "$REPO_URL" || -n "$REVISION" ]]; then
     log "Overriding targetRevision -> ${REVISION}"
   fi
   APPLY_FILE="$TMP"
-  warn "Applied repo/revision overrides only to the app-of-apps-sandbox.yaml root."
+  warn "Applied repo/revision overrides only to the app-of-apps-${GITOPS_ENV}.yaml root."
   warn "The child Applications under argocd/applications/ still carry their"
   warn "own repoURL/targetRevision — edit those for the bundled charts, or"
   warn "merge to your default branch so HEAD resolves."
 fi
 
-# --- 4. Apply the app-of-apps-sandbox.yaml -----------------------------------------------
-log "Applying sandbox app-of-apps-sandbox.yaml"
+# --- 4. Apply the app-of-apps-$(GITOPS_ENV).yaml -----------------------------------------------
+log "Applying ${GITOPS_ENV} app-of-apps-${GITOPS_ENV}.yaml"
 kubectl apply -n "$ARGOCD_NAMESPACE" -f "$APPLY_FILE"
 [[ "$APPLY_FILE" != "$APP_OF_APPS" ]] && rm -f "$APPLY_FILE"
 

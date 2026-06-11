@@ -23,7 +23,8 @@ HELM          := helm
 ARGOCD_REPO_URL ?=
 ARGOCD_REVISION ?=
 ARGOCD_NAMESPACE ?= argocd
-APP_SANDBOX_NAMESPACE ?= dep-dlm-sandbox
+GITOPS_ENV ?= sandbox
+GITOPS_TARGET_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
 
 # ── Validation ─────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ help: ## Show this help (default target)
 	@echo '  RUNTIME    = $(RUNTIME)    (compose | k8s)'
 	@echo '  TOKEN_MODE = $(TOKEN_MODE) (managed | unmanaged)'
 	@echo '  DAEMON_MODE = $(DAEMON_MODE) (direct | daemons)'
+	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
 	@echo ''
 	@echo 'Usage:'
 	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]'
@@ -139,29 +141,29 @@ endif
 
 ## GitOps
 
-.PHONY: argocd-sandbox-install
-argocd-sandbox-install: ## Install Argo CD and bootstrap the sandbox app-of-apps (override ARGOCD_REPO_URL / ARGOCD_REVISION to test from a fork/branch)
-	./shared/scripts/init-argocd.sh \
+.PHONY: argocd-install
+argocd-install: ## Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
 	    $(if $(ARGOCD_REPO_URL),--repo-url $(ARGOCD_REPO_URL)) \
 	    $(if $(ARGOCD_REVISION),--revision $(ARGOCD_REVISION))
 
-.PHONY: argocd-sandbox-uninstall
-argocd-sandbox-uninstall: ## Uninstall GitOps sandbox and Argo CD
+.PHONY: argocd-uninstall
+argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	# 1. Delete the app-of-apps roots first (stops selfHeal recreating).
-	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-sandbox-apps dep-dlm-sandbox-secrets --ignore-not-found --wait=false
+	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-$(GITOPS_ENV)-apps dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
 	# 2. Delete component apps but KEEP external-secrets so it can clear finalizers.
 	kubectl -n $(ARGOCD_NAMESPACE) delete applications -l '!keep' --field-selector metadata.name!=external-secrets --ignore-not-found --wait=false || \
 	  kubectl -n $(ARGOCD_NAMESPACE) delete application vault ruciodb rucio-server rucio-daemons rucio-bootstrap keycloak xrootd teapot fts --ignore-not-found --wait=false
 	# 3. Clear ESO-managed resources while ESO is still alive.
 	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
-	-for es in $$(kubectl get externalsecret -n $(APP_SANDBOX_NAMESPACE) -o name 2>/dev/null); do \
-	  kubectl delete -n $(APP_SANDBOX_NAMESPACE) $$es --ignore-not-found; done
+	-for es in $$(kubectl get externalsecret -n $(GITOPS_TARGET_NAMESPACE) -o name 2>/dev/null); do \
+	  kubectl delete -n $(GITOPS_TARGET_NAMESPACE) $$es --ignore-not-found; done
 	# 4. Now the namespace can finalize.
-	kubectl delete namespace $(APP_SANDBOX_NAMESPACE) --ignore-not-found --timeout=60s
+	kubectl delete namespace $(GITOPS_TARGET_NAMESPACE) --ignore-not-found --timeout=60s
 	# 5. Finally remove ESO and Argo.
 	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
-	@echo "GitOps sandbox and Argo CD removed"
+	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
 
 ## Helm-only
 
