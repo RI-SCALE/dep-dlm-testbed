@@ -146,16 +146,22 @@ argocd-sandbox-install: ## Install Argo CD and bootstrap the sandbox app-of-apps
 	    $(if $(ARGOCD_REVISION),--revision $(ARGOCD_REVISION))
 
 .PHONY: argocd-sandbox-uninstall
-argocd-sandbox-uninstall: ## Uninstall GitOps sandbox (Argo apps, workloads, store) and Argo CD itself
-	# 1. Delete Applications first so Argo's selfHeal can't recreate resources.
-	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-sandbox --ignore-not-found
-	kubectl -n $(ARGOCD_NAMESPACE) delete applications --all --ignore-not-found
-	# 2. Namespaced workloads.
-	kubectl delete namespace $(APP_SANDBOX_NAMESPACE) --ignore-not-found
-	# 3. Cluster-scoped resources the overlay created.
-	kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
-	@echo "GitOps sandbox and Argo CD removed"
+argocd-sandbox-uninstall: ## Uninstall GitOps sandbox and Argo CD
+	# 1. Delete the app-of-apps roots first (stops selfHeal recreating).
+	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-sandbox-apps dep-dlm-sandbox-secrets --ignore-not-found --wait=false
+	# 2. Delete component apps but KEEP external-secrets so it can clear finalizers.
+	kubectl -n $(ARGOCD_NAMESPACE) delete applications -l '!keep' --field-selector metadata.name!=external-secrets --ignore-not-found --wait=false || \
+	  kubectl -n $(ARGOCD_NAMESPACE) delete application vault ruciodb rucio-server rucio-daemons rucio-bootstrap keycloak xrootd teapot fts --ignore-not-found --wait=false
+	# 3. Clear ESO-managed resources while ESO is still alive.
+	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
+	-for es in $$(kubectl get externalsecret -n $(APP_SANDBOX_NAMESPACE) -o name 2>/dev/null); do \
+	  kubectl delete -n $(APP_SANDBOX_NAMESPACE) $$es --ignore-not-found; done
+	# 4. Now the namespace can finalize.
+	kubectl delete namespace $(APP_SANDBOX_NAMESPACE) --ignore-not-found --timeout=60s
+	# 5. Finally remove ESO and Argo.
+	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
+	@echo "GitOps sandbox and Argo CD removed"
 
 ## Helm-only
 
