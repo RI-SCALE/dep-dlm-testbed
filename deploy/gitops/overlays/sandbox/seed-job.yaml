@@ -113,6 +113,8 @@ spec:
                 server.cfg=@shared/config/rucio/${CFG} \
                 alembic.ini=@shared/config/rucio/alembic.ini \
                 idpsecrets.json=@shared/config/rucio/idpsecrets.json
+              vault kv put secret/dep-dlm/scripts-xrootd \
+                docker-entrypoint.sh=@shared/scripts/xrootd/docker-entrypoint.sh
               echo "seed complete"
           volumeMounts:
             - { name: repo, mountPath: /repo }

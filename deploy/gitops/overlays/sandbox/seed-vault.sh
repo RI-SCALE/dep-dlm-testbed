@@ -90,4 +90,8 @@ kv dep-dlm/rucio \
   alembic.ini=@shared/config/rucio/alembic.ini \
   idpsecrets.json=@shared/config/rucio/idpsecrets.json
 
+echo "==> Seeding xrootd scripts"
+kv dep-dlm/scripts-xrootd \
+  docker-entrypoint.sh=@shared/scripts/xrootd/docker-entrypoint.sh
+
 echo "==> Done. ExternalSecrets will project these into testbed-* Secrets."

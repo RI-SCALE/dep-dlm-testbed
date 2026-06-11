@@ -5,3 +5,4 @@ resources:
   - testbed-configs.yaml
   - testbed-patches.yaml
   - rucio-server-cfg.yaml
+  - testbed-scripts-xrootd.yaml

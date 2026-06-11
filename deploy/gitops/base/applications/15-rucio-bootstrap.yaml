@@ -1,0 +1,22 @@
+# Rucio DB bootstrap — initialises the schema (heartbeats, etc.) BEFORE daemons.
+# The umbrella did this via a post-install hook (bootstrap-db.py); GitOps needs
+# it explicit. sync-wave 9: after Postgres (0) + rucio-server cfg, before the
+# server (10) and daemons (11). PreSync/Sync hook semantics via Argo wave.
+#
+# This wraps a Job manifest that runs `rucio-admin db init` against ruciodb.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rucio-bootstrap
+  namespace: argocd
+  annotations: { argocd.argoproj.io/sync-wave: "9" }
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/base/bootstrap
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
