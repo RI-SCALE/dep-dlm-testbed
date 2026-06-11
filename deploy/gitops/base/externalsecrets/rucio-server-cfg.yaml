@@ -1,0 +1,23 @@
+# Reproduces the umbrella's `rucio-server-cfg` Secret: server.cfg + alembic.ini
+# + idpsecrets.json. In the umbrella, server.cfg is selected by tokenMode
+# (token-exchange vs client-credentials). Here the seed step writes the right
+# one as `server.cfg`, so the ExternalSecret stays env-agnostic.
+# Seed: vault kv put secret/dep-dlm/rucio \
+#   server.cfg=@shared/config/rucio/server.<flow>.cfg \
+#   alembic.ini=@shared/config/rucio/alembic.ini \
+#   idpsecrets.json=@shared/config/rucio/idpsecrets.json
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: rucio-server-cfg
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: dep-dlm-vault
+    kind: ClusterSecretStore
+  target:
+    name: rucio-server-cfg
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: dep-dlm/rucio

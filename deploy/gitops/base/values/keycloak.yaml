@@ -1,0 +1,14 @@
+# Shared Keycloak values — mirrors the umbrella `keycloak:` block.
+# testbed-configs is now an ESO Secret (was a ConfigMap).
+fullnameOverride: keycloak
+volumes:
+  - name: certs
+    secret:
+      secretName: testbed-certs
+  - name: configs
+    secret:
+      secretName: testbed-configs
+volumeMounts:
+  - { name: certs,   mountPath: /etc/x509/https/keycloakcert.pem, subPath: keycloakcert.pem, readOnly: true }
+  - { name: certs,   mountPath: /etc/x509/https/keycloakkey.pem,  subPath: keycloakkey.pem,  readOnly: true }
+  - { name: configs, mountPath: /opt/keycloak/data/import/realm.json, subPath: realm.json,   readOnly: true }

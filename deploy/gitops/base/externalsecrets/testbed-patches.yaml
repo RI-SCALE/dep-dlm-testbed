@@ -1,0 +1,18 @@
+# Reproduces the umbrella's `testbed-patches` Secret (Python patch files).
+# Seed: vault kv put secret/dep-dlm/patches rucio--fts3.py=@shared/patches/rucio/fts3.py ...
+# Note the umbrella's "/"->"--" key convention is preserved in the seed keys.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: testbed-patches
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: dep-dlm-vault
+    kind: ClusterSecretStore
+  target:
+    name: testbed-patches
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: dep-dlm/patches

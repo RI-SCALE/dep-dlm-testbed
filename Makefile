@@ -15,9 +15,15 @@ COMPOSE       := docker compose -f $(COMPOSE_FILE)
 
 HELM_CHART    := deploy/helm-charts/dep-dlm-testbed
 HELM_RELEASE  ?= testbed
-K8S_NAMESPACE ?= dep-dlm-testbed
-KUBECTL       := kubectl -n $(K8S_NAMESPACE)
+UMBRELLA_CHART_NAMESPACE ?= dep-dlm-testbed
+KUBECTL       := kubectl -n $(UMBRELLA_CHART_NAMESPACE)
 HELM          := helm
+
+# GitOps (Argo CD sandbox bootstrap)
+ARGOCD_REPO_URL ?=
+ARGOCD_REVISION ?=
+ARGOCD_NAMESPACE ?= argocd
+APP_SANDBOX_NAMESPACE ?= dep-dlm-sandbox
 
 # ── Validation ─────────────────────────────────────────────────────
 
@@ -76,11 +82,11 @@ start: ## Start the stack
 ifeq ($(RUNTIME),compose)
 	COMPOSE_PROFILES=$(DAEMON_MODE) $(COMPOSE) up -d $(SERVICES)
 else
-	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	$(KUBECTL) create namespace $(UMBRELLA_CHART_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	$(HELM) dependency update $(HELM_CHART)
 	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
 endif
 
 .PHONY: stop
@@ -88,8 +94,9 @@ stop: ## Stop the stack and remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) down -v
 else
-	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
+	$(HELM) uninstall $(HELM_RELEASE) -n $(UMBRELLA_CHART_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
+	$(KUBECTL) delete namespace $(UMBRELLA_CHART_NAMESPACE) --ignore-not-found
 endif
 
 .PHONY: restart
@@ -101,7 +108,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build  $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
 endif
 
 .PHONY: rebuild-clean
@@ -110,7 +117,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build --no-cache $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
 endif
 
 .PHONY: ps
@@ -126,9 +133,29 @@ logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) logs -f --tail=100 $(SERVICES)
 else
-	@echo "k8s: use 'kubectl -n $(K8S_NAMESPACE) logs deploy/<name> -f'"
+	@echo "k8s: use 'kubectl -n $(UMBRELLA_CHART_NAMESPACE) logs deploy/<name> -f'"
 	@$(KUBECTL) get deploy -o name
 endif
+
+## GitOps
+
+.PHONY: argocd-sandbox-install
+argocd-sandbox-install: ## Install Argo CD and bootstrap the sandbox app-of-apps (override ARGOCD_REPO_URL / ARGOCD_REVISION to test from a fork/branch)
+	./shared/scripts/init-argocd.sh \
+	    $(if $(ARGOCD_REPO_URL),--repo-url $(ARGOCD_REPO_URL)) \
+	    $(if $(ARGOCD_REVISION),--revision $(ARGOCD_REVISION))
+
+.PHONY: argocd-sandbox-uninstall
+argocd-sandbox-uninstall: ## Uninstall GitOps sandbox (Argo apps, workloads, store) and Argo CD itself
+	# 1. Delete Applications first so Argo's selfHeal can't recreate resources.
+	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-sandbox --ignore-not-found
+	kubectl -n $(ARGOCD_NAMESPACE) delete applications --all --ignore-not-found
+	# 2. Namespaced workloads.
+	kubectl delete namespace $(APP_SANDBOX_NAMESPACE) --ignore-not-found
+	# 3. Cluster-scoped resources the overlay created.
+	kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
+	@echo "GitOps sandbox and Argo CD removed"
+	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
 
 ## Helm-only
 
@@ -138,13 +165,13 @@ helm-lint: ## Lint the umbrella chart
 
 .PHONY: helm-template
 helm-template: ## Render manifests without installing
-	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
+	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
 
 ## Tests
 
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
@@ -153,16 +180,16 @@ test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentin
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
-		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
 
 ## Cleanup
 

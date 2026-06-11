@@ -1,0 +1,19 @@
+# Reproduces the umbrella's `testbed-certs` Secret from Vault.
+# Seed: vault kv put secret/dep-dlm/certs <pem>=@certs/<pem> ...
+# dataFrom.extract pulls EVERY key under the path into one Secret — validated
+# end-to-end (Vault -> ClusterSecretStore -> ESO -> Secret) in the sandbox.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: testbed-certs
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: dep-dlm-vault          # ClusterSecretStore; same name every env
+    kind: ClusterSecretStore
+  target:
+    name: testbed-certs          # the Secret pods mount (same as the umbrella)
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: dep-dlm/certs

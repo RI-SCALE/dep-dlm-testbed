@@ -1,0 +1,18 @@
+# ============================================================================
+# DEP DLM GitOps — production overrides (thin margin)
+# ============================================================================
+# External IdP AND external storage; HA Rucio. The base architecture is
+# unchanged — only toggles, endpoints, replicas, persistence differ.
+idp:
+  internal: false
+  issuerUrl: "https://idp.example.org/realms/dep-dlm"        # TODO
+storage:
+  xrootd: { internal: false, externalHosts: [] }             # external RSEs; TODO
+  webdav: { internal: false, externalHosts: [] }             # external RSEs; TODO
+tokenFlow: managed
+
+rucioServer:
+  replicaCount: 3                                            # HA
+postgresql:
+  primary:
+    persistence: { enabled: true, size: 100Gi }
