@@ -1,0 +1,44 @@
+# ============================================================================
+# DEP DLM — Argo app-of-apps (STAGING)
+# ============================================================================
+# Same two-root structure as sandbox. Differences:
+#   - apps root points at overlays/staging/applications (the SUBSET staging wants
+#     — no keycloak/xrootd/teapot, external IdP + storage instead)
+#   - secrets root points at overlays/staging (real Vault store, NO seed Job)
+#
+#   kubectl apply -n argocd -f app-of-apps-staging.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-staging-apps
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/overlays/staging/applications
+    directory: { recurse: true }
+  destination: { server: https://kubernetes.default.svc, namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-staging-secrets
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/overlays/staging
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

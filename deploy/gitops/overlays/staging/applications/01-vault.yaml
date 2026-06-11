@@ -1,0 +1,24 @@
+# HashiCorp Vault (dev mode) — SANDBOX-ONLY. Must exist before the seed Job and
+# the ExternalSecrets. Negative sync-wave so it deploys first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+  annotations: { argocd.argoproj.io/sync-wave: "-15" }
+spec:
+  project: default
+  source:
+    repoURL: https://helm.releases.hashicorp.com
+    chart: vault
+    targetRevision: 0.28.1     # TODO: pin to a current release
+    helm:
+      values: |
+        server:
+          dev: { enabled: true, devRootToken: "root" }
+          dataStorage: { enabled: false }
+          ha: { enabled: false }
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

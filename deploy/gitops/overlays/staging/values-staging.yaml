@@ -1,14 +1,9 @@
-# ============================================================================
-# DEP DLM GitOps — staging overrides (thin margin vs base/sandbox)
-# ============================================================================
-# Same architecture; externalise the IdP, real secrets, persistent DB.
-# NO seed job: operator seeds the real Vault out-of-band.
 idp:
-  internal: false                                  # external SSO/IdP
+  internal: false                                       # external SSO/IdP
   issuerUrl: "https://idp.example.org/realms/dep-dlm"   # TODO
 storage:
-  xrootd: { internal: true }                       # storage may still be bundled
-  webdav: { internal: true }
+  xrootd: { internal: false }
+  webdav: { internal: false }
 tokenFlow: managed
 
 postgresql:
