@@ -1,0 +1,17 @@
+# bootstrap-db.py — the umbrella mounted it from the testbed-scripts-rucio
+# ConfigMap; here ESO projects it from Vault. Seed dep-dlm/scripts-rucio.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: testbed-scripts-rucio
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: dep-dlm-vault
+    kind: ClusterSecretStore
+  target:
+    name: testbed-scripts-rucio
+    creationPolicy: Owner
+  dataFrom:
+    - extract:
+        key: dep-dlm/scripts-rucio

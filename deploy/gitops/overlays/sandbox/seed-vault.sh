@@ -94,4 +94,8 @@ echo "==> Seeding xrootd scripts"
 kv dep-dlm/scripts-xrootd \
   docker-entrypoint.sh=@shared/scripts/xrootd/docker-entrypoint.sh
 
+echo "==> Seeding rucio scripts"
+kv dep-dlm/scripts-rucio \
+  bootstrap-db.py=@shared/scripts/rucio/bootstrap-db.py
+
 echo "==> Done. ExternalSecrets will project these into testbed-* Secrets."

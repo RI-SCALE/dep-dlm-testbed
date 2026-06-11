@@ -115,6 +115,8 @@ spec:
                 idpsecrets.json=@shared/config/rucio/idpsecrets.json
               vault kv put secret/dep-dlm/scripts-xrootd \
                 docker-entrypoint.sh=@shared/scripts/xrootd/docker-entrypoint.sh
+              vault kv put secret/dep-dlm/scripts-rucio \
+                bootstrap-db.py=@shared/scripts/rucio/bootstrap-db.py
               echo "seed complete"
           volumeMounts:
             - { name: repo, mountPath: /repo }
