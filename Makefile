@@ -28,6 +28,7 @@ GITOPS_TARGET_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
 
 FLUX_REPO_URL ?=
 FLUX_REVISION ?=
+FLUX_NAMESPACE ?= flux-system
 
 # ── Validation ─────────────────────────────────────────────────────
 
@@ -173,6 +174,28 @@ flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|sta
 	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
 	    $(if $(FLUX_REPO_URL),--repo-url $(FLUX_REPO_URL)) \
 	    $(if $(FLUX_REVISION),--revision $(FLUX_REVISION))
+
+.PHONY: flux-uninstall
+flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
+	# 1. Suspend + delete the entrypoint Kustomizations (stops Flux re-reconciling).
+	#    Reverse order: components -> secrets -> eso.
+	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV) --ignore-not-found --wait=false
+	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
+	# 2. Clear ESO-managed resources WHILE ESO is still alive (avoids finalizer deadlock).
+	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
+	-for es in $$(kubectl get externalsecret -n $(GITOPS_TARGET_NAMESPACE) -o name 2>/dev/null); do \
+	  kubectl delete -n $(GITOPS_TARGET_NAMESPACE) $$es --ignore-not-found; done
+	# 3. Now the workload namespace can finalize.
+	kubectl delete namespace $(GITOPS_TARGET_NAMESPACE) --ignore-not-found --timeout=60s
+	# 4. Remove ESO (its own Kustomization) and the HelmReleases it managed.
+	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-eso --ignore-not-found --wait=false
+	# 5. Remove the GitRepository source.
+	kubectl -n $(FLUX_NAMESPACE) delete gitrepository dep-dlm-testbed --ignore-not-found
+	@echo "GitOps $(GITOPS_ENV) Flux Kustomizations removed (Flux controllers left intact)"
+	# 6. Uinstall Flux itself
+	flux uninstall --namespace=$(FLUX_NAMESPACE) --silent 2>/dev/null || \
+	  kubectl delete namespace $(FLUX_NAMESPACE) --ignore-not-found
+	@echo "Flux controllers removed"
 
 ## Helm-only
 
