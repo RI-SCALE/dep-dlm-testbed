@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GITOPS_DIR="${REPO_ROOT}/deploy/gitops"
 GITOPS_ENV="${GITOPS_ENV:-sandbox}"
-APP_OF_APPS="${GITOPS_DIR}/argocd/app-of-apps-${GITOPS_ENV}.yaml"
+APP_OF_APPS="${GITOPS_DIR}/argocd/entrypoints/app-of-apps-${GITOPS_ENV}.yaml"
 
 # --- Config / defaults ------------------------------------------------------
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
