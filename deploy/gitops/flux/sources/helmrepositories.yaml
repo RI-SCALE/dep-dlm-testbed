@@ -13,7 +13,10 @@ spec: { interval: 1h, url: https://helm.releases.hashicorp.com }
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata: { name: bitnami, namespace: flux-system }
-spec: { interval: 1h, url: https://charts.bitnami.com/bitnami }
+spec:
+  type: oci
+  interval: 1h
+  url: oci://registry-1.docker.io/bitnamicharts
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
