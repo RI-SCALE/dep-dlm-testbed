@@ -1,0 +1,51 @@
+# ============================================================================
+# DEP DLM — Flux entrypoint (production)   [equivalent to Argo app-of-apps-production]
+# ============================================================================
+# Ordering (fixes the ESO-vs-ExternalSecrets circular dep):
+#   namespace -> dep-dlm-production-eso -> dep-dlm-production-secrets -> dep-dlm-production
+# ESO installs its CRDs FIRST so the ExternalSecrets can apply.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dep-dlm-production
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: dep-dlm-production-eso
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/eso
+  prune: true
+  wait: true                      # block until ESO (and its CRDs) are Ready
+  timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: dep-dlm-production-secrets
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/environments/production/secrets
+  prune: true
+  targetNamespace: dep-dlm-production
+  dependsOn:
+    - { name: dep-dlm-production-eso }   # CRDs must exist before ExternalSecrets apply
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: dep-dlm-production
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/environments/production
+  prune: true
+  dependsOn:
+    - { name: dep-dlm-production-secrets }

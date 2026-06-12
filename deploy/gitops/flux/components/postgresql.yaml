@@ -1,0 +1,21 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: postgresql
+  namespace: flux-system
+spec:
+  interval: 5m
+  releaseName: ruciodb
+  targetNamespace: dep-dlm-PLACEHOLDER
+  install: { createNamespace: true }
+  dependsOn:
+    - { name: external-secrets }
+  chart:
+    spec:
+      chart: postgresql
+      version: "18.3.0"
+      sourceRef: { kind: HelmRepository, name: bitnami, namespace: flux-system }
+  values:
+    fullnameOverride: ruciodb
+    auth: { username: rucio, password: rucio, database: rucio }
+    primary: { persistence: { enabled: false } }

@@ -1,5 +1,5 @@
-# Flux source — the same repo Argo uses. The workloads under base/ and
-# environments/ are reused verbatim; only these Flux controller objects differ.
+# Git source — same repo, reused for chart paths (keycloak/xrootd/teapot/fts),
+# base/ values, and the bootstrap dir.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:

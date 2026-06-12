@@ -1,0 +1,21 @@
+# One HelmRepository per chart registry. Argo embeds repoURL per Application;
+# Flux declares them as reusable source objects referenced by HelmReleases.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata: { name: external-secrets, namespace: flux-system }
+spec: { interval: 1h, url: https://charts.external-secrets.io }
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata: { name: hashicorp, namespace: flux-system }
+spec: { interval: 1h, url: https://helm.releases.hashicorp.com }
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata: { name: bitnami, namespace: flux-system }
+spec: { interval: 1h, url: https://charts.bitnami.com/bitnami }
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata: { name: rucio, namespace: flux-system }
+spec: { interval: 1h, url: https://rucio.github.io/helm-charts }

@@ -19,12 +19,15 @@ UMBRELLA_CHART_NAMESPACE ?= dep-dlm-testbed
 KUBECTL       := kubectl -n $(UMBRELLA_CHART_NAMESPACE)
 HELM          := helm
 
-# GitOps (Argo CD sandbox bootstrap)
+# GitOps
 ARGOCD_REPO_URL ?=
 ARGOCD_REVISION ?=
 ARGOCD_NAMESPACE ?= argocd
 GITOPS_ENV ?= sandbox
 GITOPS_TARGET_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
+
+FLUX_REPO_URL ?=
+FLUX_REVISION ?=
 
 # ── Validation ─────────────────────────────────────────────────────
 
@@ -164,6 +167,12 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
 	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
+
+.PHONY: flux-install
+flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
+	    $(if $(FLUX_REPO_URL),--repo-url $(FLUX_REPO_URL)) \
+	    $(if $(FLUX_REVISION),--revision $(FLUX_REVISION))
 
 ## Helm-only
 

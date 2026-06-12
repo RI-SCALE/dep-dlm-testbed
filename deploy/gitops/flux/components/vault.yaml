@@ -1,0 +1,23 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vault
+  namespace: flux-system
+spec:
+  interval: 5m
+  releaseName: vault
+  targetNamespace: dep-dlm-PLACEHOLDER
+  install: { createNamespace: true }
+  dependsOn:
+    - { name: external-secrets }
+  chart:
+    spec:
+      chart: vault
+      version: "0.28.1"
+      sourceRef: { kind: HelmRepository, name: hashicorp, namespace: flux-system }
+  values:
+    fullnameOverride: vault    # pin svc name (same discipline as Argo fix)
+    server:
+      dev: { enabled: true, devRootToken: "root" }
+      dataStorage: { enabled: false }
+      ha: { enabled: false }

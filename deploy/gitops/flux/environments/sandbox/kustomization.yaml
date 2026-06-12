@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Sandbox components (ESO is NOT here — it's the dep-dlm-sandbox-eso Kustomization).
+resources:
+  - ../../flux-system/gitrepository.yaml
+  - ../../sources/helmrepositories.yaml
+  - ../../components/vault.yaml
+  - ../../components/postgresql.yaml
+  - ../../components/keycloak.yaml
+  - ../../components/xrootd.yaml
+  - ../../components/teapot.yaml
+  - ../../components/fts.yaml
+  - ../../components/rucio-server.yaml
+  - ../../components/rucio-daemons.yaml
+configMapGenerator:
+  - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
+  - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
+  - { name: keycloak-values,      namespace: flux-system, files: [ keycloak.yaml=../../../base/values/keycloak.yaml ] }
+  - { name: xrootd-values,        namespace: flux-system, files: [ xrootd.yaml=../../../base/values/xrootd.yaml ] }
+  - { name: teapot-values,        namespace: flux-system, files: [ teapot.yaml=../../../base/values/teapot.yaml ] }
+  - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
+generatorOptions:
+  disableNameSuffixHash: true
+patches:
+  - target: { kind: HelmRelease }
+    patch: |
+      - op: replace
+        path: /spec/targetNamespace
+        value: dep-dlm-sandbox
