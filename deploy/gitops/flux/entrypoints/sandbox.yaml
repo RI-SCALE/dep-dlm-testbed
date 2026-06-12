@@ -1,12 +1,14 @@
 # ============================================================================
-# DEP DLM — Flux entrypoint (sandbox)   [equivalent to Argo app-of-apps-sandbox]
+# DEP DLM — Flux entrypoint (sandbox)
 # ============================================================================
-# Ordering: namespace -> eso -> secrets -> db -> bootstrap -> components
-#   db        : postgresql (ruciodb) alone, Ready before the schema is created
-#   bootstrap : Rucio DB-init Job (build_database); Ready when the Job completes
-#   components: rucio-server/daemons + the rest, only after the schema exists
-# Fixes 'relation heartbeats does not exist' (bootstrap Job never ran under Flux
-# because base/bootstrap was not referenced by any Flux Kustomization).
+# Ordering: namespace -> eso -> core -> secrets -> bootstrap -> components
+#   core      : vault + postgresql, up BEFORE the seed so vault-seed can reach
+#               Vault and ESO can project the secrets bootstrap mounts
+#   secrets   : ESO ClusterSecretStore + vault-seed Job + ExternalSecrets
+#   bootstrap : Rucio DB-init Job (mounts rucio-server-cfg + testbed-scripts-rucio)
+#   components: rucio-server/daemons, keycloak, xrootd, teapot, fts
+# Fixes: vault-seed 'no such host' (Vault now exists first) and bootstrap
+# FailedMount (ESO secrets now projected before the Job runs).
 ---
 apiVersion: v1
 kind: Namespace
@@ -26,6 +28,19 @@ spec:
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
+metadata: { name: dep-dlm-sandbox-core, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/core/sandbox
+  prune: true
+  wait: true                      # Vault + postgresql Ready before seed/secrets
+  timeout: 10m
+  dependsOn:
+    - { name: dep-dlm-sandbox-eso }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
 metadata: { name: dep-dlm-sandbox-secrets, namespace: flux-system }
 spec:
   interval: 5m
@@ -33,21 +48,10 @@ spec:
   path: ./deploy/gitops/environments/sandbox/secrets
   prune: true
   targetNamespace: dep-dlm-sandbox
-  dependsOn:
-    - { name: dep-dlm-sandbox-eso }
----
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata: { name: dep-dlm-sandbox-db, namespace: flux-system }
-spec:
-  interval: 5m
-  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
-  path: ./deploy/gitops/flux/db/sandbox
-  prune: true
-  wait: true                      # block until postgresql HelmRelease is Ready
+  wait: true                      # ExternalSecrets projected before bootstrap mounts them
   timeout: 10m
   dependsOn:
-    - { name: dep-dlm-sandbox-secrets }
+    - { name: dep-dlm-sandbox-core }   # Vault must be up + reachable for the seed
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -59,7 +63,7 @@ spec:
   prune: true
   targetNamespace: dep-dlm-sandbox
   dependsOn:
-    - { name: dep-dlm-sandbox-db }    # DB must be up before the schema Job runs
+    - { name: dep-dlm-sandbox-secrets }   # rucio-server-cfg + testbed-scripts-rucio exist
   wait: true
   timeout: 10m
   healthChecks:
@@ -77,4 +81,4 @@ spec:
   path: ./deploy/gitops/flux/environments/sandbox
   prune: true
   dependsOn:
-    - { name: dep-dlm-sandbox-bootstrap }   # schema exists before rucio-server
+    - { name: dep-dlm-sandbox-bootstrap }
