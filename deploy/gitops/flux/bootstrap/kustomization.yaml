@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Bootstrap overlay — applies the Rucio DB-init Job from base/bootstrap. Flux
+# ignores the Argo hook annotation on the Job (harmless), so no patch needed.
+# Ordering (Job runs before rucio-server) is enforced by the entrypoint:
+# dep-dlm-<env>-bootstrap has a Job healthCheck, and the components Kustomization
+# dependsOn it.
+resources:
+  - ../../base/bootstrap

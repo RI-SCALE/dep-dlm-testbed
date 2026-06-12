@@ -1,9 +1,12 @@
 # ============================================================================
 # DEP DLM — Flux entrypoint (production)   [equivalent to Argo app-of-apps-production]
 # ============================================================================
-# Ordering (fixes the ESO-vs-ExternalSecrets circular dep):
-#   namespace -> dep-dlm-production-eso -> dep-dlm-production-secrets -> dep-dlm-production
-# ESO installs its CRDs FIRST so the ExternalSecrets can apply.
+# Ordering: namespace -> eso -> secrets -> db -> bootstrap -> components
+#   db        : postgresql (ruciodb) alone, Ready before the schema is created
+#   bootstrap : Rucio DB-init Job (build_database); Ready when the Job completes
+#   components: rucio-server/daemons + the rest, only after the schema exists
+# Fixes 'relation heartbeats does not exist' (bootstrap Job never ran under Flux
+# because base/bootstrap was not referenced by any Flux Kustomization).
 ---
 apiVersion: v1
 kind: Namespace
@@ -12,22 +15,18 @@ metadata:
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-production-eso
-  namespace: flux-system
+metadata: { name: dep-dlm-production-eso, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
   path: ./deploy/gitops/flux/eso
   prune: true
-  wait: true                      # block until ESO (and its CRDs) are Ready
+  wait: true
   timeout: 5m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-production-secrets
-  namespace: flux-system
+metadata: { name: dep-dlm-production-secrets, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
@@ -35,17 +34,47 @@ spec:
   prune: true
   targetNamespace: dep-dlm-production
   dependsOn:
-    - { name: dep-dlm-production-eso }   # CRDs must exist before ExternalSecrets apply
+    - { name: dep-dlm-production-eso }
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-production
-  namespace: flux-system
+metadata: { name: dep-dlm-production-db, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/db/production
+  prune: true
+  wait: true                      # block until postgresql HelmRelease is Ready
+  timeout: 10m
+  dependsOn:
+    - { name: dep-dlm-production-secrets }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production-bootstrap, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/bootstrap
+  prune: true
+  targetNamespace: dep-dlm-production
+  dependsOn:
+    - { name: dep-dlm-production-db }    # DB must be up before the schema Job runs
+  wait: true
+  timeout: 10m
+  healthChecks:
+    - apiVersion: batch/v1
+      kind: Job
+      name: rucio-bootstrap-db
+      namespace: dep-dlm-production
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
   path: ./deploy/gitops/flux/environments/production
   prune: true
   dependsOn:
-    - { name: dep-dlm-production-secrets }
+    - { name: dep-dlm-production-bootstrap }   # schema exists before rucio-server

@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# production components (ESO separate; omits vault/pg/keycloak/xrootd/teapot).
+# production components (external Vault/DB/IdP/storage; postgresql in db stage if local).
 resources:
   - ../../flux-system/gitrepository.yaml
   - ../../sources/helmrepositories.yaml

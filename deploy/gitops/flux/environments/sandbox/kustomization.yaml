@@ -1,11 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Sandbox components (ESO is NOT here — it's the dep-dlm-sandbox-eso Kustomization).
+# Sandbox components AFTER the db + bootstrap stages (postgresql is in db/).
 resources:
   - ../../flux-system/gitrepository.yaml
   - ../../sources/helmrepositories.yaml
   - ../../components/vault.yaml
-  - ../../components/postgresql.yaml
   - ../../components/keycloak.yaml
   - ../../components/xrootd.yaml
   - ../../components/teapot.yaml

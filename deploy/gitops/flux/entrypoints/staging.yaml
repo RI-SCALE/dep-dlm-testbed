@@ -1,9 +1,12 @@
 # ============================================================================
 # DEP DLM — Flux entrypoint (staging)   [equivalent to Argo app-of-apps-staging]
 # ============================================================================
-# Ordering (fixes the ESO-vs-ExternalSecrets circular dep):
-#   namespace -> dep-dlm-staging-eso -> dep-dlm-staging-secrets -> dep-dlm-staging
-# ESO installs its CRDs FIRST so the ExternalSecrets can apply.
+# Ordering: namespace -> eso -> secrets -> db -> bootstrap -> components
+#   db        : postgresql (ruciodb) alone, Ready before the schema is created
+#   bootstrap : Rucio DB-init Job (build_database); Ready when the Job completes
+#   components: rucio-server/daemons + the rest, only after the schema exists
+# Fixes 'relation heartbeats does not exist' (bootstrap Job never ran under Flux
+# because base/bootstrap was not referenced by any Flux Kustomization).
 ---
 apiVersion: v1
 kind: Namespace
@@ -12,22 +15,18 @@ metadata:
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-staging-eso
-  namespace: flux-system
+metadata: { name: dep-dlm-staging-eso, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
   path: ./deploy/gitops/flux/eso
   prune: true
-  wait: true                      # block until ESO (and its CRDs) are Ready
+  wait: true
   timeout: 5m
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-staging-secrets
-  namespace: flux-system
+metadata: { name: dep-dlm-staging-secrets, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
@@ -35,17 +34,47 @@ spec:
   prune: true
   targetNamespace: dep-dlm-staging
   dependsOn:
-    - { name: dep-dlm-staging-eso }   # CRDs must exist before ExternalSecrets apply
+    - { name: dep-dlm-staging-eso }
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
-metadata:
-  name: dep-dlm-staging
-  namespace: flux-system
+metadata: { name: dep-dlm-staging-db, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/db/staging
+  prune: true
+  wait: true                      # block until postgresql HelmRelease is Ready
+  timeout: 10m
+  dependsOn:
+    - { name: dep-dlm-staging-secrets }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-staging-bootstrap, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/bootstrap
+  prune: true
+  targetNamespace: dep-dlm-staging
+  dependsOn:
+    - { name: dep-dlm-staging-db }    # DB must be up before the schema Job runs
+  wait: true
+  timeout: 10m
+  healthChecks:
+    - apiVersion: batch/v1
+      kind: Job
+      name: rucio-bootstrap-db
+      namespace: dep-dlm-staging
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-staging, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
   path: ./deploy/gitops/flux/environments/staging
   prune: true
   dependsOn:
-    - { name: dep-dlm-staging-secrets }
+    - { name: dep-dlm-staging-bootstrap }   # schema exists before rucio-server
