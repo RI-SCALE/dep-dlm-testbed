@@ -1,0 +1,85 @@
+name: GitOps (Argo CD)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/gitops/**'
+      - 'deploy/helm-charts/**'
+      - 'shared/scripts/init-argocd.sh'
+      - '.github/workflows/gitops-argocd.yml'
+
+jobs:
+  argocd:
+    name: argocd | ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [sandbox]          # staging/production need external Vault/DB/IdP
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dep-dlm-gitops
+
+      - name: Install Argo CD + bootstrap ${{ matrix.env }}
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+          # Point Argo at THIS PR's repo+branch (Argo reads git, not the runner's
+          # working tree). Without this it would track the default branch.
+          ARGOCD_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          ARGOCD_REVISION: ${{ github.head_ref || github.ref_name }}
+        run: make argocd-install
+
+      - name: Wait for Applications to converge
+        run: |
+          # app-of-apps + ApplicationSet fan-out is async; poll until every
+          # Application reports Healthy + Synced (or fail after the budget).
+          ns=argocd
+          for i in $(seq 1 60); do
+            # Total app count and the count that are Healthy+Synced.
+            total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
+            ready=$(kubectl -n $ns get applications \
+              -o jsonpath='{range .items[*]}{.status.health.status}{","}{.status.sync.status}{"\n"}{end}' 2>/dev/null \
+              | grep -c '^Healthy,Synced$' || true)
+            echo "  [$i] $ready/$total Applications Healthy+Synced"
+            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+              echo "All Applications converged"; exit 0
+            fi
+            sleep 15
+          done
+          echo "ERROR: Applications did not converge in time"
+          kubectl -n $ns get applications
+          exit 1
+
+      - name: Verify workload pods are Running
+        run: |
+          ns=dep-dlm-${{ matrix.env }}
+          kubectl -n $ns rollout status deploy/rucio --timeout=300s || true
+          kubectl -n $ns get pods
+          # The DB-init Job must have completed (schema created).
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Applications ==="; kubectl -n argocd get applications -o wide || true
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ matrix.env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ matrix.env }} get events --sort-by=.lastTimestamp | tail -50 || true
+          for d in vault-seed rucio-bootstrap-db; do
+            echo "=== job/$d ==="
+            kubectl -n dep-dlm-${{ matrix.env }} logs job/$d --tail=50 2>/dev/null || true
+          done
+
+      - name: Tear down
+        if: always()
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+        run: make argocd-uninstall

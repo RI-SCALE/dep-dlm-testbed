@@ -1,0 +1,75 @@
+name: GitOps (Flux)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/gitops/**'
+      - 'deploy/helm-charts/**'
+      - 'shared/scripts/init-flux.sh'
+      - '.github/workflows/gitops-flux.yml'
+
+jobs:
+  flux:
+    name: flux | ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [sandbox]          # staging/production need external Vault/DB/IdP
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dep-dlm-gitops
+
+      - name: Install Flux CLI
+        uses: fluxcd/flux2/action@main
+
+      - name: Install Flux + bootstrap ${{ matrix.env }}
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+          # Flux reads git, not the runner's tree — point the GitRepository at
+          # THIS PR's repo+branch so it reconciles the code under test.
+          FLUX_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          FLUX_REVISION: ${{ github.head_ref || github.ref_name }}
+        run: make flux-install
+
+      - name: Wait for Kustomizations to reconcile
+        run: |
+          # The entrypoint chain (eso -> core -> secrets -> bootstrap -> components)
+          # is async; flux can block until the top-level Kustomization is Ready.
+          flux reconcile kustomization dep-dlm-${{ matrix.env }} --with-source --timeout=20m
+          flux get kustomizations
+          flux get helmreleases -A
+
+      - name: Verify workload pods are Running
+        run: |
+          ns=dep-dlm-${{ matrix.env }}
+          kubectl -n $ns rollout status deploy/rucio --timeout=300s || true
+          kubectl -n $ns get pods
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Kustomizations ==="; flux get kustomizations || true
+          echo "=== HelmReleases ==="; flux get helmreleases -A || true
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ matrix.env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ matrix.env }} get events --sort-by=.lastTimestamp | tail -50 || true
+          for d in vault-seed rucio-bootstrap-db; do
+            echo "=== job/$d ==="
+            kubectl -n dep-dlm-${{ matrix.env }} logs job/$d --tail=50 2>/dev/null || true
+          done
+
+      - name: Tear down
+        if: always()
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+        run: make flux-uninstall
