@@ -1,15 +1,16 @@
 # Rucio DB bootstrap Job — runs bootstrap-db.py once against ruciodb.
-# NOTE: NO hardcoded namespace — the Application's destination.namespace places
-# it per environment. (Earlier this pinned dep-dlm-sandbox, which broke staging.)
 # Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg) and the script
-# (testbed-scripts-rucio).
+# (testbed-scripts-rucio) — BOTH projected by ESO from Vault after vault-seed.
 #
-# Argo: Sync hook so it runs as a one-shot during sync. hook-delete-policy
-# BeforeHookCreation deletes the PREVIOUS Job right before a new run, so:
-#   - re-runs cleanly on each sync (Jobs are immutable; avoids OutOfSync wedge)
-#   - logs persist until the NEXT deploy (not deleted on success)
-# Flux ignores these annotations and applies the Job normally (gated by the
-# bootstrap Kustomization's healthCheck), so the same manifest serves both.
+# ORDERING (the important part):
+#   Argo: this Job is applied with sync-wave "5", AFTER the ExternalSecrets
+#         (wave 0) in the SAME Application. Argo waits for wave 0 resources to be
+#         Healthy (ExternalSecret Ready == target Secret synced) before applying
+#         wave 5 — so the mounted Secrets exist when the Job's pod is created,
+#         eliminating the FailedMount race. hook: Sync + BeforeHookCreation keeps
+#         re-runs clean and logs until the next deploy.
+#   Flux: annotations ignored; the bootstrap Kustomization (dependsOn secrets,
+#         healthCheck on this Job) provides the same gate.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,6 +18,7 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "5"      # after ExternalSecrets (wave 0)
 spec:
   backoffLimit: 6
   template:

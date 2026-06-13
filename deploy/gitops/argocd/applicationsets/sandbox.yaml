@@ -50,13 +50,6 @@ spec:
                     fullnameOverride: ruciodb
                     auth: { username: rucio, password: rucio, database: rucio }
                     primary: { persistence: { enabled: false } }
-          - name: rucio-bootstrap
-            wave: "9"
-            spec:
-              source:
-                repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                targetRevision: feat/gitops-deployment-blueprint
-                path: deploy/gitops/base/bootstrap
           - name: rucio-server
             wave: "10"
             spec:
