@@ -39,7 +39,7 @@ jobs:
 
       - name: Wait for Applications to become Healthy
         run: |
-          # Gate on Application HEALTH, not sync status. Two apps stay
+          # Gate on Application HEALTH, not sync status. Some apps stay
           # permanently OutOfSync-but-Healthy and that is EXPECTED:
           #   - dep-dlm-sandbox-secrets: contains the bootstrap hook Job
           #     (hook resources are excluded from Argo's desired-state diff, so
@@ -47,19 +47,15 @@ jobs:
           #   - fts-sandbox: benign post-deploy drift.
           # Health == workload up; sync == git drift. We assert health here and
           # the actual workload (bootstrap Job complete + rucio rollout) next.
-          # rucio-bootstrap is the empty hook-wrapper Application and is ignored.
           ns=argocd
-          IGNORE='rucio-bootstrap'
           for i in $(seq 1 80); do
-            total=$(kubectl -n $ns get applications -o name 2>/dev/null \
-              | grep -v "/${IGNORE}" | wc -l | tr -d ' ')
+            total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
             healthy=$(kubectl -n $ns get applications \
               -o custom-columns='NAME:.metadata.name,HS:.status.health.status' \
-              --no-headers 2>/dev/null \
-              | grep -v "^${IGNORE} " | awk '$2=="Healthy"' | wc -l | tr -d ' ')
-            echo "  [$i] $healthy/$total (excluding ${IGNORE}) Healthy"
+              --no-headers 2>/dev/null | awk '$2=="Healthy"' | wc -l | tr -d ' ')
+            echo "  [$i] $healthy/$total Applications Healthy"
             if [ "$total" -gt 0 ] && [ "$healthy" = "$total" ]; then
-              echo "All tracked Applications Healthy"; exit 0
+              echo "All Applications Healthy"; exit 0
             fi
             kubectl -n $ns get applications \
               -o custom-columns='NAME:.metadata.name,HEALTH:.status.health.status,SYNC:.status.sync.status' \
