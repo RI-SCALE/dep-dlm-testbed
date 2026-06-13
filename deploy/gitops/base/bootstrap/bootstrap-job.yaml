@@ -2,14 +2,21 @@
 # NOTE: NO hardcoded namespace — the Application's destination.namespace places
 # it per environment. (Earlier this pinned dep-dlm-sandbox, which broke staging.)
 # Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg) and the script
-# (testbed-scripts-rucio). hook-delete-policy is intentionally omitted so a
-# failed run's logs persist.
+# (testbed-scripts-rucio).
+#
+# Argo: Sync hook so it runs as a one-shot during sync. hook-delete-policy
+# BeforeHookCreation deletes the PREVIOUS Job right before a new run, so:
+#   - re-runs cleanly on each sync (Jobs are immutable; avoids OutOfSync wedge)
+#   - logs persist until the NEXT deploy (not deleted on success)
+# Flux ignores these annotations and applies the Job normally (gated by the
+# bootstrap Kustomization's healthCheck), so the same manifest serves both.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: rucio-bootstrap-db
   annotations:
     argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 6
   template:
