@@ -39,19 +39,27 @@ jobs:
 
       - name: Wait for Applications to converge
         run: |
-          # app-of-apps + ApplicationSet fan-out is async; poll until every
-          # Application reports Healthy + Synced (or fail after the budget).
+          # app-of-apps + ApplicationSet fan-out is async. Poll until every
+          # Application EXCEPT the bootstrap hook is Healthy+Synced. The
+          # rucio-bootstrap Application wraps a Sync-hook Job, which Argo does not
+          # track as a normal resource, so it never reports Healthy — assert on
+          # its Job in the next step instead.
           ns=argocd
-          for i in $(seq 1 60); do
-            # Total app count and the count that are Healthy+Synced.
-            total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
+          IGNORE='rucio-bootstrap'
+          for i in $(seq 1 80); do
+            total=$(kubectl -n $ns get applications -o name 2>/dev/null \
+              | grep -v "/${IGNORE}" | wc -l | tr -d ' ')
             ready=$(kubectl -n $ns get applications \
-              -o jsonpath='{range .items[*]}{.status.health.status}{","}{.status.sync.status}{"\n"}{end}' 2>/dev/null \
-              | grep -c '^Healthy,Synced$' || true)
-            echo "  [$i] $ready/$total Applications Healthy+Synced"
+              -o custom-columns='NAME:.metadata.name,HS:.status.health.status,SS:.status.sync.status' \
+              --no-headers 2>/dev/null \
+              | grep -v "^${IGNORE} " | awk '$2=="Healthy" && $3=="Synced"' | wc -l | tr -d ' ')
+            echo "  [$i] $ready/$total (excluding ${IGNORE}) Healthy+Synced"
             if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
-              echo "All Applications converged"; exit 0
+              echo "All tracked Applications converged"; exit 0
             fi
+            kubectl -n $ns get applications \
+              -o custom-columns='NAME:.metadata.name,HEALTH:.status.health.status,SYNC:.status.sync.status' \
+              --no-headers 2>/dev/null | awk '!($2=="Healthy" && $3=="Synced")' | sed 's/^/      pending: /' || true
             sleep 15
           done
           echo "ERROR: Applications did not converge in time"
@@ -61,10 +69,11 @@ jobs:
       - name: Verify workload pods are Running
         run: |
           ns=dep-dlm-${{ matrix.env }}
-          kubectl -n $ns rollout status deploy/rucio --timeout=300s || true
-          kubectl -n $ns get pods
-          # The DB-init Job must have completed (schema created).
+          # The DB-init Job must have completed (schema created) — this is the
+          # real assertion for the bootstrap step.
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio --timeout=300s
+          kubectl -n $ns get pods
 
       - name: Diagnostics on failure
         if: failure()
@@ -82,4 +91,4 @@ jobs:
         if: always()
         env:
           GITOPS_ENV: ${{ matrix.env }}
-        run: make argocd-uninstall
+        run: make argocd-uninstall || true
