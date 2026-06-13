@@ -1,0 +1,45 @@
+# ============================================================================
+# DEP DLM — Argo app-of-apps (production)
+# ============================================================================
+#   apps root    -> argocd/applicationsets (directory; applies the production ApplicationSet)
+#   secrets root -> environments/production/secrets (ExternalSecrets + REAL Vault store,
+#                   k8s auth, NO seed Job — operator seeds the external Vault)
+#
+#   kubectl apply -n argocd -f app-of-apps-production.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-production-apps
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/argocd/applicationsets
+    directory:
+      recurse: false
+      include: 'production.yaml'
+  destination: { server: https://kubernetes.default.svc, namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-production-secrets
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/environments/production/secrets
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

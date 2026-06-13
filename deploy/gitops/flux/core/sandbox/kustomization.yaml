@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Core stage (sandbox) — vault + postgresql. Up BEFORE the seed/ExternalSecrets,
+# so vault-seed can reach Vault and bootstrap can mount the ESO-projected secrets.
+resources:
+  - ../../flux-system/gitrepository.yaml
+  - ../../sources/helmrepositories.yaml
+  - ../../components/vault.yaml
+  - ../../components/postgresql.yaml
+patches:
+  - target: { kind: HelmRelease }
+    patch: |
+      - op: replace
+        path: /spec/targetNamespace
+        value: dep-dlm-sandbox

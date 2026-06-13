@@ -90,6 +90,7 @@ dep-dlm-testbed
   RUNTIME    = compose    (compose | k8s)
   TOKEN_MODE = managed (managed | unmanaged)
   DAEMON_MODE = direct (direct | daemons)
+  GITOPS_ENV = sandbox (sandbox | staging | production)
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]
@@ -108,6 +109,12 @@ Lifecycle
   rebuild-clean        Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
   ps                   Show running services / pods
   logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
+
+GitOps
+  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+  argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
+  flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+  flux-uninstall       Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
 
 Helm-only
   helm-lint            Lint the umbrella chart

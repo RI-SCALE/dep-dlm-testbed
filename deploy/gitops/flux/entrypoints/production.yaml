@@ -1,0 +1,84 @@
+# ============================================================================
+# DEP DLM — Flux entrypoint (production)
+# ============================================================================
+# Ordering: namespace -> eso -> core -> secrets -> bootstrap -> components
+#   core      : vault + postgresql, up BEFORE the seed so vault-seed can reach
+#               Vault and ESO can project the secrets bootstrap mounts
+#   secrets   : ESO ClusterSecretStore + vault-seed Job + ExternalSecrets
+#   bootstrap : Rucio DB-init Job (mounts rucio-server-cfg + testbed-scripts-rucio)
+#   components: rucio-server/daemons, keycloak, xrootd, teapot, fts
+# Fixes: vault-seed 'no such host' (Vault now exists first) and bootstrap
+# FailedMount (ESO secrets now projected before the Job runs).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dep-dlm-production
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production-eso, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/eso
+  prune: true
+  wait: true
+  timeout: 5m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production-core, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/core/production
+  prune: true
+  wait: true                      # Vault + postgresql Ready before seed/secrets
+  timeout: 10m
+  dependsOn:
+    - { name: dep-dlm-production-eso }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production-secrets, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/environments/production/secrets
+  prune: true
+  targetNamespace: dep-dlm-production
+  wait: true                      # ExternalSecrets projected before bootstrap mounts them
+  timeout: 10m
+  dependsOn:
+    - { name: dep-dlm-production-core }   # Vault must be up + reachable for the seed
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production-bootstrap, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/bootstrap
+  prune: true
+  targetNamespace: dep-dlm-production
+  dependsOn:
+    - { name: dep-dlm-production-secrets }   # rucio-server-cfg + testbed-scripts-rucio exist
+  wait: true
+  timeout: 10m
+  healthChecks:
+    - apiVersion: batch/v1
+      kind: Job
+      name: rucio-bootstrap-db
+      namespace: dep-dlm-production
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-production, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/flux/environments/production
+  prune: true
+  dependsOn:
+    - { name: dep-dlm-production-bootstrap }

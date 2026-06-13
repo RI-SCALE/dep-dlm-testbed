@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# staging components (external Vault/DB/IdP/storage; postgresql in db stage if local).
+resources:
+  - ../../flux-system/gitrepository.yaml
+  - ../../sources/helmrepositories.yaml
+  - ../../components/fts.yaml
+  - ../../components/rucio-server.yaml
+  - ../../components/rucio-daemons.yaml
+configMapGenerator:
+  - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
+  - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
+  - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
+generatorOptions:
+  disableNameSuffixHash: true
+patches:
+  - target: { kind: HelmRelease }
+    patch: |
+      - op: replace
+        path: /spec/targetNamespace
+        value: dep-dlm-staging

@@ -1,0 +1,46 @@
+# ============================================================================
+# DEP DLM — Argo app-of-apps (SANDBOX)
+# ============================================================================
+#   apps root    -> argocd/applicationsets (directory mode; applies the SANDBOX
+#                   ApplicationSet, which generates all component Applications)
+#   secrets root -> environments/sandbox/secrets (kustomize; ExternalSecrets +
+#                   dev Vault store + seed Job — directory-base, already working)
+#
+#   kubectl apply -n argocd -f app-of-apps-sandbox.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-sandbox-apps
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/argocd/applicationsets
+    directory:
+      recurse: false
+      include: 'sandbox.yaml'      # only the sandbox ApplicationSet
+  destination: { server: https://kubernetes.default.svc, namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-sandbox-secrets
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/environments/sandbox/secrets
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]

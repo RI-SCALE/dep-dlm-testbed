@@ -1,0 +1,20 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: teapot
+  namespace: flux-system
+spec:
+  interval: 5m
+  releaseName: teapot
+  targetNamespace: dep-dlm-PLACEHOLDER
+  install: { createNamespace: true }
+  dependsOn:
+    - { name: external-secrets }
+  chart:
+    spec:
+      chart: deploy/helm-charts/teapot          # path within the GitRepository
+      sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+  valuesFrom:
+    - kind: ConfigMap
+      name: teapot-values
+      valuesKey: teapot.yaml

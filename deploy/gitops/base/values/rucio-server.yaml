@@ -1,0 +1,70 @@
+# Shared rucio-server values — mirrors the umbrella `rucio:` block so the
+# UPSTREAM chart mounts the same testbed-certs / rucio-server-cfg / patches the
+# umbrella supplied. Secrets now come from ESO (testbed-certs etc.), seeded from
+# Vault — but the mountPaths/items are identical to the umbrella.
+fullnameOverride: rucio
+replicaCount: 1
+image:
+  repository: rucio/rucio-server
+  tag: release-40.0.0
+  pullPolicy: IfNotPresent
+useSSL: false
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+useDeprecatedImplicitSecrets: false
+
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - |
+          dnf -y install yum-utils epel-release.noarch &&
+          dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
+            python3-gfal2-util gfal2-plugin-http --skip-broken ||
+          echo "gfal2 install failed"
+
+additionalEnvs:
+  - name: REQUESTS_CA_BUNDLE
+    value: /etc/grid-security/certificates/rucio_ca.pem
+  - name: SSL_CERT_FILE
+    value: /etc/pki/tls/certs/ca-bundle.crt
+
+secretMounts:
+  - secretFullName: testbed-certs
+    volumeName: certs-grid
+    mountPath: /etc/grid-security
+    defaultMode: 0600
+    items:
+      - { key: hostcert.pem,          path: hostcert.pem }
+      - { key: hostkey.pem,           path: hostkey.pem }
+      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
+      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
+      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+  - secretFullName: rucio-server-cfg
+    volumeName: rucio-cfg-server
+    mountPath: /opt/rucio/etc/rucio.cfg
+    subPath: server.cfg
+  - secretFullName: rucio-server-cfg
+    volumeName: rucio-cfg-alembic
+    mountPath: /opt/rucio/etc/alembic.ini
+    subPath: alembic.ini
+  - secretFullName: rucio-server-cfg
+    volumeName: idpsecrets
+    mountPath: /opt/rucio/etc/idpsecrets.json
+    subPath: idpsecrets.json
+  - secretFullName: testbed-patches
+    volumeName: fts3-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
+    subPath: rucio--fts3.py
+  - secretFullName: testbed-patches
+    volumeName: oidc-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
+    subPath: rucio--oidc.py
+  - secretFullName: testbed-patches
+    volumeName: constants-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
+    subPath: rucio--constants.py

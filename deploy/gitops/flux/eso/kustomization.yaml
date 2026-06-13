@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# ESO installer — cluster-wide operator + CRDs. Reconciles FIRST so the
+# ExternalSecret/ClusterSecretStore CRDs exist before any secrets Kustomization.
+# Installs into the external-secrets namespace (cluster infra, not per-env).
+resources:
+  - ../sources/helmrepositories.yaml
+  - external-secrets.yaml

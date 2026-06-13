@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - testbed-certs.yaml
+  - testbed-configs.yaml
+  - testbed-patches.yaml
+  - rucio-server-cfg.yaml
+  - testbed-scripts-xrootd.yaml
+  - testbed-scripts-rucio.yaml

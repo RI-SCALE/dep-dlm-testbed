@@ -1,0 +1,12 @@
+# Git source — same repo, reused for chart paths (keycloak/xrootd/teapot/fts),
+# base/ values, and the bootstrap dir.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: dep-dlm-testbed
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/ri-scale/dep-dlm-testbed.git
+  ref:
+    branch: feat/gitops-deployment-blueprint

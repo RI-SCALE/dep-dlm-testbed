@@ -1,0 +1,116 @@
+# Shared rucio-daemons values — mirrors the umbrella `rucio-daemons:` block.
+# Carries the hard-won fixes from the testbed work:
+#   - useDeprecatedImplicitSecrets:false  (kills the rucio-x509up/ca-bundle
+#     mounts that block ContainerCreating)
+#   - per-daemon memory bump (200Mi upstream default OOM-kills on startup)
+#   - sleepTime/activities so default-activity rules converge
+#   - lifecycle/gfal2 postStart and secretMounts items (CA at the right path)
+# NOTE: the upstream chart does NOT render secretMounts[].items or a lifecycle
+# value yet; until upstreamed, apply those via an Argo post-render patch
+# (see base/applications/21-rucio-daemons.yaml TODO).
+fullnameOverride: rucio-daemons
+image:
+  repository: rucio/rucio-daemons
+  tag: release-40.0.0
+  pullPolicy: IfNotPresent
+useDeprecatedImplicitSecrets: false
+
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - /bin/bash
+        - -c
+        - |
+          dnf -y install yum-utils epel-release.noarch &&
+          dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
+            python3-gfal2-util gfal2-plugin-http --skip-broken ||
+          echo "gfal2 install failed"
+
+conveyorTransferSubmitterCount: 1
+conveyorPollerCount: 1
+conveyorFinisherCount: 1
+judgeEvaluatorCount: 1
+judgeCleanerCount: 1
+reaperCount: 1
+
+conveyorTransferSubmitter:
+  threads: 1
+  sleepTime: 5
+  activities: ""
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+conveyorPoller:
+  threads: 1
+  sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+conveyorFinisher:
+  threads: 1
+  sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+judgeEvaluator:
+  threads: 1
+  sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+judgeCleaner:
+  threads: 1
+  sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+reaper:
+  greedy: 1
+  threads: 1
+  sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+
+additionalEnvs:
+  - name: REQUESTS_CA_BUNDLE
+    value: /etc/grid-security/certificates/rucio_ca.pem
+  - name: SSL_CERT_FILE
+    value: /etc/pki/tls/certs/ca-bundle.crt
+
+secretMounts:
+  - secretFullName: testbed-certs
+    volumeName: certs-grid
+    mountPath: /etc/grid-security
+    defaultMode: 0600
+    items:
+      - { key: hostcert.pem,          path: hostcert.pem }
+      - { key: hostkey.pem,           path: hostkey.pem }
+      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
+      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
+      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+  - secretFullName: rucio-server-cfg
+    volumeName: rucio-cfg-server
+    mountPath: /opt/rucio/etc/rucio.cfg
+    subPath: server.cfg
+  - secretFullName: rucio-server-cfg
+    volumeName: rucio-cfg-alembic
+    mountPath: /opt/rucio/etc/alembic.ini
+    subPath: alembic.ini
+  - secretFullName: rucio-server-cfg
+    volumeName: idpsecrets
+    mountPath: /opt/rucio/etc/idpsecrets.json
+    subPath: idpsecrets.json
+  - secretFullName: testbed-patches
+    volumeName: fts3-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
+    subPath: rucio--fts3.py
+  - secretFullName: testbed-patches
+    volumeName: oidc-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
+    subPath: rucio--oidc.py
+  - secretFullName: testbed-patches
+    volumeName: constants-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
+    subPath: rucio--constants.py

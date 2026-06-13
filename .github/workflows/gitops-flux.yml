@@ -1,0 +1,121 @@
+name: GitOps (Flux)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/gitops/**'
+      - 'deploy/helm-charts/**'
+      - 'shared/scripts/init-flux.sh'
+      - '.github/workflows/gitops-flux.yml'
+
+jobs:
+  flux:
+    name: flux | ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [sandbox]          # staging/production need external Vault/DB/IdP
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: dep-dlm-gitops
+
+      - name: Install Flux CLI
+        uses: fluxcd/flux2/action@main
+
+      - name: Install Flux + bootstrap ${{ matrix.env }}
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+          # Flux reads git, not the runner's tree — point the GitRepository at
+          # THIS PR's repo+branch so it reconciles the code under test.
+          FLUX_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          FLUX_REVISION: ${{ github.head_ref || github.ref_name }}
+        run: make flux-install
+
+      - name: Wait for all Kustomizations to be Ready
+        run: |
+          # Reconciling the top Kustomization only confirms it APPLIED its
+          # manifests — the dependsOn chain (eso->core->secrets->bootstrap->
+          # components) is still settling. Wait for EVERY dep-dlm Kustomization to
+          # report Ready, which only happens once each stage's wait/healthChecks
+          # pass (the components stage Ready == its HelmReleases installed).
+          ns=flux-system
+          for i in $(seq 1 60); do
+            total=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+              -o name 2>/dev/null | grep dep-dlm | wc -l | tr -d ' ')
+            ready=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+              | grep '^dep-dlm' | awk '$2=="True"' | wc -l | tr -d ' ')
+            echo "  [$i] $ready/$total dep-dlm Kustomizations Ready"
+            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+              echo "All Kustomizations Ready"; break
+            fi
+            sleep 15
+            [ "$i" = 60 ] && { echo "ERROR: Kustomizations not Ready in time"; flux get kustomizations; exit 1; }
+          done
+
+      - name: Wait for all HelmReleases to be Ready
+        run: |
+          # The real convergence gate: every HelmRelease must finish installing.
+          # (A Kustomization can be Ready while a HelmRelease it applied is still
+          # 'Running install' — so assert on the HelmReleases directly.)
+          ns=flux-system
+          for i in $(seq 1 60); do
+            total=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o name 2>/dev/null | wc -l | tr -d ' ')
+            ready=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+              | awk '$2=="True"' | wc -l | tr -d ' ')
+            echo "  [$i] $ready/$total HelmReleases Ready"
+            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+              echo "All HelmReleases Ready"; exit 0
+            fi
+            # Show the laggards (name + Ready status + message).
+            kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\t"}{.message}{end}{"\n"}{end}' 2>/dev/null \
+              | awk -F'\t' '$2!="True"' | sed 's/^/      pending: /' || true
+            sleep 15
+          done
+          echo "ERROR: HelmReleases did not all become Ready in time"
+          flux get helmreleases -A
+          exit 1
+
+      - name: Verify workload pods are Running
+        run: |
+          ns=dep-dlm-${{ matrix.env }}
+          # No '|| true' — rucio MUST be installed and rolled out. (Previously this
+          # was masked, so a missing rucio Deployment still passed.)
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio --timeout=300s
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s
+          done
+          kubectl -n $ns get pods
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== Kustomizations ==="; flux get kustomizations || true
+          echo "=== HelmReleases ==="; flux get helmreleases -A || true
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ matrix.env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ matrix.env }} get events --sort-by=.lastTimestamp | tail -50 || true
+          for d in vault-seed rucio-bootstrap-db; do
+            echo "=== job/$d ==="
+            kubectl -n dep-dlm-${{ matrix.env }} logs job/$d --tail=50 2>/dev/null || true
+          done
+
+      - name: Tear down
+        if: always()
+        env:
+          GITOPS_ENV: ${{ matrix.env }}
+        run: make flux-uninstall || true

@@ -1,0 +1,45 @@
+# ============================================================================
+# DEP DLM — Argo app-of-apps (staging)
+# ============================================================================
+#   apps root    -> argocd/applicationsets (directory; applies the staging ApplicationSet)
+#   secrets root -> environments/staging/secrets (ExternalSecrets + REAL Vault store,
+#                   k8s auth, NO seed Job — operator seeds the external Vault)
+#
+#   kubectl apply -n argocd -f app-of-apps-staging.yaml
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-staging-apps
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/argocd/applicationsets
+    directory:
+      recurse: false
+      include: 'staging.yaml'
+  destination: { server: https://kubernetes.default.svc, namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-staging-secrets
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/gitops-deployment-blueprint
+    path: deploy/gitops/environments/staging/secrets
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
