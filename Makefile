@@ -20,14 +20,12 @@ KUBECTL       := kubectl -n $(UMBRELLA_CHART_NAMESPACE)
 HELM          := helm
 
 # GitOps
-ARGOCD_REPO_URL ?=
-ARGOCD_REVISION ?=
-ARGOCD_NAMESPACE ?= argocd
 GITOPS_ENV ?= sandbox
 GITOPS_TARGET_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
+GITOPS_REVISION ?= main
+GITOPS_REPO_URL ?=
 
-FLUX_REPO_URL ?=
-FLUX_REVISION ?=
+ARGOCD_NAMESPACE ?= argocd
 FLUX_NAMESPACE ?= flux-system
 
 # ── Validation ─────────────────────────────────────────────────────
@@ -148,8 +146,8 @@ endif
 .PHONY: argocd-install
 argocd-install: ## Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
 	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
-	    $(if $(ARGOCD_REPO_URL),--repo-url $(ARGOCD_REPO_URL)) \
-	    $(if $(ARGOCD_REVISION),--revision $(ARGOCD_REVISION))
+	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
+	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
 .PHONY: argocd-uninstall
 argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
@@ -172,8 +170,8 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 .PHONY: flux-install
 flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
 	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
-	    $(if $(FLUX_REPO_URL),--repo-url $(FLUX_REPO_URL)) \
-	    $(if $(FLUX_REVISION),--revision $(FLUX_REVISION))
+	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
+	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
 .PHONY: flux-uninstall
 flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers

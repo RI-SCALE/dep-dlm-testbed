@@ -36,8 +36,8 @@ jobs:
           GITOPS_ENV: ${{ matrix.env }}
           # Flux reads git, not the runner's tree — point the GitRepository at
           # THIS PR's repo+branch so it reconciles the code under test.
-          FLUX_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          FLUX_REVISION: ${{ github.head_ref || github.ref_name }}
+          GITOPS_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          GITOPS_REVISION: ${{ github.head_ref || github.ref_name }}
         run: make flux-install
 
       - name: Wait for all Kustomizations to be Ready

@@ -33,8 +33,8 @@ jobs:
           GITOPS_ENV: ${{ matrix.env }}
           # Point Argo at THIS PR's repo+branch (Argo reads git, not the runner's
           # working tree). Without this it would track the default branch.
-          ARGOCD_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          ARGOCD_REVISION: ${{ github.head_ref || github.ref_name }}
+          GITOPS_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          GITOPS_REVISION: ${{ github.head_ref || github.ref_name }}
         run: make argocd-install
 
       - name: Wait for Applications to become Healthy
