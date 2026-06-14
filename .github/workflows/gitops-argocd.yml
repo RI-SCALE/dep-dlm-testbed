@@ -2,6 +2,13 @@ name: GitOps (Argo CD)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/gitops/**'
+      - 'deploy/helm-charts/**'
+      - 'shared/scripts/init-argocd.sh'
+      - '.github/workflows/gitops-argocd.yml'
   pull_request:
     branches: [main]
     paths:

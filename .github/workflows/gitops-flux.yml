@@ -2,6 +2,13 @@ name: GitOps (Flux)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/gitops/**'
+      - 'deploy/helm-charts/**'
+      - 'shared/scripts/init-flux.sh'
+      - '.github/workflows/gitops-flux.yml'
   pull_request:
     branches: [main]
     paths:
