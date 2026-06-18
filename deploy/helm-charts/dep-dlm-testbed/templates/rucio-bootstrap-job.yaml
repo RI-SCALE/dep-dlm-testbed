@@ -12,7 +12,7 @@
   testbed-scripts-rucio ConfigMap.
 */}}
 
-{{- if .Values.rucio.enabled }}
+{{- if (index .Values "rucio-server" "enabled") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,7 +28,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: bootstrap
-          image: "{{ .Values.rucio.image.repository }}:{{ .Values.rucio.image.tag }}"
+          image: "{{ index .Values "rucio-server" "image" "repository" }}:{{ index .Values "rucio-server" "image" "tag" }}"
           imagePullPolicy: "IfNotPresent"
           command:
             - bash

@@ -79,7 +79,7 @@ jobs:
           # The DB-init Job must have completed (schema created) — the real
           # assertion for the bootstrap step, gated behind the ExternalSecrets.
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
-          kubectl -n $ns rollout status deploy/rucio --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns get pods
 
       - name: Diagnostics on failure

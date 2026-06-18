@@ -23,8 +23,8 @@ dependencies:
   - name: rucio-server
     version: "~40.0.0"
     repository: "file://../rucio-server"
-    alias: rucio
-    condition: rucio.enabled
+    alias: rucio-server
+    condition: "rucio-server.enabled"
 
   - name: fts
     version: "0.1.0"

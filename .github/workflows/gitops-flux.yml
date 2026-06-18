@@ -101,7 +101,7 @@ jobs:
           # No '|| true' — rucio MUST be installed and rolled out. (Previously this
           # was masked, so a missing rucio Deployment still passed.)
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
-          kubectl -n $ns rollout status deploy/rucio --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           for d in conveyor-submitter conveyor-poller conveyor-finisher \
                    judge-evaluator judge-cleaner reaper; do
             kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s

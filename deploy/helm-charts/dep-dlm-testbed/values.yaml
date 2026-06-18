@@ -72,9 +72,9 @@ ruciodb:
 
 # Rucio Server
 
-rucio:
+"rucio-server":
   enabled: true
-  fullnameOverride: rucio
+  fullnameOverride: rucio-server
   replicaCount: 1
   image:
     repository: rucio/rucio-server
@@ -98,6 +98,7 @@ rucio:
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
             echo "gfal2 install failed"
+            update-ca-trust || echo "update-ca-trust failed"
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
       value: /etc/grid-security/certificates/rucio_ca.pem
@@ -129,6 +130,10 @@ rucio:
       volumeName: idpsecrets
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
+    - secretFullName: testbed-certs
+      volumeName: ca-anchor
+      mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
+      subPath: rucio_ca.pem
 
     # Python patches
     - secretFullName: testbed-patches
@@ -164,6 +169,7 @@ rucio-daemons:
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
             echo "gfal2 install failed"
+            update-ca-trust || echo "update-ca-trust failed"
 
   # Enable the daemons the testbed needs
   conveyorTransferSubmitterCount: 1
@@ -234,6 +240,10 @@ rucio-daemons:
         - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
         - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
         - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+    - secretFullName: testbed-certs
+      volumeName: ca-anchor
+      mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
+      subPath: rucio_ca.pem
     - secretFullName: rucio-server-cfg
       volumeName: rucio-cfg-server
       mountPath: /opt/rucio/etc/rucio.cfg

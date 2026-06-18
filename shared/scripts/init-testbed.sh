@@ -40,7 +40,7 @@ _exec() {
             case "$svc" in
                 ftsdb|ruciodb)
                     target="pod/${svc}-0" ;;
-                rucio)
+                rucio-server)
                     target="deploy/${svc}"; cflag=(-c "$svc") ;;
                 *)
                     target="deploy/${svc}" ;;
@@ -77,7 +77,7 @@ _http_probe_local() {
             curl -s -o /dev/null -w '%{http_code}' \
                 "http://localhost:${port}${path}" || true ;;
         k8s)
-            _exec rucio curl -s -o /dev/null -w '%{http_code}' \
+            _exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
                 "http://localhost${path}" 2>/dev/null || true ;;
     esac
 }
@@ -86,7 +86,7 @@ _http_probe_local() {
 # ── Service URLs ─────────────────────────────────────────────────
 FTS_OIDC="https://fts:8446"
 
-ra() { _exec rucio rucio-admin -S userpass -u ddmlab --password secret "$@"; }
+ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
 
 # Run kcadm inside the keycloak service (compose container or k8s pod).
 _kc() { _exec keycloak "$KCADM" "$@"; }
@@ -102,7 +102,7 @@ wait_for_infrastructure() {
     done
 
     for i in $(seq 1 30); do
-        code=$(_exec rucio curl -s -o /dev/null -w '%{http_code}' \
+        code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
             https://keycloak:8443/realms/rucio/.well-known/openid-configuration \
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
@@ -124,7 +124,7 @@ setup_accounts_and_identities() {
     echo "  Verifying Keycloak token endpoint..."
     AUTH=$(echo -n "rucio:rucio-secret" | base64)
     for i in $(seq 1 12); do
-        code=$(_exec rucio curl -s -o /dev/null -w '%{http_code}' \
+        code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
             -X POST https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
             -H "Authorization: Basic $AUTH" \
             -d "grant_type=password&username=randomaccount&password=secret" \
@@ -134,7 +134,7 @@ setup_accounts_and_identities() {
     done
 
     echo "  Registering OIDC identity for randomaccount..."
-    _exec rucio python3 -c "
+    _exec rucio-server python3 -c "
 import urllib.request, urllib.parse, json, base64
 from rucio.core.identity import add_identity, add_account_identity
 from rucio.common.types import InternalAccount
@@ -218,7 +218,7 @@ seed_subject_tokens() {
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    _exec rucio env SEED_ACCOUNTS="$accounts_csv" OIDC_SEED_SCOPE="${OIDC_SEED_SCOPE}" python3 -c "
+    _exec rucio-server env SEED_ACCOUNTS="$accounts_csv" OIDC_SEED_SCOPE="${OIDC_SEED_SCOPE}" python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
 from rucio.core.identity import add_account_identity

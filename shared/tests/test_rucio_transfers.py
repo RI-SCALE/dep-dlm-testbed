@@ -45,7 +45,7 @@ from conftest import (
 log = logging.getLogger("test-transfers")
 
 SCOPE = "ddmlab"
-RUCIO_SVC = "rucio"
+RUCIO_SVC = "rucio-server"
 
 
 # ── XRootD SciTokens: XRD3 → XRD4 ───────────────────────────────────────

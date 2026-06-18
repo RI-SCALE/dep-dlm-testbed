@@ -42,7 +42,7 @@ SCOPE = "ddmlab"
 # Both judge-cleaner and reaper run in the rucio server container.
 # gfal2 is installed at container startup (see docker-compose.yml entrypoint)
 # to satisfy the reaper's Python gfal2 dependency for davs:// physical deletion.
-RUCIO_SVC = "rucio"
+RUCIO_SVC = "rucio-server"
 
 
 def run_deletion_daemons(rucio_svc: str = RUCIO_SVC) -> None:
@@ -57,7 +57,7 @@ def replica_exists_on_xrd(svc: str, pfn: str) -> bool:
     """Check whether a file exists at the given PFN path inside an XRootD container."""
 
     local_path = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-    if RUCIO_SVC == "rucio":  # reuse svc_exec indirectly
+    if RUCIO_SVC == "rucio-server":  # reuse svc_exec indirectly
         try:
             svc_exec(svc, ["test", "-f", local_path])
             return True
