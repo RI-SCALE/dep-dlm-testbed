@@ -56,10 +56,10 @@ spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-server
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
           - name: rucio-daemons
             wave: "11"
@@ -67,54 +67,54 @@ spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-daemons
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
           - name: keycloak
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/keycloak
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/keycloak.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
           - name: xrootd
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrootd.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
           - name: teapot
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
           - name: fts
             wave: "8"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
   template:
     metadata:
