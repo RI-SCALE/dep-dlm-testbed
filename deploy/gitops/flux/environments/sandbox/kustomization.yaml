@@ -26,3 +26,23 @@ patches:
       - op: replace
         path: /spec/targetNamespace
         value: dep-dlm-sandbox
+  - target: { kind: HelmRelease, name: rucio-server }
+    patch: |
+      - op: replace
+        path: /spec/chart/spec/sourceRef
+        value: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      - op: replace
+        path: /spec/chart/spec/chart
+        value: deploy/helm-charts/rucio-server
+      - op: remove
+        path: /spec/chart/spec/version
+  - target: { kind: HelmRelease, name: rucio-daemons }
+    patch: |
+      - op: replace
+        path: /spec/chart/spec/sourceRef
+        value: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      - op: replace
+        path: /spec/chart/spec/chart
+        value: deploy/helm-charts/rucio-daemons
+      - op: remove
+        path: /spec/chart/spec/version
