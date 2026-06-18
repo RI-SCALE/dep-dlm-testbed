@@ -94,25 +94,47 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
-          - name: xrootd
+          - name: xrd3
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/xrootd
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/xrootd.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd3.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
-          - name: teapot
+          - name: xrd4
+            wave: "5"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  path: deploy/helm-charts/xrootd
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd4.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  ref: values
+          - name: teapot1
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   path: deploy/helm-charts/teapot
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot1.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  ref: values
+          - name: teapot2
+            wave: "5"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  path: deploy/helm-charts/teapot
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot2.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values

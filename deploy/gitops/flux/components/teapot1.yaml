@@ -1,11 +1,11 @@
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: teapot
+  name: teapot1
   namespace: flux-system
 spec:
   interval: 5m
-  releaseName: teapot
+  releaseName: teapot1
   targetNamespace: dep-dlm-PLACEHOLDER
   install: { createNamespace: true }
   dependsOn:
@@ -16,5 +16,5 @@ spec:
       sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
   valuesFrom:
     - kind: ConfigMap
-      name: teapot-values
-      valuesKey: teapot.yaml
+      name: teapot1-values
+      valuesKey: teapot1.yaml

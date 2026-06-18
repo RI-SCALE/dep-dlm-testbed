@@ -1,0 +1,24 @@
+# xrootd-xrd4.yaml
+fullnameOverride: xrd4
+volumes:
+  - name: certs
+    secret:
+      secretName: testbed-certs
+      defaultMode: 0600
+      items:
+        - { key: xrd4cert.pem, path: xrd4cert.pem, mode: 0600 }
+        - { key: xrd4key.pem,  path: xrd4key.pem,  mode: 0600 }
+        - { key: rucio_ca.pem, path: rucio_ca.pem, mode: 0644 }
+  - name: configs
+    secret: { secretName: testbed-configs }
+  - name: scripts
+    secret: { secretName: testbed-scripts-xrootd, defaultMode: 0755 }
+volumeMounts:
+  - { name: certs,   mountPath: /etc/grid-security/certificates/5fca1cb1.0, subPath: rucio_ca.pem }
+  - { name: certs,   mountPath: /tmp/xrdcert.pem, subPath: xrd4cert.pem }
+  - { name: certs,   mountPath: /tmp/xrdkey.pem,  subPath: xrd4key.pem }
+  - { name: certs,   mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt, subPath: rucio_ca.pem }
+  - { name: scripts, mountPath: /usr/local/bin/docker-entrypoint.sh, subPath: docker-entrypoint.sh, readOnly: true }
+  - { name: configs, mountPath: /etc/xrootd/xrdrucio.cfg,   subPath: xrdrucio-scitokens.cfg, readOnly: true }
+  - { name: configs, mountPath: /etc/xrootd/authdb,         subPath: authdb,                readOnly: true }
+  - { name: configs, mountPath: /etc/xrootd/scitokens.conf, subPath: scitokens.conf,        readOnly: true }

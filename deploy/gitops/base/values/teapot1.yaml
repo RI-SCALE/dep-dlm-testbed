@@ -1,8 +1,4 @@
-# Shared Teapot/StoRM-WebDAV values — mirrors the umbrella teapot1/teapot2 block.
-# IMPORTANT: the umbrella supplied the `teapot-data` volume (PVC) that the chart
-# Deployment mounts. Standalone, the chart's volumeMounts reference teapot-data
-# with no matching volume -> invalid Deployment. So this MUST declare it.
-fullnameOverride: teapot
+fullnameOverride: teapot1
 volumes:
   - name: certs
     secret:
@@ -30,7 +26,7 @@ volumes:
       secretName: testbed-patches
   - name: teapot-data
     persistentVolumeClaim:
-      claimName: teapot-data
+      claimName: teapot1-data
 volumeMounts:
   - { name: configs, mountPath: /etc/teapot/config.ini,       subPath: config.ini,       readOnly: true }
   - { name: configs, mountPath: /etc/teapot/user-mapping.csv, subPath: user-mapping.csv, readOnly: true }
