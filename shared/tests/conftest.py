@@ -27,7 +27,7 @@ K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "dep-dlm-testbed")
 
 # Maps service name → (k8s resource kind, container name or None)
 K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
-    "rucio": ("deploy", "rucio"),
+    "rucio-server": ("deploy", "rucio-server"),
     "fts": ("deploy", None),
     "ftsdb": ("statefulset", None),
     "xrd3": ("deploy", None),
@@ -201,7 +201,9 @@ def _log_daemon_output(out: bytes, keywords=None) -> None:
             log.info("    | %s", line)
 
 
-def advance_pipeline(rucio_svc="rucio", daemons=None, mode=None, keywords=None) -> None:
+def advance_pipeline(
+    rucio_svc="rucio-server", daemons=None, mode=None, keywords=None
+) -> None:
     """Advance a Rucio pipeline.
 
     mode='direct'  : invoke each daemon with --run-once via svc_exec
@@ -219,7 +221,7 @@ def advance_pipeline(rucio_svc="rucio", daemons=None, mode=None, keywords=None) 
         _log_daemon_output(out, keywords)
 
 
-def run_daemons(rucio_svc: str = "rucio") -> None:
+def run_daemons(rucio_svc: str = "rucio-server") -> None:
     """Back-compat wrapper: advance the conveyor pipeline."""
     advance_pipeline(rucio_svc, DEFAULT_CONVEYOR)
 
@@ -228,7 +230,7 @@ def validate_rule(
     client,
     rule_id: str,
     label: str,
-    rucio_svc: str = "rucio",
+    rucio_svc: str = "rucio-server",
     timeout: int = 300,
 ) -> None:
     """Poll until locks_ok >= 1 and locks_replicating == 0, cycling daemons each iteration."""

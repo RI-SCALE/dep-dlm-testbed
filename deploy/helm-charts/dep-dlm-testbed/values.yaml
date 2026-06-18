@@ -72,9 +72,9 @@ ruciodb:
 
 # Rucio Server
 
-rucio:
+"rucio-server":
   enabled: true
-  fullnameOverride: rucio
+  fullnameOverride: rucio-server
   replicaCount: 1
   image:
     repository: rucio/rucio-server

@@ -29,5 +29,5 @@ dependencies:
 - name: teapot
   repository: file://../teapot
   version: 0.1.0
-digest: sha256:7d6ecd0b76b0a1d3ca74770ceafb636977fe787bfb3a7e04aea80eb1aa6d5208
-generated: "2026-06-09T11:41:51.811711964Z"
+digest: sha256:15fc27f5ed3d5b4a9113937f7ff7a00efae11cc84e0db3eefca92adfc5d50e67
+generated: "2026-06-18T06:57:03.241273167Z"

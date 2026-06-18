@@ -1,8 +1,8 @@
-# Shared rucio-server values — mirrors the umbrella `rucio:` block so the
+# Shared rucio-server values — mirrors the umbrella `rucio-server:` block so the
 # UPSTREAM chart mounts the same testbed-certs / rucio-server-cfg / patches the
 # umbrella supplied. Secrets now come from ESO (testbed-certs etc.), seeded from
 # Vault — but the mountPaths/items are identical to the umbrella.
-fullnameOverride: rucio
+fullnameOverride: rucio-server
 replicaCount: 1
 image:
   repository: rucio/rucio-server

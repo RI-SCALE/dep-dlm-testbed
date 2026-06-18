@@ -20,7 +20,7 @@ import pytest
 log = logging.getLogger("test-transfers")
 
 SCOPE = "ddmlab"
-RUCIO_SVC = "rucio"
+RUCIO_SVC = "rucio-server"
 FTS_SVC = "fts"
 
 COPERNICUS_S3 = "COPERNICUS_S3"

@@ -226,9 +226,9 @@ services:
       timeout: 5s
       retries: 10
 
-  rucio:
+  rucio-server:
     image: rucio/rucio-server@sha256:0d81e6c85616106443814a9c3193e13452da6a36de3d4569a7c9ca2d94db62b1
-    hostname: rucio
+    hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
     ports:
@@ -274,13 +274,13 @@ services:
     image: mgajekcern/rucio-client-docker-kubectl:latest
     hostname: rucio-client
     depends_on:
-      rucio:
+      rucio-server:
         condition: service_healthy
     networks:
       - dep-dlm-testbed
     environment:
-      - RUCIO_CFG_CLIENT_RUCIO_HOST=http://rucio
-      - RUCIO_CFG_CLIENT_AUTH_HOST=http://rucio
+      - RUCIO_CFG_CLIENT_RUCIO_HOST=http://rucio-server
+      - RUCIO_CFG_CLIENT_AUTH_HOST=http://rucio-server
       - RUCIO_CFG_CLIENT_AUTH_TYPE=userpass
       - RUCIO_CFG_CLIENT_USERNAME=ddmlab
       - RUCIO_CFG_CLIENT_PASSWORD=secret
@@ -313,7 +313,7 @@ services:
     depends_on:
       ruciodb:
         condition: service_healthy
-      rucio:
+      rucio-server:
         condition: service_healthy
       fts:
         condition: service_healthy
