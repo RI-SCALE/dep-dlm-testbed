@@ -156,10 +156,10 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	  kubectl -n $(ARGOCD_NAMESPACE) delete application vault ruciodb rucio-server rucio-daemons rucio-bootstrap keycloak xrootd teapot fts --ignore-not-found --wait=false
 	# 3. Clear ESO-managed resources while ESO is still alive.
 	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
-	-for es in $$(kubectl get externalsecret -n $(GITOPS_TARGET_NAMESPACE) -o name 2>/dev/null); do \
-	  kubectl delete -n $(GITOPS_TARGET_NAMESPACE) $$es --ignore-not-found; done
+	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
+	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 4. Now the namespace can finalize.
-	kubectl delete namespace $(GITOPS_TARGET_NAMESPACE) --ignore-not-found --timeout=60s
+	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=60s
 	# 5. Finally remove ESO and Argo.
 	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
@@ -179,10 +179,10 @@ flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository)
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
 	# 2. Clear ESO-managed resources WHILE ESO is still alive (avoids finalizer deadlock).
 	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
-	-for es in $$(kubectl get externalsecret -n $(GITOPS_TARGET_NAMESPACE) -o name 2>/dev/null); do \
-	  kubectl delete -n $(GITOPS_TARGET_NAMESPACE) $$es --ignore-not-found; done
+	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
+	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 3. Now the workload namespace can finalize.
-	kubectl delete namespace $(GITOPS_TARGET_NAMESPACE) --ignore-not-found --timeout=60s
+	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=60s
 	# 4. Remove ESO (its own Kustomization) and the HelmReleases it managed.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-eso --ignore-not-found --wait=false
 	# 5. Remove the GitRepository source.
