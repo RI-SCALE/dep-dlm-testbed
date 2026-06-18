@@ -65,20 +65,20 @@ jobs:
       - name: Wait for rucio server ready (k8s)
         if: inputs.runtime == 'k8s'
         run: |
-          kubectl -n dep-dlm-testbed rollout status deploy/rucio-server --timeout=300s
+          kubectl -n dep-dlm-sandbox rollout status deploy/rucio-server --timeout=300s
           # Wait for postStart gfal2 install to complete before running tests.
           # The postStart hook runs asynchronously alongside httpd; rollout status
           # only confirms httpd readiness, not hook completion.
           echo "Waiting for gfal2 to be available in rucio container..."
           for i in $(seq 1 24); do
-            kubectl -n dep-dlm-testbed exec deploy/rucio-server -c rucio-server -- \
+            kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
               python3 -c "import gfal2" 2>/dev/null && \
               { echo "gfal2 ready"; exit 0; }
             echo "  [$i] gfal2 not yet available, waiting 10s..."
             sleep 10
           done
           echo "ERROR: gfal2 not available after 240s — postStart hook may have failed"
-          kubectl -n dep-dlm-testbed describe pod -l app=rucio | grep -A 5 "Events:"
+          kubectl -n dep-dlm-sandbox describe pod -l app=rucio | grep -A 5 "Events:"
           exit 1
 
       - name: Wait for rucio daemons ready (k8s, daemon mode)
@@ -91,11 +91,11 @@ jobs:
           for d in conveyor-submitter conveyor-poller conveyor-finisher \
                    judge-evaluator judge-cleaner reaper; do
             echo "Waiting for rucio-daemons-$d..."
-            kubectl -n dep-dlm-testbed rollout status \
+            kubectl -n dep-dlm-sandbox rollout status \
               deploy/rucio-daemons-$d --timeout=300s || {
                 echo "ERROR: rucio-daemons-$d did not become available"
-                kubectl -n dep-dlm-testbed describe deploy/rucio-daemons-$d | grep -A 5 "Events:" || true
-                kubectl -n dep-dlm-testbed logs deploy/rucio-daemons-$d --tail=50 || true
+                kubectl -n dep-dlm-sandbox describe deploy/rucio-daemons-$d | grep -A 5 "Events:" || true
+                kubectl -n dep-dlm-sandbox logs deploy/rucio-daemons-$d --tail=50 || true
                 exit 1
               }
           done
@@ -121,15 +121,15 @@ jobs:
       - name: Wait for fts (k8s)
         if: inputs.runtime == 'k8s'
         run: |
-          kubectl -n dep-dlm-testbed rollout status deploy/fts --timeout=300s
+          kubectl -n dep-dlm-sandbox rollout status deploy/fts --timeout=300s
           for i in $(seq 1 40); do
-            code=$(kubectl -n dep-dlm-testbed exec deploy/fts -- \
+            code=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- \
               curl -sk -o /dev/null -w '%{http_code}' \
               https://localhost:8446/whoami) || true
             [[ "$code" == "200" ]] && { echo "fts REST ready"; exit 0; }
             echo "  [$i] HTTP $code"; sleep 5
           done
-          kubectl -n dep-dlm-testbed logs deploy/fts --tail=200; exit 1
+          kubectl -n dep-dlm-sandbox logs deploy/fts --tail=200; exit 1
 
       - name: fts OIDC token auth check (compose)
         if: inputs.runtime == 'compose'
@@ -151,13 +151,13 @@ jobs:
       - name: fts OIDC token auth check (k8s)
         if: inputs.runtime == 'k8s'
         run: |
-          TOKEN=$(kubectl -n dep-dlm-testbed exec deploy/fts -- curl -sk \
+          TOKEN=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
             -u "rucio:rucio-secret" \
             -d "grant_type=password&username=randomaccount&password=secret" \
             https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
           [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
-          RESP=$(kubectl -n dep-dlm-testbed exec deploy/fts -- curl -sk \
+          RESP=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
             -H "Authorization: Bearer $TOKEN" \
             https://localhost:8446/whoami)
           echo "whoami response: $RESP"
@@ -190,19 +190,19 @@ jobs:
         if: failure() && inputs.runtime == 'k8s'
         run: |
           echo "=== Pod status ==="
-          kubectl -n dep-dlm-testbed get pods -o wide
+          kubectl -n dep-dlm-sandbox get pods -o wide
           echo "=== Recent events ==="
-          kubectl -n dep-dlm-testbed get events --sort-by=.lastTimestamp | tail -50
+          kubectl -n dep-dlm-sandbox get events --sort-by=.lastTimestamp | tail -50
           for deploy in fts rucio keycloak xrd3 xrd4 teapot1 teapot2; do
             echo "=== $deploy ==="
-            kubectl -n dep-dlm-testbed logs deploy/$deploy --tail=200 2>/dev/null || true
+            kubectl -n dep-dlm-sandbox logs deploy/$deploy --tail=200 2>/dev/null || true
           done
           # Daemon diagnostics only relevant in daemon mode
           if [ "${{ inputs.daemon_mode }}" = "daemons" ]; then
             for d in conveyor-submitter conveyor-poller conveyor-finisher \
                      judge-evaluator judge-cleaner reaper; do
               echo "=== rucio-daemons-$d ==="
-              kubectl -n dep-dlm-testbed logs deploy/rucio-daemons-$d --tail=200 2>/dev/null || true
+              kubectl -n dep-dlm-sandbox logs deploy/rucio-daemons-$d --tail=200 2>/dev/null || true
             done
           fi
 

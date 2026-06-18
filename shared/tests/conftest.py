@@ -23,7 +23,7 @@ log = logging.getLogger("conftest")
 # ── Runtime ───────────────────────────────────────────────────────────────
 
 RUNTIME = os.environ.get("RUNTIME", "compose")
-K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "dep-dlm-testbed")
+K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "dep-dlm-sandbox")
 
 # Maps service name → (k8s resource kind, container name or None)
 K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {

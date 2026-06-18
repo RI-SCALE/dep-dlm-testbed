@@ -72,6 +72,17 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: fix/sandbox-internal-rucio-charts
                   ref: values
+          - name: rucio-client
+            wave: "12"
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  path: deploy/helm-charts/rucio-client
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-client.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: fix/sandbox-internal-rucio-charts
+                  ref: values
           - name: keycloak
             wave: "5"
             spec:

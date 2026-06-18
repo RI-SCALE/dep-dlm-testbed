@@ -15,19 +15,16 @@ COMPOSE       := docker compose -f $(COMPOSE_FILE)
 
 HELM_CHART    := deploy/helm-charts/dep-dlm-testbed
 HELM_RELEASE  ?= testbed
-UMBRELLA_CHART_NAMESPACE ?= dep-dlm-testbed
-KUBECTL       := kubectl -n $(UMBRELLA_CHART_NAMESPACE)
 HELM          := helm
 
-# GitOps
 GITOPS_ENV ?= sandbox
-GITOPS_TARGET_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
+K8S_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
+KUBECTL       := kubectl -n $(K8S_NAMESPACE)
+
 GITOPS_REVISION ?= main
 GITOPS_REPO_URL ?=
-
 ARGOCD_NAMESPACE ?= argocd
 FLUX_NAMESPACE ?= flux-system
-
 # ── Validation ─────────────────────────────────────────────────────
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
@@ -61,6 +58,7 @@ help: ## Show this help (default target)
 	@echo '  TOKEN_MODE = $(TOKEN_MODE) (managed | unmanaged)'
 	@echo '  DAEMON_MODE = $(DAEMON_MODE) (direct | daemons)'
 	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
+	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
 	@echo ''
 	@echo 'Usage:'
 	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]'
@@ -86,11 +84,11 @@ start: ## Start the stack
 ifeq ($(RUNTIME),compose)
 	COMPOSE_PROFILES=$(DAEMON_MODE) $(COMPOSE) up -d $(SERVICES)
 else
-	$(KUBECTL) create namespace $(UMBRELLA_CHART_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	$(HELM) dependency update $(HELM_CHART)
 	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
+	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
@@ -98,9 +96,9 @@ stop: ## Stop the stack and remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) down -v
 else
-	$(HELM) uninstall $(HELM_RELEASE) -n $(UMBRELLA_CHART_NAMESPACE) || true
+	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
-	$(KUBECTL) delete namespace $(UMBRELLA_CHART_NAMESPACE) --ignore-not-found
+	$(KUBECTL) delete namespace $(K8S_NAMESPACE) --ignore-not-found
 endif
 
 .PHONY: restart
@@ -112,7 +110,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build  $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: rebuild-clean
@@ -121,7 +119,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build --no-cache $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE)
+	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: ps
@@ -137,7 +135,7 @@ logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) logs -f --tail=100 $(SERVICES)
 else
-	@echo "k8s: use 'kubectl -n $(UMBRELLA_CHART_NAMESPACE) logs deploy/<name> -f'"
+	@echo "k8s: use 'kubectl -n $(K8S_NAMESPACE) logs deploy/<name> -f'"
 	@$(KUBECTL) get deploy -o name
 endif
 
@@ -203,13 +201,13 @@ helm-lint: ## Lint the umbrella chart
 
 .PHONY: helm-template
 helm-template: ## Render manifests without installing
-	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(UMBRELLA_CHART_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
+	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
 
 ## Tests
 
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
@@ -218,16 +216,16 @@ test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentin
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
-		K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) \
+		K8S_NAMESPACE=$(K8S_NAMESPACE) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(UMBRELLA_CHART_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
 
 ## Cleanup
 

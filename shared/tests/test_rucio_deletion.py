@@ -15,8 +15,8 @@ Typical invocations:
         bash -c "RUNTIME=compose pytest /tests/test_rucio_deletion.py -v"
 
     # Kubernetes
-    kubectl -n dep-dlm-testbed exec deploy/rucio-client -- \\
-        bash -c "RUNTIME=k8s K8S_NAMESPACE=dep-dlm-testbed pytest /tests/test_rucio_deletion.py -v"
+    kubectl -n dep-dlm-sandbox exec deploy/rucio-client -- \\
+        bash -c "RUNTIME=k8s K8S_NAMESPACE=dep-dlm-sandbox pytest /tests/test_rucio_deletion.py -v"
 """
 
 import logging
