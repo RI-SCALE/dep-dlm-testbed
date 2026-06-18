@@ -7,3 +7,5 @@ resources:
   - rucio-server-cfg.yaml
   - testbed-scripts-xrootd.yaml
   - testbed-scripts-rucio.yaml
+  - testbed-scripts.yaml
+  - testbed-tests.yaml

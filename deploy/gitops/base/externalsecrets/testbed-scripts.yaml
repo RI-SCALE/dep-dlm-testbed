@@ -1,0 +1,10 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: testbed-scripts
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: dep-dlm-vault, kind: ClusterSecretStore }
+  target: { name: testbed-scripts, creationPolicy: Owner }
+  dataFrom:
+    - extract: { key: dep-dlm/scripts }
