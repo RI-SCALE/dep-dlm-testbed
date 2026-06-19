@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: fix/sandbox-internal-rucio-charts
+    targetRevision: feat/sandbox-e2e-gitops
     path: deploy/gitops/argocd/applicationsets
     directory:
       recurse: false
@@ -38,7 +38,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: fix/sandbox-internal-rucio-charts
+    targetRevision: feat/sandbox-e2e-gitops
     path: deploy/gitops/environments/sandbox/secrets
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
   syncPolicy:
