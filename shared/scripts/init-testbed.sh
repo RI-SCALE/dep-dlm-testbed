@@ -2,7 +2,7 @@
 set -euo pipefail
 
 RUNTIME="${RUNTIME:-compose}"
-K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-testbed}"
+K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-sandbox}"
 TOKEN_MODE="${TOKEN_MODE:-managed}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.${TOKEN_MODE}.yml}"
 
