@@ -22,6 +22,9 @@ jobs:
     name: argocd | ${{ matrix.env }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      GITOPS_ENV: ${{ matrix.env }}
+      RUNTIME: k8s
     strategy:
       fail-fast: false
       matrix:
@@ -81,6 +84,15 @@ jobs:
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns get pods
+
+      - name: Initialize testbed (accounts, RSEs, OIDC)
+        run: make init
+
+      - name: Rucio E2E transfer tests
+        run: make test-rucio-transfers
+
+      - name: Rucio E2E deletion test
+        run: make test-rucio-deletion
 
       - name: Diagnostics on failure
         if: failure()
