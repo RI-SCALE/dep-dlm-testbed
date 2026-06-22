@@ -60,10 +60,10 @@ spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-server
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: rucio-daemons
             wave: "11"
@@ -71,87 +71,87 @@ spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-daemons
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: rucio-client
             wave: "12"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/rucio-client
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-client.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: keycloak
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/keycloak
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/keycloak.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: xrd3
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd3.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: xrd4
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd4.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: teapot1
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot1.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: teapot2
             wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot2.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
           - name: fts
             wave: "8"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: feat/sandbox-e2e-gitops
+                  targetRevision: main
                   ref: values
   template:
     metadata:
