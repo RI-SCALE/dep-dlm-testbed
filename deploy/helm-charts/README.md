@@ -61,7 +61,7 @@ helm install testbed helm-charts/dep-dlm-testbed --namespace dep-dlm-testbed
 You should end up with something like:
 
 ```bash
-$  kubectl get pods -n dep-dlm-testbed
+$  kubectl get pods -n dep-dlm-sandbox
 NAME                            READY   STATUS    RESTARTS   AGE
 fts-5b96566fc4-6gjr5            0/1     Running   0          18s
 ftsdb-0                         1/1     Running   0          18s
@@ -79,6 +79,6 @@ xrd4-5f94846b87-bjxq9           1/1     Running   0          18s
 Tear down:
 
 ```sh
-helm uninstall testbed -n dep-dlm-testbed
-kubectl -n dep-dlm-testbed delete pvc --all   # PVCs aren't removed by `helm uninstall`
+helm uninstall testbed -n dep-dlm-sandbox
+kubectl -n dep-dlm-sandbox delete pvc --all   # PVCs aren't removed by `helm uninstall`
 ```

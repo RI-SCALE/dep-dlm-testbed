@@ -1,10 +1,5 @@
-# Shared XRootD values — mirrors the umbrella xrd3/xrd4 block. Single instance
-# here (fullnameOverride set by the overlay/app for xrd3 vs xrd4 if both wanted).
-# The entrypoint script lives in testbed-scripts-xrootd in the umbrella; seed it
-# into Vault (dep-dlm/scripts-xrootd) and add an ExternalSecret, OR rely on the
-# image's own entrypoint. The umbrella mounted a custom docker-entrypoint.sh, so
-# scripts are seeded and mounted here.
-fullnameOverride: xrootd
+# xrootd-xrd3.yaml
+fullnameOverride: xrd3
 volumes:
   - name: certs
     secret:
@@ -15,18 +10,15 @@ volumes:
         - { key: xrd3key.pem,  path: xrd3key.pem,  mode: 0600 }
         - { key: rucio_ca.pem, path: rucio_ca.pem, mode: 0644 }
   - name: configs
-    secret:
-      secretName: testbed-configs
+    secret: { secretName: testbed-configs }
   - name: scripts
-    secret:
-      secretName: testbed-scripts-xrootd
-      defaultMode: 0755
+    secret: { secretName: testbed-scripts-xrootd, defaultMode: 0755 }
 volumeMounts:
   - { name: certs,   mountPath: /etc/grid-security/certificates/5fca1cb1.0, subPath: rucio_ca.pem }
   - { name: certs,   mountPath: /tmp/xrdcert.pem, subPath: xrd3cert.pem }
   - { name: certs,   mountPath: /tmp/xrdkey.pem,  subPath: xrd3key.pem }
   - { name: certs,   mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt, subPath: rucio_ca.pem }
   - { name: scripts, mountPath: /usr/local/bin/docker-entrypoint.sh, subPath: docker-entrypoint.sh, readOnly: true }
-  - { name: configs, mountPath: /etc/xrootd/xrdrucio.cfg,  subPath: xrdrucio-scitokens.cfg, readOnly: true }
-  - { name: configs, mountPath: /etc/xrootd/authdb,        subPath: authdb,                readOnly: true }
+  - { name: configs, mountPath: /etc/xrootd/xrdrucio.cfg,   subPath: xrdrucio-scitokens.cfg, readOnly: true }
+  - { name: configs, mountPath: /etc/xrootd/authdb,         subPath: authdb,                readOnly: true }
   - { name: configs, mountPath: /etc/xrootd/scitokens.conf, subPath: scitokens.conf,        readOnly: true }

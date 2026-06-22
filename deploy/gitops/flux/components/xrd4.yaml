@@ -1,0 +1,15 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata: { name: xrd4, namespace: flux-system }
+spec:
+  interval: 5m
+  releaseName: xrd4
+  targetNamespace: dep-dlm-PLACEHOLDER
+  install: { createNamespace: true }
+  dependsOn: [ { name: external-secrets } ]
+  chart:
+    spec:
+      chart: deploy/helm-charts/xrootd
+      sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+  valuesFrom:
+    - { kind: ConfigMap, name: xrd4-values, valuesKey: xrd4.yaml }

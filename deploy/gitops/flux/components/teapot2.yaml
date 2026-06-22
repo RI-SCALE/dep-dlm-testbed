@@ -1,20 +1,20 @@
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: xrootd
+  name: teapot2
   namespace: flux-system
 spec:
   interval: 5m
-  releaseName: xrootd
+  releaseName: teapot2
   targetNamespace: dep-dlm-PLACEHOLDER
   install: { createNamespace: true }
   dependsOn:
     - { name: external-secrets }
   chart:
     spec:
-      chart: deploy/helm-charts/xrootd          # path within the GitRepository
+      chart: deploy/helm-charts/teapot          # path within the GitRepository
       sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
   valuesFrom:
     - kind: ConfigMap
-      name: xrootd-values
-      valuesKey: xrootd.yaml
+      name: teapot2-values
+      valuesKey: teapot2.yaml

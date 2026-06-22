@@ -30,7 +30,7 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/sandbox-e2e-gitops
                   ref: values
           - name: rucio-daemons
             wave: "11"
@@ -41,18 +41,18 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/sandbox-e2e-gitops
                   ref: values
           - name: fts
             wave: "8"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/sandbox-e2e-gitops
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/sandbox-e2e-gitops
                   ref: values
   template:
     metadata:

@@ -6,17 +6,23 @@ resources:
   - ../../flux-system/gitrepository.yaml
   - ../../sources/helmrepositories.yaml
   - ../../components/keycloak.yaml
-  - ../../components/xrootd.yaml
-  - ../../components/teapot.yaml
+  - ../../components/xrd3.yaml
+  - ../../components/xrd4.yaml
+  - ../../components/teapot1.yaml
+  - ../../components/teapot2.yaml
   - ../../components/fts.yaml
   - ../../components/rucio-server.yaml
   - ../../components/rucio-daemons.yaml
+  - ../../components/rucio-client.yaml
 configMapGenerator:
   - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
   - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
-  - { name: keycloak-values,      namespace: flux-system, files: [ keycloak.yaml=../../../base/values/keycloak.yaml ] }
-  - { name: xrootd-values,        namespace: flux-system, files: [ xrootd.yaml=../../../base/values/xrootd.yaml ] }
-  - { name: teapot-values,        namespace: flux-system, files: [ teapot.yaml=../../../base/values/teapot.yaml ] }
+  - { name: rucio-client-values,  namespace: flux-system, files: [ rucio-client.yaml=../../../base/values/rucio-client.yaml ] }
+  - { name: keycloak-values, namespace: flux-system, files: [ keycloak.yaml=../../../base/values/keycloak.yaml ] }
+  - { name: xrd3-values, namespace: flux-system, files: [ xrd3.yaml=../../../base/values/xrd3.yaml ] }
+  - { name: xrd4-values, namespace: flux-system, files: [ xrd4.yaml=../../../base/values/xrd4.yaml ] }
+  - { name: teapot1-values, namespace: flux-system, files: [ teapot1.yaml=../../../base/values/teapot1.yaml ] }
+  - { name: teapot2-values, namespace: flux-system, files: [ teapot2.yaml=../../../base/values/teapot2.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
 generatorOptions:
   disableNameSuffixHash: true
@@ -26,3 +32,33 @@ patches:
       - op: replace
         path: /spec/targetNamespace
         value: dep-dlm-sandbox
+  - target: { kind: HelmRelease, name: rucio-server }
+    patch: |
+      - op: replace
+        path: /spec/chart/spec/sourceRef
+        value: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      - op: replace
+        path: /spec/chart/spec/chart
+        value: deploy/helm-charts/rucio-server
+      - op: remove
+        path: /spec/chart/spec/version
+  - target: { kind: HelmRelease, name: rucio-daemons }
+    patch: |
+      - op: replace
+        path: /spec/chart/spec/sourceRef
+        value: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      - op: replace
+        path: /spec/chart/spec/chart
+        value: deploy/helm-charts/rucio-daemons
+      - op: remove
+        path: /spec/chart/spec/version
+  - target: { kind: HelmRelease, name: rucio-client }
+    patch: |
+      - op: replace
+        path: /spec/chart/spec/sourceRef
+        value: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      - op: replace
+        path: /spec/chart/spec/chart
+        value: deploy/helm-charts/rucio-client
+      - op: remove
+        path: /spec/chart/spec/version
