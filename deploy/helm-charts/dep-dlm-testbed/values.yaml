@@ -57,13 +57,12 @@ tests:
 
 ruciodb:
   image:
-    tag: "latest"
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 17.6.0-debian-12-r4
   enabled: true
   fullnameOverride: ruciodb
-  auth:
-    username: rucio
-    password: rucio
-    database: rucio
+  auth: { username: rucio, password: rucio, database: rucio }
   primary:
     persistence:
       enabled: true
