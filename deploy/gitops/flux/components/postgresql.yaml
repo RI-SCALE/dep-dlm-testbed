@@ -8,6 +8,8 @@ spec:
   releaseName: ruciodb
   targetNamespace: dep-dlm-PLACEHOLDER
   install: { createNamespace: true }
+  upgrade:
+    force: true          # recreate immutable resources (StatefulSet) on conflicting changes
   dependsOn:
     - { name: external-secrets }
   chart:
