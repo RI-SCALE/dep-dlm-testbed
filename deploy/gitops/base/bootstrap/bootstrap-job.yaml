@@ -16,8 +16,10 @@ kind: Job
 metadata:
   name: rucio-bootstrap-db
   annotations:
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # Run as a normal wave-5 resource (not a hook) so Argo counts it toward
+    # Application health and does not prune it across syncs. Wave 5 still places
+    # it after the ExternalSecrets (wave 0). Flux ignores this annotation and
+    # gates the Job via the bootstrap Kustomization healthCheck.
     argocd.argoproj.io/sync-wave: "5"      # after ExternalSecrets (wave 0)
 spec:
   backoffLimit: 6
