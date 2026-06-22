@@ -48,8 +48,12 @@ spec:
                 helm:
                   values: |
                     fullnameOverride: ruciodb
+                    image:
+                      registry: docker.io
+                      repository: bitnamilegacy/postgresql
+                      tag: 17.6.0-debian-12-r4
                     auth: { username: rucio, password: rucio, database: rucio }
-                    primary: { persistence: { enabled: false } }
+                    primary: { persistence: { enabled: true } }
           - name: rucio-server
             wave: "10"
             spec:
