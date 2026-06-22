@@ -159,7 +159,7 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 4. Now the namespace can finalize.
-	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=60s
+	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
 	# 5. Finally remove ESO and Argo.
 	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
@@ -182,7 +182,7 @@ flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository)
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 3. Now the workload namespace can finalize.
-	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=60s
+	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
 	# 4. Remove ESO (its own Kustomization) and the HelmReleases it managed.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-eso --ignore-not-found --wait=false
 	# 5. Remove the GitRepository source.
