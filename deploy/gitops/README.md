@@ -18,7 +18,7 @@ PostgreSQL) and point their dependents at external endpoints.
 ## Quickstart (sandbox)
 
 ```bash
-make argocd-install GITOPS_ENV=sandbox     # or: make flux-install
+make argocd-install                        # or: make flux-install
 make argocd-uninstall                      # or: make flux-uninstall
 ```
 

@@ -279,12 +279,6 @@ services:
     networks:
       - dep-dlm-testbed
     environment:
-      - RUCIO_CFG_CLIENT_RUCIO_HOST=http://rucio-server
-      - RUCIO_CFG_CLIENT_AUTH_HOST=http://rucio-server
-      - RUCIO_CFG_CLIENT_AUTH_TYPE=userpass
-      - RUCIO_CFG_CLIENT_USERNAME=ddmlab
-      - RUCIO_CFG_CLIENT_PASSWORD=secret
-      - RUCIO_CFG_CLIENT_ACCOUNT=root
       - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
       - AWS_CA_BUNDLE=/etc/pki/tls/cert.pem
     volumes:
@@ -292,7 +286,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/userpass-client.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/tests:/tests:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command:

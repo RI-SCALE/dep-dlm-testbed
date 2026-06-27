@@ -33,10 +33,6 @@ volumeMounts:
     subPath: rucio_ca.pem
     readOnly: true
   - name: configs
-    mountPath: /opt/rucio/etc/userpass-client.cfg
-    subPath: userpass-client.cfg
-    readOnly: true
-  - name: configs
     mountPath: /opt/rucio/etc/rucio.cfg
     subPath: userpass-client.cfg
     readOnly: true

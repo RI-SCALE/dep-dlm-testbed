@@ -132,4 +132,4 @@ Cleanup
 
 ## Documentation
 
-Documentation is available in the [docs directory](./docs/) including high-level flows.
+See [docs](./docs/)

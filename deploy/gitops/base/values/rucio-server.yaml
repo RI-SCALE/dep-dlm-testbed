@@ -39,11 +39,11 @@ secretMounts:
     mountPath: /etc/grid-security
     defaultMode: 0600
     items:
-      - { key: hostcert.pem,          path: hostcert.pem }
-      - { key: hostkey.pem,           path: hostkey.pem }
-      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
-      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
-      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+      - { key: hostcert.pem,          path: hostcert.pem, mode: 0644 }
+      - { key: hostkey.pem,           path: hostkey.pem, mode: 0600 }
+      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem, mode: 0600 }
+      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
+      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
   - secretFullName: rucio-server-cfg
     volumeName: rucio-cfg-server
     mountPath: /opt/rucio/etc/rucio.cfg

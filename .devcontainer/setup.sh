@@ -41,6 +41,37 @@ install_kind() {
     echo -e "${GREEN}Kind cluster ready${NC}\n"
 }
 
+install_rucio_gfal() {
+  echo -e "${BLUE}Installing gfal2 + rucio-clients via conda-forge...${NC}"
+
+  # conda arch name differs from kind's amd64/arm64
+  local CONDA_ARCH
+  if [ "$ARCH" = "amd64" ]; then CONDA_ARCH="64"; else CONDA_ARCH="aarch64"; fi
+
+  # micromamba (static, no system deps)
+  if [ ! -x /usr/local/bin/micromamba ]; then
+    curl -Ls "https://micro.mamba.pm/api/micromamba/linux-${CONDA_ARCH}/latest" \
+      | tar -xvj -C /usr/local bin/micromamba
+  fi
+  export MAMBA_ROOT_PREFIX=/opt/conda
+
+  # gfal2 + python binding + CLI tools, all API-matched from conda-forge
+  /usr/local/bin/micromamba create -y -p /opt/conda/envs/rucio -c conda-forge \
+    python=3.10 gfal2 python-gfal2 gfal2-util xrootd
+
+  # rucio client pinned to the SERVER major (39.x); 40.x can misbehave vs a 39 server
+  /opt/conda/envs/rucio/bin/pip install --no-cache-dir "rucio-clients[argcomplete]==39.*"
+
+  # put the env first on PATH for this shell + future logins
+  echo 'export PATH=/opt/conda/envs/rucio/bin:$PATH' >> /etc/profile.d/rucio_env.sh
+  chmod +x /etc/profile.d/rucio_env.sh
+
+  # sanity check — fail loudly if the binding didn't land
+  /opt/conda/envs/rucio/bin/python -c "import gfal2; print('gfal2 binding OK')" || {
+    echo -e "${RED}gfal2 python binding missing${NC}"; return 1; }
+  echo -e "${GREEN}rucio: $(/opt/conda/envs/rucio/bin/rucio --version)  |  gfal CLIs: $(ls /opt/conda/envs/rucio/bin/gfal-* | wc -l) found${NC}\n"
+}
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -57,4 +88,5 @@ echo -e "${BLUE}╚════════════════════�
 
 check_requirements
 install_kind
+install_rucio_gfal
 print_summary

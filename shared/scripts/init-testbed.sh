@@ -120,6 +120,7 @@ setup_accounts_and_identities() {
     ra account add-attribute ddmlab --key admin --value True || true
     ra account update --account ddmlab --key type --value SERVICE || true
     ra account add --type USER --email randomaccount@rucio randomaccount || true
+    ra account add-attribute randomaccount --key admin --value True || true
 
     echo "  Verifying Keycloak token endpoint..."
     AUTH=$(echo -n "rucio:rucio-secret" | base64)
