@@ -25,7 +25,7 @@ read straight from Git, so they must already point at the branch you're testing.
 
 ## Workflow
 1. Flip all refs above to your branch; push.
-2. `make flux-install GITOPS_ENV=sandbox` (or `argocd-install`).
+2. `make flux-install` (or `argocd-install`).
 3. Verify the source tracks your branch, not main:
    ```bash
    flux get sources git -A          # expect <your-branch>@sha1:<tip>

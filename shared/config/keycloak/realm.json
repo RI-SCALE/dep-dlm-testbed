@@ -34,9 +34,12 @@
       "secret": "rucio-secret",
       "publicClient": false,
       "redirectUris": [
-        "http://rucio/auth/oidc_token",
+         "http://rucio/auth/oidc_token",
         "http://rucio/auth/oidc_code",
-        "http://rucio/auth/oidc_redirect"
+        "http://rucio/auth/oidc_redirect",
+        "http://localhost:8080/auth/oidc_token",
+        "http://localhost:8080/auth/oidc_code",
+        "http://localhost:8080/auth/oidc_redirect"
       ],
       "standardFlowEnabled": true,
       "serviceAccountsEnabled": true,
