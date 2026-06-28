@@ -58,14 +58,6 @@ kubectl exec -n dep-dlm-sandbox deploy/rucio-client -- \
 Expected: `TestXRootDOIDC`, `TestTeapotOIDC`, `TestCrossProtocolOIDC`,
 `TestDatasetOIDC` all pass — rules reach `state=OK`.
 
-## Verification
-```bash
-rucio rule show <rule_id>                  # REPLICATING -> OK
-rucio replica list file <scope:name>       # replica on destination RSE
-```
-A rule state of `OK` with a replica on the destination means catalog → FTS →
-storage works end to end.
-
 ## Interactive OIDC login + upload (WORKING — dev-container recipe)
 
 Both interactive login **and** `rucio upload` run entirely from the dev
@@ -182,7 +174,14 @@ starts `REPLICATING` and reaches `OK` once the conveyor cycle completes.
 ```bash
 rucio add-rule randomaccount:hello-xrd.txt 1 XRD4
 rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLICATING -> OK
+
+# verify the rule and the destination replica
+rucio rule show <rule_id>                            # REPLICATING -> OK
+rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
 ```
+
+A rule state of `OK` with a replica on the destination means catalog → FTS →
+storage works end to end.
 
 ### Watching the replication (FTS daemon logs)
 
