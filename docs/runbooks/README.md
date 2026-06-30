@@ -19,8 +19,7 @@ in `BACKLOG.md`.
 | # | Runbook | Purpose | Status |
 |---|---------|---------|--------|
 | 4 | Secrets with external Vault | Provision an external Vault (or equivalent) via Terraform/IaC on a hyperscaler; wire `ClusterSecretStore` + external-secrets to it; seed and rotate the cert/config/IdP secrets the stack consumes. | Deferred — pending external IaC provisioning |
-| 6 | Certificate installation (Rucio + FTS) | Install the CA + host certs trusted by Rucio and FTS for IAM and storage backends, so token and TLS connections to external IdP/storage are trusted.  | TODO |
-| 7 | Observability | Metrics, logs, and dashboards for the conveyor/judge/reaper daemons, FTS, and storage — what to scrape, what to alert on, where transfers stall. | TODO (later) |
+| 6 | Observability | Metrics, logs, and dashboards for the conveyor/judge/reaper daemons, FTS, and storage — what to scrape, what to alert on, where transfers stall. | TODO (later) |
 
 ## Conventions
 Each runbook follows the same skeleton: Purpose, Prerequisites, Configuration

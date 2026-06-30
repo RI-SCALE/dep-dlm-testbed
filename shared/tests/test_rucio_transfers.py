@@ -60,14 +60,6 @@ class TestXRootDOIDC:
     FTS issues a storage.read + storage.modify token from Keycloak
     (audience: xrd3 / xrd4) and performs
     an HTTP COPY between the two XRootD endpoints.
-
-    To answer Andrea Manzi's question: the XRootD TPC here uses the
-    HTTP protocol (davs://), not the native xroot:// protocol. XRootD
-    exposes an HTTP interface via the xrd.protocol http:1094 directive
-    in xrdrucio-scitokens.cfg, and SciTokens validation is done by
-    the libXrdAccSciTokens.so plugin on the server side. FTS submits
-    the job with the davs:// PFN and a Bearer token; the two XRootD
-    nodes then perform an HTTP COPY (TPC pull).
     """
 
     def test_xrd3_to_xrd4(self, rucio_client):
