@@ -69,8 +69,8 @@ token-copy, no pod hop.
 
 ```ini
 [client]
-rucio_host  = http://localhost:8080
-auth_host   = http://localhost:8080
+rucio_host  = http://localhost:8090
+auth_host   = http://localhost:8090
 auth_type   = oidc
 account     = randomaccount
 oidc_scope  = openid offline_access storage.read:/ storage.modify:/ aud:rucio
@@ -135,7 +135,7 @@ flow will fail.
 
 ```bash
 # control-plane + auth forwards
-kubectl -n dep-dlm-sandbox port-forward svc/rucio-server 8080:80 &
+kubectl -n dep-dlm-sandbox port-forward svc/rucio-server 8090:80 &
 kubectl -n dep-dlm-sandbox port-forward svc/keycloak     8443:8443 &
 # storage forwards (gfal2 hits these directly; the local port must match the
 # RSE PFN port: Teapot davs = 8081, XRootD davs = 1094)
