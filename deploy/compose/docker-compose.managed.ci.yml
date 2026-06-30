@@ -195,7 +195,7 @@ services:
       - KC_HTTP_ENABLED=true
     ports:
       - "8080:8080"
-      - "8448:8443"
+      - "8443:8443"
     networks:
       - dep-dlm-testbed
     volumes:
