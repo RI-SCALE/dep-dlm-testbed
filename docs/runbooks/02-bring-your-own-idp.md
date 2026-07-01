@@ -114,7 +114,7 @@ get issuer certificate`, even though the image's system bundle
 
    # compose (e.g.)
    docker exec -t compose-rucio-server-1 \
-      rucio-admin identity add --type OIDC
+      rucio-admin identity add --type OIDC  \
          --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" --account randomaccount --email marvin.gajek@cern.ch
    ```
    `SUB`/`ISS` must match the token's claims exactly; `--account` must match the
