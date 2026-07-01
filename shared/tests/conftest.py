@@ -63,6 +63,26 @@ DELETION_DAEMONS = (
     ["rucio-reaper", "--run-once", "--greedy"],
 )
 
+# ── OIDC provider config (env-overridable; defaults = internal Keycloak) ──
+
+OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "https://keycloak:8443/realms/rucio")
+OIDC_TOKEN_URL = os.environ.get(
+    "OIDC_TOKEN_URL", f"{OIDC_ISSUER}/protocol/openid-connect/token"
+)
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "rucio")
+OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "rucio-secret")
+OIDC_USERNAME = os.environ.get("OIDC_USERNAME", "randomaccount")
+OIDC_PASSWORD = os.environ.get("OIDC_PASSWORD", "secret")
+
+# Storage scopes — split so audience tokens can be toggled per provider
+OIDC_STORAGE_SCOPE = os.environ.get(
+    "OIDC_STORAGE_SCOPE", "openid storage.read:/ storage.modify:/"
+)
+# aud:* is Keycloak-only syntax; blank it for EGI
+OIDC_TEAPOT_AUD_SCOPE = os.environ.get(
+    "OIDC_TEAPOT_AUD_SCOPE", "aud:teapot1 aud:teapot2"
+)
+
 # ── Container exec ────────────────────────────────────────────────────────
 
 
@@ -458,31 +478,26 @@ def rucio_client():
 
 @pytest.fixture(scope="session")
 def oidc_token():
-    """
-    Keycloak resource-owner password token for 'randomaccount'.
-    Scopes include storage read/write — used for Teapot seeding and
-    as the bearer token Rucio will exchange for FTS TPC submissions.
-    """
     return fetch_token_password(
-        KEYCLOAK_TOKEN_URL,
-        client_id="rucio",
-        client_secret="rucio-secret",
-        username="randomaccount",
-        password="secret",
-        scope="openid storage.read:/ storage.modify:/",
+        OIDC_TOKEN_URL,
+        OIDC_CLIENT_ID,
+        OIDC_CLIENT_SECRET,
+        OIDC_USERNAME,
+        OIDC_PASSWORD,
+        scope=OIDC_STORAGE_SCOPE,
     )
 
 
 @pytest.fixture(scope="session")
 def teapot_token():
-    """Token specifically for Teapot WebDAV — carries teapot audiences."""
+    scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
-        KEYCLOAK_TOKEN_URL,
-        client_id="rucio",
-        client_secret="rucio-secret",
-        username="randomaccount",
-        password="secret",
-        scope="openid storage.read:/ storage.modify:/ aud:teapot1 aud:teapot2",
+        OIDC_TOKEN_URL,
+        OIDC_CLIENT_ID,
+        OIDC_CLIENT_SECRET,
+        OIDC_USERNAME,
+        OIDC_PASSWORD,
+        scope=scope,
     )
 
 
