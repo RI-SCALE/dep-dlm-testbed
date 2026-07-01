@@ -5,7 +5,7 @@ services:
     environment:
       - XRDPORT=1094
     ports:
-      - "1096:1094"
+      - "1094:1094"
     networks:
       - dep-dlm-testbed
     volumes:
@@ -25,7 +25,7 @@ services:
     environment:
       - XRDPORT=1094
     ports:
-      - "1097:1094"
+      - "1095:1094"
     networks:
       - dep-dlm-testbed
     volumes:
