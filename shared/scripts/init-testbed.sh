@@ -26,6 +26,8 @@ EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
 declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 
+SCOPE_PROFILE="${SCOPE_PROFILE:-local}"   # local (default) | egi
+
 # ─── Cross-runtime helpers ───────────────────────────────────────
 
 _exec() {
@@ -539,10 +541,18 @@ setup_fts_oidc_provider() {
     done
 
 
-    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-    INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
-    ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'fts', 'fts-secret'),
-    ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'fts', 'fts-secret');"
+    # provider rows: always seed both slash/no-slash forms (the FK lesson)
+    if [ "$SCOPE_PROFILE" = "egi" ]; then
+        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
+        ('egi-checkin-dev', 'https://aai-dev.egi.eu/auth/realms/egi', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\"),
+        ('egi-checkin-dev-slash', 'https://aai-dev.egi.eu/auth/realms/egi/', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\");"
+    else
+        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
+        ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'fts', 'fts-secret'),
+        ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'fts', 'fts-secret');"
+    fi
 
     echo "  Restarting fts..."
     _restart fts

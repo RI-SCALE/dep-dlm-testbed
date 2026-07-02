@@ -1233,7 +1233,11 @@ class FTS3Transfertool(Transfertool):
         if oidc_support:
             fts_hostname = urlparse(external_host).hostname
             if fts_hostname is not None:
-                token = request_token(audience=fts_hostname, scope="fts")
+                scope_profile = config_get(
+                    "oidc", "scope_profile", raise_exception=False, default="wlcg"
+                )
+                fts_scope = "read:/ write:/" if scope_profile == "egi" else "fts"
+                token = request_token(audience=fts_hostname, scope=fts_scope)
                 if token is not None:
                     self.logger(
                         logging.INFO,

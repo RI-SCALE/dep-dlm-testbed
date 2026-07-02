@@ -91,6 +91,7 @@ dep-dlm-testbed
   TOKEN_MODE = managed (managed | unmanaged)
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
+  K8S_NAMESPACE = dep-dlm-sandbox
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]
@@ -122,6 +123,7 @@ Helm-only
 
 Tests
   test-rucio-transfers Rucio E2E TPC transfer test
+  test-rucio-transfers-egi Rucio E2E TPC transfer test with EGI Check-In OIDC (set OIDC_* first)
   test-copernicus-transfers Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens

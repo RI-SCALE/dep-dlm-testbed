@@ -73,6 +73,9 @@ OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "rucio")
 OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "rucio-secret")
 OIDC_USERNAME = os.environ.get("OIDC_USERNAME", "randomaccount")
 OIDC_PASSWORD = os.environ.get("OIDC_PASSWORD", "secret")
+OIDC_GRANT_TYPE = os.environ.get(
+    "OIDC_GRANT_TYPE", "password"
+)  # password | client_credentials
 
 # Storage scopes — split so audience tokens can be toggled per provider
 OIDC_STORAGE_SCOPE = os.environ.get(
@@ -388,6 +391,28 @@ def fetch_token_password(
     return resp.json()["access_token"]
 
 
+def fetch_token_client_credentials(
+    url: str,
+    client_id: str,
+    client_secret: str,
+    scope: str = "openid",
+    resource: str = None,
+) -> str:
+    data = {"grant_type": "client_credentials", "scope": scope}
+    if resource:
+        # EGI (RFC 8707): resource stamps the aud claim; audience= does not.
+        data["resource"] = resource
+    resp = requests.post(
+        url,
+        data=data,
+        auth=(client_id, client_secret),
+        verify=False,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+
 # ── WebDAV helpers ────────────────────────────────────────────────────────
 
 
@@ -476,20 +501,36 @@ def rucio_client():
     return make_client()
 
 
-@pytest.fixture(scope="session")
-def oidc_token():
+def _mint(scope: str, resource: str = None) -> str:
+    if OIDC_GRANT_TYPE == "client_credentials":
+        return fetch_token_client_credentials(
+            OIDC_TOKEN_URL,
+            OIDC_CLIENT_ID,
+            OIDC_CLIENT_SECRET,
+            scope=scope,
+            resource=resource,
+        )
     return fetch_token_password(
         OIDC_TOKEN_URL,
         OIDC_CLIENT_ID,
         OIDC_CLIENT_SECRET,
         OIDC_USERNAME,
         OIDC_PASSWORD,
-        scope=OIDC_STORAGE_SCOPE,
+        scope=scope,
     )
 
 
 @pytest.fixture(scope="session")
+def oidc_token():
+    return _mint(OIDC_STORAGE_SCOPE, resource="xrd4")
+
+
+@pytest.fixture(scope="session")
 def teapot_token():
+    # On EGI, audience comes from resource=, NOT the aud:teapot* scope
+    # (Keycloak-only syntax → invalid_scope). Keep aud: scope only for wlcg.
+    if OIDC_GRANT_TYPE == "client_credentials":
+        return _mint(OIDC_STORAGE_SCOPE, resource="teapot1")
     scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
         OIDC_TOKEN_URL,
