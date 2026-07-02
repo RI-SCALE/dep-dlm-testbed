@@ -145,8 +145,13 @@ def request_token(
     token via RFC 8693 token-exchange of that account's stored subject token.
     Otherwise fall back to the stock client_credentials grant.
     """
-    token_strategy = config_get("oidc", "token_strategy", False, "client_credentials")
+    # Resolve the scope profile once. Default "wlcg" preserves stock behaviour;
+    # "egi" opts into EGI Check-In specifics (resource= param, no aud: scope).
+    scope_profile = config_get(
+        "oidc", "scope_profile", raise_exception=False, default="wlcg"
+    )
 
+    token_strategy = config_get("oidc", "token_strategy", False, "client_credentials")
     if token_strategy == "exchange" and account is not None:
         try:
             from rucio.common.types import InternalAccount
@@ -178,30 +183,48 @@ def request_token(
 
     requested_scope = scope
     if audience:
-        aud_scope = f"aud:{audience}"
-        if aud_scope not in requested_scope.split():
-            requested_scope = f"{requested_scope} {aud_scope}".strip()
+        # aud:<audience> is Keycloak audience-scope syntax; EGI (and other
+        # RFC-8693/param-audience IdPs) reject it. Only append it when NOT on
+        # the EGI scope profile — on EGI the audience is conveyed via the
+        # `resource` request parameter (RFC 8707) instead.
+        if scope_profile != "egi":
+            aud_scope = f"aud:{audience}"
+            if aud_scope not in requested_scope.split():
+                requested_scope = f"{requested_scope} {aud_scope}".strip()
 
+    # Include the scope profile in the cache key so an EGI token minted with a
+    # `resource` (and therefore carrying an `aud` claim) is never served in
+    # place of a non-EGI token requested under the same audience/scope, or
+    # vice-versa. For non-EGI this simply appends a constant and does not
+    # change cache-hit behaviour relative to previous runs of the same profile.
     key = hashlib.md5(
-        f"audience={audience};scope={requested_scope}".encode()
+        f"profile={scope_profile};audience={audience};scope={requested_scope}".encode()
     ).hexdigest()
     if use_cache and (token := _token_cache_get(key)):
         return token
+
     try:
+        data = {
+            "grant_type": "client_credentials",
+            "audience": audience,
+            "scope": requested_scope,
+        }
+        # EGI (RFC 8707): the `resource` param is what actually stamps the `aud`
+        # claim; `audience` alone does not. Send it on the EGI profile so FTS
+        # can persist a non-null audience.
+        if scope_profile == "egi" and audience:
+            data["resource"] = audience
         response = requests.post(
             url=OIDC_PROVIDER_ENDPOINT,
             auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
-            data={
-                "grant_type": "client_credentials",
-                "audience": audience,
-                "scope": requested_scope,
-            },
+            data=data,
         )
         response.raise_for_status()
         token = response.json()["access_token"]
     except Exception:
         logging.warning("Failed to procure a token", exc_info=True)
         return None
+
     if use_cache:
         _token_cache_set(key, token)
     return token

@@ -262,6 +262,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/rucio/bootstrap-db.py:/scripts/rucio/bootstrap-db.py:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/ping"]
@@ -344,6 +345,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
 
 networks:
   dep-dlm-testbed:

@@ -25,6 +25,20 @@ GITOPS_REVISION ?= main
 GITOPS_REPO_URL ?=
 ARGOCD_NAMESPACE ?= argocd
 FLUX_NAMESPACE ?= flux-system
+
+# ── COPERNICUS S3 credentials (env-overridable; defaults = empty) ──
+S3_ACCESS_KEY ?=
+S3_SECRET_KEY ?=
+
+# ── OIDC provider (env-overridable; empty = use test defaults / Keycloak) ──
+OIDC_ISSUER           ?=
+OIDC_CLIENT_ID        ?=
+OIDC_CLIENT_SECRET    ?=
+OIDC_STORAGE_SCOPE    ?=
+OIDC_TEAPOT_AUD_SCOPE ?=
+
+SCOPE_PROFILE ?= local      # local (default) | egi
+
 # ── Validation ─────────────────────────────────────────────────────
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
@@ -75,7 +89,7 @@ certs: ## Generate certificates (CA, host certs)
 
 .PHONY: init
 init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
-	./shared/scripts/init-testbed.sh
+	$(EXEC) bash -c "SCOPE_PROFILE=$(SCOPE_PROFILE) ./init-testbed.sh"
 
 ## Lifecycle
 
@@ -208,6 +222,17 @@ helm-template: ## Render manifests without installing
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
 	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+
+.PHONY: test-rucio-transfers-egi
+test-rucio-transfers-egi: ## Rucio E2E TPC transfer test with EGI Check-In OIDC (set OIDC_* first)
+	$(EXEC_RUCIO) bash -c "\
+	  OIDC_ISSUER='$(OIDC_ISSUER)' \
+	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+	  OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
+	  OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' \
+	  OIDC_TEAPOT_AUD_SCOPE='' \
+	  DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	  pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
