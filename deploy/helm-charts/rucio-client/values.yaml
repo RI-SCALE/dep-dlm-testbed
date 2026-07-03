@@ -8,9 +8,7 @@ fullnameOverride: rucio-client
 
 env:
   - name: REQUESTS_CA_BUNDLE
-    value: /etc/grid-security/certificates/rucio_ca.pem
-  - name: AWS_CA_BUNDLE
-    value: /etc/pki/tls/cert.pem
+    value: /etc/pki/tls/certs/ca-bundle.crt
 
 volumes: []
 volumeMounts: []

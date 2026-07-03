@@ -11,6 +11,7 @@ services:
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/xrd3cert.pem:/tmp/xrdcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/xrd3key.pem:/tmp/xrdkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
@@ -31,6 +32,7 @@ services:
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/xrd4cert.pem:/tmp/xrdcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/xrd4key.pem:/tmp/xrdkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
@@ -62,7 +64,6 @@ services:
     hostname: fts
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
-      - SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
     ports:
       - "8446:8446"
     depends_on:
@@ -75,7 +76,11 @@ services:
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3config:/etc/fts3/fts3config:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/unmanaged.fts3restconfig:/etc/fts3/fts3restconfig:ro
@@ -107,9 +112,6 @@ services:
       - keycloak
     networks:
       - dep-dlm-testbed
-    environment:
-      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
     volumes:
       - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
@@ -118,6 +120,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/teapot1key.pem:/var/lib/teapot/webdav/teapot.key:ro
       - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
@@ -145,9 +148,6 @@ services:
       - keycloak
     networks:
       - dep-dlm-testbed
-    environment:
-      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
     volumes:
       - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
@@ -156,6 +156,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/teapot2key.pem:/var/lib/teapot/webdav/teapot.key:ro
       - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
@@ -224,7 +225,7 @@ services:
     image: rucio/rucio-server@sha256:0d81e6c85616106443814a9c3193e13452da6a36de3d4569a7c9ca2d94db62b1
     hostname: rucio-server
     environment:
-      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
     ports:
       - "8090:80"
     depends_on:
@@ -240,6 +241,7 @@ services:
       - bash
       - -c
       - |
+        update-ca-trust extract
         python3 /scripts/rucio/bootstrap-db.py &&
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
@@ -250,6 +252,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
@@ -274,11 +277,12 @@ services:
     networks:
       - dep-dlm-testbed
     environment:
-      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
       - AWS_CA_BUNDLE=/etc/pki/tls/cert.pem
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro
@@ -311,7 +315,7 @@ services:
     networks:
       - dep-dlm-testbed
     environment:
-      - REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/rucio_ca.pem
+      - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
       # daemon image expects the daemon name + args via env
       - RUCIO_ENABLE_LOGS=True
     entrypoint:
@@ -333,6 +337,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro

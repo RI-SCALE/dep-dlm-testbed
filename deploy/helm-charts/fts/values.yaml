@@ -31,8 +31,6 @@ volumeMounts: []
 env:
   - name: REQUESTS_CA_BUNDLE
     value: /etc/pki/tls/certs/ca-bundle.crt
-  - name: SSL_CERT_FILE
-    value: /etc/pki/tls/certs/ca-bundle.crt
   - name: X509_USER_PROXY
     value: /tmp/x509up_u0
   - name: XrdSecGSISRVNAMES
