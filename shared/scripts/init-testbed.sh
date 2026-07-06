@@ -221,7 +221,23 @@ seed_subject_tokens() {
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    _exec rucio-server env SEED_ACCOUNTS="$accounts_csv" OIDC_SEED_SCOPE="${OIDC_SEED_SCOPE}" python3 -c "
+    local grant_mode token_url
+    if [ "$SCOPE_PROFILE" = "egi" ]; then
+        grant_mode="client_credentials"
+        token_url="${OIDC_ISSUER}/protocol/openid-connect/token"
+    else
+        grant_mode="password"
+        token_url="https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
+    fi
+
+    _exec rucio-server env \
+        SEED_ACCOUNTS="$accounts_csv" \
+        OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
+        OIDC_TOKEN_URL="$token_url" \
+        OIDC_GRANT_MODE="$grant_mode" \
+        OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
+        OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
+        python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
 from rucio.core.identity import add_account_identity
@@ -229,9 +245,12 @@ from rucio.core import oidc
 from rucio.common.types import InternalAccount
 from rucio.common import exception
 
-SEED_SCOPE = os.environ['OIDC_SEED_SCOPE']
-ACCOUNTS   = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
-TOKEN_URL  = 'https://keycloak:8443/realms/rucio/protocol/openid-connect/token'
+SEED_SCOPE    = os.environ['OIDC_SEED_SCOPE']
+TOKEN_URL     = os.environ['OIDC_TOKEN_URL']
+GRANT_MODE    = os.environ['OIDC_GRANT_MODE']
+CLIENT_ID     = os.environ['OIDC_CLIENT_ID']
+CLIENT_SECRET = os.environ['OIDC_CLIENT_SECRET']
+ACCOUNTS      = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
 
 
 def _b64json(segment):
@@ -239,16 +258,24 @@ def _b64json(segment):
 
 
 def _mint_token():
-    # Each call is a fresh password grant -> a distinct JWT (different jti/iat),
-    # so each account gets its own token string. The tokens table PK is the
-    # token column, so reusing one JWT across accounts violates TOKENS_PK.
-    data = urllib.parse.urlencode({
-        'grant_type': 'password',
-        'username': 'randomaccount',
-        'password': 'secret',
-        'scope': SEED_SCOPE,
-    }).encode()
-    _auth = base64.b64encode(b'rucio:rucio-secret').decode()
+    # Each call is a fresh grant -> a distinct JWT (different jti/iat), so each
+    # account gets its own token string. The tokens table PK is the token
+    # column, so reusing one JWT across accounts violates TOKENS_PK.
+    if GRANT_MODE == 'client_credentials':
+        # EGI Check-in: no end-user account exists server-side to grant
+        # 'password' against — authenticate as the client itself.
+        data = urllib.parse.urlencode({
+            'grant_type': 'client_credentials',
+            'scope': SEED_SCOPE,
+        }).encode()
+    else:
+        data = urllib.parse.urlencode({
+            'grant_type': 'password',
+            'username': 'randomaccount',
+            'password': 'secret',
+            'scope': SEED_SCOPE,
+        }).encode()
+    _auth = base64.b64encode(f'{CLIENT_ID}:{CLIENT_SECRET}'.encode()).decode()
     req = urllib.request.Request(TOKEN_URL, data=data,
                                  headers={'Authorization': f'Basic {_auth}'})
     return json.loads(urllib.request.urlopen(req).read())['access_token']
@@ -275,7 +302,7 @@ def _store(account, access_token):
     granted_scope = claims.get('scope', '')
     granted_aud   = claims.get('aud', '')
     exp           = claims.get('exp')
-    if 'offline_access' not in granted_scope:
+    if GRANT_MODE == 'password' and 'offline_access' not in granted_scope:
         print('  ⚠ offline_access NOT granted by Keycloak - the exchange will '
               'not be able to mint a refresh token. Check that offline_access '
               'is an allowed scope on the rucio client.')
@@ -297,7 +324,6 @@ def _store(account, access_token):
     except Exception as e:
         msg = str(e).lower()
         if 'duplicate key' in msg or 'tokens_pk' in msg or 'unique constraint' in msg:
-            # token row already present for this account (idempotent re-run)
             print(f'  ✓ Subject token already present for {account}')
         else:
             raise
@@ -307,7 +333,6 @@ def _store(account, access_token):
 try:
     last = None
     for account in ACCOUNTS:
-        # fresh grant per account -> unique token string -> no PK collision
         last = _store(account, _mint_token())
 
     if last:
@@ -318,7 +343,7 @@ try:
         print(f'      expires  = {lifetime}')
 
 except urllib.error.HTTPError as e:
-    print(f'  ✗ Keycloak token request failed: HTTP {e.code} {e.read().decode()[:300]}')
+    print(f'  ✗ Token request failed: HTTP {e.code} {e.read().decode()[:300]}')
     sys.exit(1)
 except AttributeError as e:
     print(f'  ✗ Subject-token seeding failed: {e}')

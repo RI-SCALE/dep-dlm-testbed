@@ -42,7 +42,6 @@ K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
 
 # ── Service constants ─────────────────────────────────────────────────────
 
-KEYCLOAK_TOKEN_URL = "https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
 TEAPOT1_URL = "https://teapot1:8081"
 TEAPOT2_URL = "https://teapot2:8081"
 
