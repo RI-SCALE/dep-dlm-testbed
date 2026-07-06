@@ -835,6 +835,11 @@ def __get_admin_token_oidc(
             "scope": req_scope,
             "audience": req_audience,
         }
+        scope_profile = config_get(
+            "oidc", "scope_profile", raise_exception=False, default="wlcg"
+        )
+        if scope_profile == "egi" and req_audience:
+            args["resource"] = req_audience
         # in the future should use oauth2 pyoidc client (base) instead
         oidc_tokens = oidc_client.do_any(
             request=CCAccessTokenRequest,
@@ -1149,6 +1154,14 @@ def __exchange_token_oidc(
     jwt_row_dict["identity"] = kwargs.get("identity", "")
     extra_dict["ip"] = kwargs.get("ip", None)
 
+    # Resolve the scope profile the same way request_token() does. On EGI,
+    # `audience=` alone does not stamp a real `aud` claim (no per-endpoint
+    # client registration exists there) — RFC 8707's `resource` request
+    # parameter is what's needed instead, sent alongside the exchange grant.
+    scope_profile = config_get(
+        "oidc", "scope_profile", raise_exception=False, default="wlcg"
+    )
+
     # if subject token has offline access scope but *no* refresh token in the DB
     # (happens when user presents subject token acquired from other sources then Rucio CLI mechanism),
     # add offline_access scope to the token exchange request !
@@ -1177,6 +1190,11 @@ def __exchange_token_oidc(
             "audience": jwt_row_dict["audience"],
             "grant_type": grant_type,
         }
+        # EGI (RFC 8707): send `resource` alongside the exchange grant so the
+        # exchanged token actually carries a non-null `aud`. `audience=` is
+        # still sent too — harmless if EGI ignores it, needed for other IdPs.
+        if scope_profile == "egi" and jwt_row_dict["audience"]:
+            args["resource"] = jwt_row_dict["audience"]
         # exchange , access token for a new one
         oidc_token_response = oidc_dict["client"].do_any(
             Message,
