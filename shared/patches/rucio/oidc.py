@@ -136,6 +136,12 @@ def _token_cache_set(key: str, value: str) -> None:
     REGION.set(key, value)
 
 
+def _is_uri_audience(audience: Optional[str]) -> bool:
+    """RFC 8707 resource indicators must be URIs; plain values like 'rucio'
+    are valid `audience=` targets but not valid `resource=` values on EGI."""
+    return bool(audience) and audience.startswith(("http://", "https://"))
+
+
 def request_token(
     audience: str, scope: str, account: Optional[str] = None, use_cache: bool = True
 ) -> Optional[str]:
@@ -206,14 +212,15 @@ def request_token(
     try:
         data = {
             "grant_type": "client_credentials",
-            "audience": audience,
             "scope": requested_scope,
         }
         # EGI (RFC 8707): the `resource` param is what actually stamps the `aud`
         # claim; `audience` alone does not. Send it on the EGI profile so FTS
         # can persist a non-null audience.
-        if scope_profile == "egi" and audience:
+        if scope_profile == "egi" and _is_uri_audience(audience):
             data["resource"] = audience
+        else:
+            data["audience"] = audience
         response = requests.post(
             url=OIDC_PROVIDER_ENDPOINT,
             auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
@@ -833,13 +840,14 @@ def __get_admin_token_oidc(
             "client_secret": oidc_client.client_secret,
             "grant_type": "client_credentials",
             "scope": req_scope,
-            "audience": req_audience,
         }
         scope_profile = config_get(
             "oidc", "scope_profile", raise_exception=False, default="wlcg"
         )
-        if scope_profile == "egi" and req_audience:
+        if scope_profile == "egi" and _is_uri_audience(req_audience):
             args["resource"] = req_audience
+        else:
+            args["audience"] = req_audience
         # in the future should use oauth2 pyoidc client (base) instead
         oidc_tokens = oidc_client.do_any(
             request=CCAccessTokenRequest,
@@ -1186,15 +1194,17 @@ def __exchange_token_oidc(
         oidc_client = oidc_dict["client"]
         args = {
             "subject_token": subject_token_object.token,
+            "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
             "scope": jwt_row_dict["authz_scope"],
-            "audience": jwt_row_dict["audience"],
             "grant_type": grant_type,
         }
-        # EGI (RFC 8707): send `resource` alongside the exchange grant so the
-        # exchanged token actually carries a non-null `aud`. `audience=` is
-        # still sent too — harmless if EGI ignores it, needed for other IdPs.
-        if scope_profile == "egi" and jwt_row_dict["audience"]:
+        if scope_profile == "egi" and _is_uri_audience(jwt_row_dict["audience"]):
+            # EGI validates `audience=` against a registered client and rejects
+            # storage RSEs that were never registered as clients there — even
+            # when `resource=` is also present. Use `resource=` only, no `audience=`.
             args["resource"] = jwt_row_dict["audience"]
+        else:
+            args["audience"] = jwt_row_dict["audience"]
         # exchange , access token for a new one
         oidc_token_response = oidc_dict["client"].do_any(
             Message,

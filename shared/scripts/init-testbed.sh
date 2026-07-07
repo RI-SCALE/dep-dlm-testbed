@@ -6,7 +6,10 @@ K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-sandbox}"
 TOKEN_MODE="${TOKEN_MODE:-managed}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.${TOKEN_MODE}.yml}"
 
+
+FTS_OIDC="https://fts:8446"
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
+OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}"
 
 # Every Rucio account that can OWN a transfer needs a seeded OIDC subject
 # token, because the conveyor submitter calls request_token(account=<rule
@@ -86,7 +89,6 @@ _http_probe_local() {
 
 
 # ── Service URLs ─────────────────────────────────────────────────
-FTS_OIDC="https://fts:8446"
 
 ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
 
@@ -230,6 +232,11 @@ seed_subject_tokens() {
         token_url="https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
     fi
 
+    for acct in "${SEED_ACCOUNTS[@]}"; do
+        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+        "DELETE FROM tokens WHERE account='${acct}' AND identity LIKE 'SUB=%';"
+    done
+
     _exec rucio-server env \
         SEED_ACCOUNTS="$accounts_csv" \
         OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
@@ -237,6 +244,7 @@ seed_subject_tokens() {
         OIDC_GRANT_MODE="$grant_mode" \
         OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
         OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
+        OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}" \
         python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
@@ -251,6 +259,7 @@ GRANT_MODE    = os.environ['OIDC_GRANT_MODE']
 CLIENT_ID     = os.environ['OIDC_CLIENT_ID']
 CLIENT_SECRET = os.environ['OIDC_CLIENT_SECRET']
 ACCOUNTS      = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
+EXPECTED_AUDIENCE = os.environ['OIDC_EXPECTED_AUDIENCE']
 
 
 def _b64json(segment):
@@ -262,12 +271,15 @@ def _mint_token():
     # account gets its own token string. The tokens table PK is the token
     # column, so reusing one JWT across accounts violates TOKENS_PK.
     if GRANT_MODE == 'client_credentials':
-        # EGI Check-in: no end-user account exists server-side to grant
-        # 'password' against — authenticate as the client itself.
-        data = urllib.parse.urlencode({
+        data = {
             'grant_type': 'client_credentials',
             'scope': SEED_SCOPE,
-        }).encode()
+        }
+        # EGI: stamp a real aud so this subject token satisfies
+        # get_token_for_account_operation()'s EXPECTED_OIDC_AUDIENCE check.
+        if EXPECTED_AUDIENCE.startswith(('http://', 'https://')):
+            data['resource'] = EXPECTED_AUDIENCE
+        data = urllib.parse.urlencode(data).encode()
     else:
         data = urllib.parse.urlencode({
             'grant_type': 'password',
@@ -390,7 +402,11 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        if [ "$SCOPE_PROFILE" = "egi" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
@@ -408,7 +424,11 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        ra rse set-attribute --rse "$rse" --key audience --value "$instance"
+        if [ "$SCOPE_PROFILE" = "egi" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "$instance"
+        fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \

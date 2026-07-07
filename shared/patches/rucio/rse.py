@@ -2144,10 +2144,16 @@ def fill_rse_expired(rse_id: str, *, session: "Session") -> None:
 
 def determine_audience_for_rse(rse_id: str) -> str:
     """Construct the Audience claim for an RSE."""
+    profile = _scope_profile()
+    if profile == "egi":
+        # EGI Check-in resource indicators require a real URI, not a bare
+        # hostname. The `audience` RSE attribute (set at RSE registration
+        # time) already holds that URI — use it directly.
+        audience = get_rse_attribute(rse_id, "audience")
+        if audience:
+            return audience
+
     rse_protocols = get_rse_protocols(rse_id)
-    # FIXME: At the time of writing, there does not appear to be a common
-    # agreement on how sites will configure their storages.  Rucio had requested
-    # that the protocol hostname be sufficient, but this may not come to pass.
     filtered_hostnames = {
         p["hostname"] for p in rse_protocols["protocols"] if p["scheme"] == "davs"
     }

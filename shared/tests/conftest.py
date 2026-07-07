@@ -85,6 +85,20 @@ OIDC_TEAPOT_AUD_SCOPE = os.environ.get(
     "OIDC_TEAPOT_AUD_SCOPE", "aud:teapot1 aud:teapot2"
 )
 
+# EGI (RFC 8707) resource indicators require a URI. Local/Keycloak's
+# aud:* scope syntax works with bare RSE names, so this helper is only
+# consulted when OIDC_GRANT_TYPE == "client_credentials" (the EGI path);
+# under the password grant it's never even passed to the token request.
+OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX", ".example.org")
+
+
+def _rse_resource(name: str) -> str:
+    """Map a bare RSE name to the URI form EGI expects as resource=."""
+    if OIDC_GRANT_TYPE != "client_credentials":
+        return name  # unused by fetch_token_password, kept as-is for clarity
+    return f"https://{name}{OIDC_RESOURCE_SUFFIX}/"
+
+
 # ── Container exec ────────────────────────────────────────────────────────
 
 
@@ -521,7 +535,7 @@ def _mint(scope: str, resource: str = None) -> str:
 
 @pytest.fixture(scope="session")
 def oidc_token():
-    return _mint(OIDC_STORAGE_SCOPE, resource="xrd4")
+    return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("xrd4"))
 
 
 @pytest.fixture(scope="session")
@@ -529,7 +543,7 @@ def teapot_token():
     # On EGI, audience comes from resource=, NOT the aud:teapot* scope
     # (Keycloak-only syntax → invalid_scope). Keep aud: scope only for wlcg.
     if OIDC_GRANT_TYPE == "client_credentials":
-        return _mint(OIDC_STORAGE_SCOPE, resource="teapot1")
+        return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("teapot1"))
     scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
         OIDC_TOKEN_URL,
