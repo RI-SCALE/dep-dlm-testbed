@@ -1,8 +1,8 @@
 # Runbook 2 — Bring Your Own IdP
 
 ## Purpose
-Point Rucio, FTS, and your RSEs at an external OIDC issuer (e.g. EGI Check-In,
-Keycloak) instead of the bundled one. Covers where issuer, audience, client, and
+Point Rucio, FTS and your RSEs at an external OIDC issuer (e.g. EGI Check-In,
+Keycloak) instead of the bundled one. Covers where issuer, audience, client and
 **scopes** must land — including the distinction between the interactive user
 flow and the daemon (service) flow, which is the most common source of errors.
 
@@ -14,13 +14,11 @@ flow and the daemon (service) flow, which is the most common source of errors.
 - A CA bundle the server trusts that includes the issuer's chain (see "CA trust").
 
 > **EGI Check-In credentials:** the `client_id` / `client_secret` for
-> `idpsecrets.json` (interactive and SCIM) are not self-service. Request them from
-> **marvin.gajek@cern.ch**. The values in `shared/config/rucio/egi-dev/` are
-> placeholders.
+> `idpsecrets.json` (interactive and SCIM) are not self-service.
 
 ## Key concept: two clients, two flows
 
-Rucio uses **two different OIDC clients with two different grant types**, and they
+Rucio uses **two different OIDC clients with two different grant types** and they
 need different scopes:
 
 | Client | Grant type | Used by | Needs capability scopes (`read:/ write:/`)? |
@@ -32,6 +30,41 @@ If the IdP issues capability scopes for one grant type but not the other, you ge
 asymmetric failures: TPC works but `rucio upload` fails with `invalid_scope` /
 "no authorization content returned". The fix is registering the scopes on the
 **correct client**, not changing `rucio.cfg`.
+
+## Creating a client in EGI Check-In Dev
+
+EGI Check-In client registration is **not self-service** for this project — see
+the note in Prerequisites. This section is for reference/documenting what gets
+requested, and for anyone with Federation Registry access to replicate it.
+
+1. Go to the EGI Federation Registry → **Manage Services** → register a new
+   service (or request reconfiguration of an existing one).
+2. Under **Protocol Specific**, select **OIDC**.
+3. **Application Type**: `Web`.
+4. **Grant Types**: enable `client credentials`, `token-exchange` and
+   `authorization code` too if the interactive user flow (`rucio whoami`) is needed.
+5. **Token Endpoint Authorization Method**: `Client Secret over HTTP Basic`
+   (matches what `idpsecrets.json`/our scripts assume).
+6. **Scope**: enable at least `openid`, `profile`, `offline_access`,
+   `eduperson_entitlement`, `read:/`, `write:/`.
+7. **Redirect URI(s)**: required even for client_credentials-only clients in
+   some cases; register `http://localhost:8090/auth/oidc_redirect`,
+   `/auth/oidc_code`, `/auth/oidc_token` if the interactive flow will be used.
+   EGI Check-In only allows `http://localhost` redirect URIs (not `https://`)
+   for non-production registrations.
+8. **Refresh Tokens**: enable if using `token_strategy=exchange` for the
+   subject-token seed step (needs `offline_access`).
+9. Submit and self-approve on the Dev/Demo instance (production requires
+   admin approval — see EGI's [Service Provider integration workflow](
+   https://docs.egi.eu/providers/check-in/sp/)).
+10. Copy `client_id` and `client_secret` into `idpsecrets.json` — request the
+    values as described in Prerequisites if you don't have Federation Registry
+    access yourself.
+
+> **No per-RSE clients exist on egi-dev today.** Registering a client per
+> storage endpoint does not scale and is not currently required for
+> `client_credentials` mode (see the token-exchange caveat below for why it
+> *would* be needed for `token_strategy=exchange`).
 
 ## CA trust: the server must trust the issuer
 
@@ -55,7 +88,7 @@ get issuer certificate`, even though the image's system bundle
 | Setting | File / location | Example |
 |---------|-----------------|---------|
 | Issuer (exact string!) | `idpsecrets.json` → `issuer`; top-level key | `https://aai-dev.egi.eu/auth/realms/egi` |
-| Client id/secret (request from marvin.gajek@cern.ch) | `idpsecrets.json` → `client_id`/`client_secret` | per-environment |
+| Client id/secret (within a configured client, e.g. egi-dev) | `idpsecrets.json` → `client_id`/`client_secret` | per-environment |
 | Daemon client id/secret | daemon `idpsecrets.json` (its own mounted secret) | service-account client |
 | Redirect URIs | `idpsecrets.json` → `redirect_uris` (server only) | `.../auth/oidc_redirect`, `/oidc_code`, `/oidc_token` |
 | Audience | `idpsecrets.json` → `audience`; `rucio.cfg [oidc] expected_audience` | `rucio` |
@@ -76,6 +109,60 @@ get issuer certificate`, even though the image's system bundle
 > **token_strategy server cfgs:** the daemon flow is selected by
 > `[oidc] token_strategy`; ship the matching server cfg per strategy — e.g.
 > `server.client-credentials.cfg` and `server.token-exchange.cfg`.
+
+> **`token_strategy=exchange` is currently non-viable against EGI Check-In
+> Dev.** `resource=` (RFC 8707) is honored on `client_credentials`,
+> `authorization_code`, `refresh_token` and `device` grants, but **not** on
+> `token-exchange`. On the exchange grant, EGI only supports the `audience=`
+> parameter and `audience` must match a **registered client_id** — there is
+> no equivalent of "any URI" for exchange today. Since per-RSE clients aren't
+> registered (see above), an exchanged token comes back with **no `aud` claim
+> at all**, which storage endpoints will reject.
+>
+> EGI has confirmed they plan to extend
+> Keycloak to honor `resource=` on token-exchange too, initially unrestricted
+> and later gated by audience policies — no ETA yet. Until that ships, **use
+> `token_strategy=client_credentials`** (`server.client-credentials.cfg`) for
+> `SCOPE_PROFILE=egi`, not `server.token-exchange.cfg`.
+>
+> Repro script confirming the gap (client id/secret redacted):
+> ```bash
+> #!/usr/bin/env bash
+> set -euo pipefail
+> CID="<client id>"
+> CSECRET="<client secret>"
+> ISSUER="https://aai-dev.egi.eu/auth/realms/egi"
+> TOKEN_URL="${ISSUER}/protocol/openid-connect/token"
+>
+> # Step 1: mint a subject token via client_credentials + resource=
+> SUBJECT_TOKEN=$(docker exec compose-fts-1 curl -s -u "${CID}:${CSECRET}" \
+>   -d 'grant_type=client_credentials' \
+>   -d 'resource=https://fts.example.org/' \
+>   -d 'scope=openid profile eduperson_entitlement offline_access read:/ write:/' \
+>   "$TOKEN_URL" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+>
+> # Step 2: exchange it (RFC 8693), targeting a different resource
+> EXCHANGE_RESPONSE=$(docker exec compose-fts-1 curl -s -u "${CID}:${CSECRET}" \
+>   -d 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+>   -d "subject_token=${SUBJECT_TOKEN}" \
+>   -d 'subject_token_type=urn:ietf:params:oauth:token-type:access_token' \
+>   -d 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+>   -d 'resource=https://xrd3.example.org/' \
+>   -d 'scope=openid read:/ write:/' \
+>   "$TOKEN_URL")
+>
+> # Step 3: decode the exchanged token — aud will be absent
+> echo "$EXCHANGE_RESPONSE" | python3 -c "
+> import sys, json, base64
+> resp = json.load(sys.stdin)
+> t = resp['access_token']
+> p = t.split('.')[1]; p += '=' * (-len(p) % 4)
+> claims = json.loads(base64.urlsafe_b64decode(p))
+> print(json.dumps(claims, indent=2))
+> print('aud present:', 'aud' in claims)
+> "
+> ```
+> Expected output: `aud present: False`.
 
 > **Daemon's idpsecrets:** daemons may mount OIDC config from a *different* secret
 > than the server. Update the one the daemon actually mounts, or it keeps the old
@@ -149,6 +236,17 @@ tok=r.json()['access_token']; p=tok.split('.')[1]; p+='='*(-len(p)%4)
 print('scope:', json.loads(base64.urlsafe_b64decode(p)).get('scope'))
 "
 
+docker exec -e OIDC_CLIENT_ID -e OIDC_CLIENT_SECRET compose-fts-1 bash -c '
+TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" -d grant_type=client_credentials -d "scope=read:/ write:/" -d "resource=teapot2" https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token | python3 -c "import sys,json;print(json.load(sys.stdin)[\"access_token\"])")
+export BEARER_TOKEN="$TOKEN"
+TS=$(date +%s)
+SRC="davs://teapot1:8081/data/test/src-$TS.txt"
+DST="davs://teapot2:8081/data/test/dst-$TS.txt"
+echo tpc > /tmp/s.txt
+gfal-copy -v file:///tmp/s.txt "$SRC"
+gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|error|done|copying|exit"
+'
+
 # User flow end to end (browser code flow)
 rucio whoami
 ```
@@ -167,3 +265,4 @@ rucio whoami
 | `Failed to discover token endpoint` / 500 on `/auth/oidc` | Issuer string mismatch or `admin_issuer` is an alias | Match the `.well-known` issuer exactly; set `admin_issuer` to the issuer URL |
 | TPC works but `rucio upload` fails | Scopes on service client but not interactive | Add scopes to the interactive client |
 | 401 on FTS token request | Wrong client mounted by daemon | Patch the secret the daemon actually mounts |
+| Exchanged token has no `aud` claim, storage rejects it | `resource=` not honored on `token-exchange` grant (EGI-specific, confirmed limitation) | Switch to `token_strategy=client_credentials`; see caveat above |

@@ -175,6 +175,9 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLI
 # verify the rule and the destination replica
 rucio rule show <rule_id>                            # REPLICATING -> OK
 rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
+
+# Download the replicated file
+rucio download randomaccount:hello-xrd.txt --rse XRD4
 ```
 
 A rule state of `OK` with a replica on the destination means catalog → FTS →
