@@ -1,6 +1,6 @@
 {
     "name": "Kind Setup",
-    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+    "image": "mcr.microsoft.com/vscode/devcontainers/base:ubuntu-22.04",
     "features": {
       "ghcr.io/devcontainers/features/docker-in-docker:2": {},
       "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
