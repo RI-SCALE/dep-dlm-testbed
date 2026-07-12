@@ -322,6 +322,7 @@ services:
       - bash
       - -c
       - |
+        update-ca-trust extract
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         rucio-conveyor-submitter --sleep-time 5 &
