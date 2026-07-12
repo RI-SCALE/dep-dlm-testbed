@@ -18,6 +18,7 @@
 global:
   tokenMode: managed
   daemonMode: direct
+  scopeProfile: local
 
 certs:
   create: true
@@ -319,7 +320,7 @@ fts:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:
@@ -398,7 +399,7 @@ keycloak:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
   volumeMounts:
     - name: certs
@@ -442,7 +443,7 @@ xrd3:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -506,7 +507,7 @@ xrd4:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -560,7 +561,7 @@ xrd4:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -657,7 +658,7 @@ teapot1:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:
@@ -772,7 +773,7 @@ teapot2:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:

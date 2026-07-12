@@ -38,7 +38,13 @@ OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 
-SCOPE_PROFILE ?= local      # local (default) | egi
+SCOPE_PROFILE ?= local
+
+ifeq ($(SCOPE_PROFILE),local)
+  export CONFIG_PROFILE_DIR :=
+else
+  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
+endif
 
 # ── Validation ─────────────────────────────────────────────────────
 
@@ -103,7 +109,9 @@ else
 	$(HELM) dependency update $(HELM_CHART)
 	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	--set global.daemonMode=$(DAEMON_MODE) \
+	--set global.scopeProfile=$(SCOPE_PROFILE) \
+	$(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop

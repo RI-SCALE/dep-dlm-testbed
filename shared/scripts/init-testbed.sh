@@ -224,7 +224,7 @@ seed_subject_tokens() {
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
     local grant_mode token_url
-    if [ "$SCOPE_PROFILE" = "egi" ]; then
+    if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
         grant_mode="client_credentials"
         token_url="${OIDC_ISSUER}/protocol/openid-connect/token"
     else
@@ -402,7 +402,7 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        if [ "$SCOPE_PROFILE" = "egi" ]; then
+        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
             ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
@@ -424,7 +424,7 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        if [ "$SCOPE_PROFILE" = "egi" ]; then
+        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
             ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
         else
             ra rse set-attribute --rse "$rse" --key audience --value "$instance"
@@ -587,7 +587,7 @@ setup_fts_oidc_provider() {
 
 
     # provider rows: always seed both slash/no-slash forms (the FK lesson)
-    if [ "$SCOPE_PROFILE" = "egi" ]; then
+    if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
         _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
         INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
         ('egi-checkin-dev', 'https://aai-dev.egi.eu/auth/realms/egi', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\"),

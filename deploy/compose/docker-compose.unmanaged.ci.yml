@@ -16,7 +16,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
 
@@ -37,7 +37,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
 
@@ -82,8 +82,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/fts3config:/etc/fts3/fts3config:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/unmanaged.fts3restconfig:/etc/fts3/fts3restconfig:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/${CONFIG_PROFILE_DIR}fts3config:/etc/fts3/fts3config:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/fts/${CONFIG_PROFILE_DIR}unmanaged.fts3restconfig:/etc/fts3/fts3restconfig:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
@@ -113,7 +113,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/teapot1cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
@@ -125,9 +125,9 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot1-data:/data
@@ -149,7 +149,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/teapot2cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
@@ -161,9 +161,9 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot2-data:/data
@@ -247,9 +247,9 @@ services:
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
@@ -333,8 +333,8 @@ services:
         wait
     volumes:
       # identical to the `rucio` service
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
