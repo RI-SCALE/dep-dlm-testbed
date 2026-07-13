@@ -114,3 +114,7 @@ secretMounts:
     volumeName: constants-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
     subPath: rucio--constants.py
+  - secretFullName: testbed-patches
+    volumeName: rse-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
+    subPath: rucio--rse.py
