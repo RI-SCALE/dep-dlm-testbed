@@ -15,6 +15,10 @@ flow and the daemon (service) flow, which is the most common source of errors.
 
 > **EGI Check-In credentials:** the `client_id` / `client_secret` for
 > `idpsecrets.json` (interactive and SCIM) are not self-service.
+> Replace the `<valid client id>` / `<valid client secret>` placeholders in
+> `shared/config/rucio/egi-dev/idpsecrets.json` with the values you receive,
+> then re-seed (`make init SCOPE_PROFILE=egi-dev` / re-run the Vault seed job)
+> so the mounted secret picks up the change.
 
 ## Key concept: two clients, two flows
 
@@ -236,8 +240,33 @@ tok=r.json()['access_token']; p=tok.split('.')[1]; p+='='*(-len(p)%4)
 print('scope:', json.loads(base64.urlsafe_b64decode(p)).get('scope'))
 "
 
+# compose
 docker exec -e OIDC_CLIENT_ID -e OIDC_CLIENT_SECRET compose-fts-1 bash -c '
-TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" -d grant_type=client_credentials -d "scope=read:/ write:/" -d "resource=teapot2" https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token | python3 -c "import sys,json;print(json.load(sys.stdin)[\"access_token\"])")
+TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
+  -d grant_type=client_credentials \
+  -d "scope=read:/ write:/" \
+  -d "resource=https://teapot2.example.org/" \
+  https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get(\"access_token\") or d)")
+echo "TOKEN=$TOKEN"
+export BEARER_TOKEN="$TOKEN"
+TS=$(date +%s)
+SRC="davs://teapot1:8081/data/test/src-$TS.txt"
+DST="davs://teapot2:8081/data/test/dst-$TS.txt"
+echo tpc > /tmp/s.txt
+gfal-copy -v file:///tmp/s.txt "$SRC"
+gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|error|done|copying|exit"
+'
+
+# k8s
+kubectl -n dep-dlm-sandbox exec deploy/fts --   env OIDC_CLIENT_ID="$OIDC_CLIENT_ID" OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET"   bash -c '
+TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
+  -d grant_type=client_credentials \
+  -d "scope=read:/ write:/" \
+  -d "resource=https://teapot2.example.org/" \
+  https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get(\"access_token\") or d)")
+echo "TOKEN=$TOKEN"
 export BEARER_TOKEN="$TOKEN"
 TS=$(date +%s)
 SRC="davs://teapot1:8081/data/test/src-$TS.txt"
@@ -248,6 +277,7 @@ gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|err
 '
 
 # User flow end to end (browser code flow)
+export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/egi-dev/oidc-client.cfg
 rucio whoami
 ```
 
