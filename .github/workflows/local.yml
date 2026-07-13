@@ -1,10 +1,11 @@
-name: Distributed Storage Testbed (full)
+name: DEP DLM Testbed (local)
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-  schedule:
-    # Nightly at 02:00 UTC
-    - cron: "0 2 * * *"
 
 jobs:
   test:
@@ -18,16 +19,8 @@ jobs:
             daemon_mode: direct
           - arch: amd64
             runner: ubuntu-latest
-            runtime: compose
-            daemon_mode: daemons
-          - arch: amd64
-            runner: ubuntu-latest
             runtime: k8s
             daemon_mode: direct
-          - arch: amd64
-            runner: ubuntu-latest
-            runtime: k8s
-            daemon_mode: daemons
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: compose
@@ -42,6 +35,8 @@ jobs:
       runner: ${{ matrix.runner }}
       runtime: ${{ matrix.runtime }}
       daemon_mode: ${{ matrix.daemon_mode }}
+      scope_profile: local
     secrets:
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+

@@ -16,27 +16,49 @@ on:
         type: string
         default: direct
         description: "direct | daemons"
+      scope_profile:
+        required: false
+        type: string
+        default: local
+        description: "local | egi-dev | <profile>"
+      token_modes:
+        required: false
+        type: string
+        default: '["managed","unmanaged"]'
+        description: "JSON array of TOKEN_MODE values to run"
     secrets:
       S3_ACCESS_KEY:
         required: false
       S3_SECRET_KEY:
         required: false
+      OIDC_CLIENT_ID:
+        required: false
+      OIDC_CLIENT_SECRET:
+        required: false
+      EGI_TEST_SUB:
+        required: false
 
 jobs:
   test:
     runs-on: ${{ inputs.runner }}
-    name: ${{ inputs.runtime }} | ${{ inputs.daemon_mode }} | ${{ matrix.mode }}
+    name: ${{ inputs.runtime }} | ${{ inputs.daemon_mode }} | ${{ inputs.scope_profile }} | ${{ matrix.mode }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        mode: [managed, unmanaged]
+        mode: ${{ fromJSON(inputs.token_modes) }}
     env:
       TESTBED_HOST_SOURCE: ${{ github.workspace }}
       RUNTIME: ${{ inputs.runtime }}
       TOKEN_MODE: ${{ matrix.mode }}
       DAEMON_MODE: ${{ inputs.daemon_mode }}
+      SCOPE_PROFILE: ${{ inputs.scope_profile }}
       COMPOSE_FILE: deploy/compose/docker-compose.${{ matrix.mode }}.ci.yml
+      OIDC_ISSUER: ${{ inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' || '' }}
+      OIDC_CLIENT_ID: ${{ secrets.OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+      OIDC_GRANT_TYPE: client_credentials
+      OIDC_STORAGE_SCOPE: 'openid profile eduperson_entitlement offline_access read:/ write:/'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -106,6 +128,14 @@ jobs:
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make init
+
+      - name: Map EGI Check-In identity to seeded account (egi-dev, k8s)
+        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'k8s'
+        run: |
+          kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=${{ secrets.EGI_TEST_SUB }}, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email ci@example.org
 
       - name: Wait for fts (compose)
         if: inputs.runtime == 'compose'
