@@ -38,6 +38,18 @@ OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 
+# ── Test env injection: only export OIDC_* overrides when targeting an
+# external IdP profile. Passing OIDC_ISSUER='' etc. unconditionally would
+# shadow conftest.py's os.environ.get(..., default) fallback for the local/
+# Keycloak path, since an empty string still counts as "set".
+ifeq ($(SCOPE_PROFILE),local)
+  TEST_OIDC_ENV :=
+else
+  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
+    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+endif
+
 SCOPE_PROFILE ?= local
 
 ifeq ($(SCOPE_PROFILE),local)
@@ -229,21 +241,8 @@ helm-template: ## Render manifests without installing
 
 ## Tests
 
-.PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
-
-.PHONY: test-rucio-transfers-egi
-test-rucio-transfers-egi: ## Rucio E2E TPC transfer test with EGI Check-In OIDC (set OIDC_* first)
-	$(EXEC_RUCIO) bash -c "\
-	  OIDC_ISSUER='$(OIDC_ISSUER)' \
-	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
-	  OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
-	  OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
-	  OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' \
-	  OIDC_TEAPOT_AUD_SCOPE='' \
-	  DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) \
-	  pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
