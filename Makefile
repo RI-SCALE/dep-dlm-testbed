@@ -80,9 +80,10 @@ help: ## Show this help (default target)
 	@echo '  DAEMON_MODE = $(DAEMON_MODE) (direct | daemons)'
 	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
+	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev>] [SERVICES="svc1 svc2"]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \

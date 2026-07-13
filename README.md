@@ -89,11 +89,17 @@ Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
 
 ```bash
 source envs/egi-dev.env
-export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
-export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
+export TOKEN_MODE=unmanaged
+export DAEMON_MODE=direct
 export RUNTIME=k8s
 make start
 make init
+
+# Map a valid user identity within EGI-Dev to the seeded rucio account trough `make init`
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+  rucio-admin identity add --type OIDC \
+    --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" --account randomaccount --email marvin.gajek@cern.ch
+  
 make test-rucio-transfers-egi
 ```
 
@@ -107,9 +113,10 @@ dep-dlm-testbed
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
+  SCOPE_PROFILE = egi-dev (local | <profile>)
 
 Usage:
-  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]
+  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev>] [SERVICES="svc1 svc2"]
 
   help                 Show this help (default target)
 
