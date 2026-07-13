@@ -277,8 +277,26 @@ gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|err
 '
 
 # User flow end to end (browser code flow)
+# Port-forwards, /etc/hosts entries, and CA trust dir setup are identical to
+# the local profile — see runbook 01's "Run it (login + upload)" section if
+# you haven't done this yet. The only egi-dev-specific change is RUCIO_CONFIG.
+#
+# egi-dev note: skip the `keycloak` /etc/hosts entry from runbook 01 — the
+# issuer here is aai-dev.egi.eu, a real public host, not a local
+# port-forward target. The rucio/teapot1/xrd3 entries are still needed.
+#
+# Everything else in runbook 01 applies unchanged from here: the XRootD
+# upload (`--rse XRD3`), replicating to another RSE and driving the
+# conveyor by hand with one-shot `--run-once` invocations all work the
+# same way against egi-dev — swap in the identity/config from this
+# runbook and the rest of runbook 01's steps carry over as-is.
 export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/egi-dev/oidc-client.cfg
-rucio whoami
+rucio whoami   # browser login via aai-dev.egi.eu, paste the code
+
+# whoami only proves auth; confirm authorization end-to-end with an upload
+# (requires the identity mapping from Step 3 above):
+echo "Hello from egi-dev" >> /tmp/hello-egi.txt
+rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-egi.txt
 ```
 
 ## Troubleshooting
