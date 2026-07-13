@@ -82,6 +82,21 @@ make init
 make test-copernicus-transfers
 ```
 
+### EGI Check-In (scope profile: egi-dev)
+
+Copy `envs/egi-dev.env.example` to `envs/egi-dev.env`, fill in your EGI
+Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
+
+```bash
+source envs/egi-dev.env
+export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
+export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
+export RUNTIME=k8s
+make start
+make init
+make test-rucio-transfers-egi
+```
+
 ## Make Targets
 
 ```bash

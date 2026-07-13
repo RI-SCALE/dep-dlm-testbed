@@ -43,8 +43,17 @@ metadata:
     app.kubernetes.io/instance: {{ $.Release.Name }}
     app.kubernetes.io/managed-by: {{ $.Release.Service }}
 data:
+  {{- $merged := dict }}
+  {{- range $path, $_ := $.Files.Glob "files/configs/*/*" }}
+    {{- $rel := trimPrefix "files/configs/" $path }}
+    {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
+      {{- $_ := set $merged (base $path) $path }}
+    {{- end }}
+  {{- end }}
   {{- range $path, $_ := $.Files.Glob (printf "files/configs/*/%s/*" $profile) }}
-    {{- $name := base $path }}
+    {{- $_ := set $merged (base $path) $path }}
+  {{- end }}
+  {{- range $name, $path := $merged }}
   {{ $name }}: |-
 {{ $.Files.Get $path | indent 4 }}
   {{- end }}

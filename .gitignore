@@ -11,3 +11,5 @@
 __pycache__
 .pytest_cache
 *.0
+envs/*.env
+!envs/*.env.example
