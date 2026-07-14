@@ -18,6 +18,7 @@
 global:
   tokenMode: managed
   daemonMode: direct
+  scopeProfile: local
 
 certs:
   create: true
@@ -35,6 +36,7 @@ certs:
     teapot1key.pem: ""
     teapot2cert.pem: ""
     teapot2key.pem: ""
+    tls_ca_bundle.pem: ""
     5fca1cb1.0: ""
     b96dc756.0: ""
     5fca1cb1.signing_policy: ""
@@ -93,14 +95,13 @@ ruciodb:
           - /bin/bash
           - -c
           - |
+            update-ca-trust extract
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
             echo "gfal2 install failed"
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
-      value: /etc/grid-security/certificates/rucio_ca.pem
-    - name: SSL_CERT_FILE
       value: /etc/pki/tls/certs/ca-bundle.crt
 
   secretMounts:
@@ -115,6 +116,7 @@ ruciodb:
         - { key: hostcert_with_key.pem, path: hostcert_with_key.pem, mode: 0600 }
         - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
         - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
+        - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
 
     - secretFullName: rucio-server-cfg
       volumeName: rucio-cfg-server
@@ -142,6 +144,10 @@ ruciodb:
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
+    - secretFullName: testbed-patches
+      volumeName: rse-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
+      subPath: rucio--rse.py
 
 
 rucio-daemons:
@@ -159,6 +165,7 @@ rucio-daemons:
           - /bin/bash
           - -c
           - |
+            update-ca-trust extract
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -218,8 +225,6 @@ rucio-daemons:
 
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
-      value: /etc/grid-security/certificates/rucio_ca.pem
-    - name: SSL_CERT_FILE
       value: /etc/pki/tls/certs/ca-bundle.crt
 
   secretMounts:
@@ -228,11 +233,12 @@ rucio-daemons:
       mountPath: /etc/grid-security
       defaultMode: 0600
       items:
-        - { key: hostcert.pem,          path: hostcert.pem }
-        - { key: hostkey.pem,           path: hostkey.pem }
-        - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
-        - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
-        - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+        - { key: hostcert.pem,          path: hostcert.pem, mode: 0644 }
+        - { key: hostkey.pem,           path: hostkey.pem, mode: 0600 }
+        - { key: hostcert_with_key.pem, path: hostcert_with_key.pem, mode: 0600 }
+        - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
+        - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
+        - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
     - secretFullName: rucio-server-cfg
       volumeName: rucio-cfg-server
       mountPath: /opt/rucio/etc/rucio.cfg
@@ -257,6 +263,10 @@ rucio-daemons:
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
+    - secretFullName: testbed-patches
+      volumeName: rse-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
+      subPath: rucio--rse.py
 
 # FTS
 
@@ -284,6 +294,10 @@ fts:
 
           - key: rucio_ca.pem
             path: rucio_ca.pem
+            mode: 0644
+
+          - key: tls_ca_bundle.pem
+            path: tls_ca_bundle.pem
             mode: 0644
 
           - key: 5fca1cb1.0
@@ -314,7 +328,7 @@ fts:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:
@@ -328,6 +342,9 @@ fts:
     - name: certs
       mountPath: /etc/grid-security/hostkey.pem
       subPath: hostkey.pem
+    - name: certs
+      mountPath: /etc/grid-security/certificates/tls_ca_bundle.pem
+      subPath: certificates/tls_ca_bundle.pem
     - name: certs
       mountPath: /etc/grid-security/certificates/5fca1cb1.0
       subPath: 5fca1cb1.0
@@ -390,7 +407,7 @@ keycloak:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
   volumeMounts:
     - name: certs
@@ -434,7 +451,7 @@ xrd3:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -442,6 +459,9 @@ xrd3:
         defaultMode: 0755
 
   volumeMounts:
+    - name: certs
+      mountPath: /etc/grid-security/certificates/tls_ca_bundle.pem
+      subPath: certificates/tls_ca_bundle.pem
     - name: certs
       mountPath: /etc/grid-security/certificates/5fca1cb1.0
       subPath: rucio_ca.pem
@@ -495,7 +515,7 @@ xrd4:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -503,6 +523,9 @@ xrd4:
         defaultMode: 0755
 
   volumeMounts:
+    - name: certs
+      mountPath: /etc/grid-security/certificates/tls_ca_bundle.pem
+      subPath: certificates/tls_ca_bundle.pem
     - name: certs
       mountPath: /etc/grid-security/certificates/5fca1cb1.0
       subPath: rucio_ca.pem
@@ -546,7 +569,7 @@ xrd4:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: scripts
       configMap:
@@ -566,6 +589,10 @@ xrd4:
     - name: certs
       mountPath: /etc/grid-security/hostkey.pem
       subPath: hostkey.pem
+      readOnly: true
+    - name: certs
+      mountPath: /etc/grid-security/certificates/tls_ca_bundle.pem
+      subPath: certificates/tls_ca_bundle.pem
       readOnly: true
     - name: certs
       mountPath: /etc/grid-security/certificates/5fca1cb1.0
@@ -622,6 +649,9 @@ teapot1:
       secret:
         secretName: testbed-certs
         items:
+          - key: tls_ca_bundle.pem
+            path: tls_ca_bundle.pem
+
           - key: rucio_ca.pem
             path: 5fca1cb1.0
 
@@ -636,7 +666,7 @@ teapot1:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:
@@ -734,6 +764,9 @@ teapot2:
       secret:
         secretName: testbed-certs
         items:
+          - key: tls_ca_bundle.pem
+            path: tls_ca_bundle.pem
+
           - key: rucio_ca.pem
             path: 5fca1cb1.0
 
@@ -748,7 +781,7 @@ teapot2:
 
     - name: configs
       configMap:
-        name: testbed-configs
+        name: '{{ if eq .Values.global.scopeProfile "egi-dev" }}testbed-configs-egi-dev{{ else }}testbed-configs{{ end }}'
 
     - name: patches
       secret:

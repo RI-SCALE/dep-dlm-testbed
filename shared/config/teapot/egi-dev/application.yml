@@ -1,0 +1,22 @@
+oauth:
+  enable-oidc: true
+  issuers:
+    - name: egi-checkin-dev
+      issuer: "https://aai-dev.egi.eu/auth/realms/egi"
+storm:
+  authz:
+    policies:
+      - sa: data
+        actions: [all]
+        effect: permit
+        description: "Grant full access to EGI Check-In tokens"
+        paths: ["/**"]
+        principals:
+          - type: jwt-issuer
+            params: { iss: "https://aai-dev.egi.eu/auth/realms/egi" }
+      - sa: data
+        actions: [all]
+        effect: deny
+        paths: ["/**"]
+        principals:
+          - type: anyone

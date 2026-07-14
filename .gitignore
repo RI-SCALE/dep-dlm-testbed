@@ -7,6 +7,9 @@
 *.tgz
 !rucio_ca.key.pem
 !rucio_ca.pem
+!tls_ca_bundle.pem
 __pycache__
 .pytest_cache
 *.0
+envs/*.env
+!envs/*.env.example

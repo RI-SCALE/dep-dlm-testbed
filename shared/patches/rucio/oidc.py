@@ -136,6 +136,12 @@ def _token_cache_set(key: str, value: str) -> None:
     REGION.set(key, value)
 
 
+def _is_uri_audience(audience: Optional[str]) -> bool:
+    """RFC 8707 resource indicators must be URIs; plain values like 'rucio'
+    are valid `audience=` targets but not valid `resource=` values on EGI."""
+    return bool(audience) and audience.startswith(("http://", "https://"))
+
+
 def request_token(
     audience: str, scope: str, account: Optional[str] = None, use_cache: bool = True
 ) -> Optional[str]:
@@ -145,8 +151,13 @@ def request_token(
     token via RFC 8693 token-exchange of that account's stored subject token.
     Otherwise fall back to the stock client_credentials grant.
     """
-    token_strategy = config_get("oidc", "token_strategy", False, "client_credentials")
+    # Resolve the scope profile once. Default "wlcg" preserves stock behaviour;
+    # "egi" opts into EGI Check-In specifics (resource= param, no aud: scope).
+    scope_profile = config_get(
+        "oidc", "scope_profile", raise_exception=False, default="wlcg"
+    )
 
+    token_strategy = config_get("oidc", "token_strategy", False, "client_credentials")
     if token_strategy == "exchange" and account is not None:
         try:
             from rucio.common.types import InternalAccount
@@ -178,30 +189,49 @@ def request_token(
 
     requested_scope = scope
     if audience:
-        aud_scope = f"aud:{audience}"
-        if aud_scope not in requested_scope.split():
-            requested_scope = f"{requested_scope} {aud_scope}".strip()
+        # aud:<audience> is Keycloak audience-scope syntax; EGI (and other
+        # RFC-8693/param-audience IdPs) reject it. Only append it when NOT on
+        # the EGI scope profile — on EGI the audience is conveyed via the
+        # `resource` request parameter (RFC 8707) instead.
+        if scope_profile != "egi":
+            aud_scope = f"aud:{audience}"
+            if aud_scope not in requested_scope.split():
+                requested_scope = f"{requested_scope} {aud_scope}".strip()
 
+    # Include the scope profile in the cache key so an EGI token minted with a
+    # `resource` (and therefore carrying an `aud` claim) is never served in
+    # place of a non-EGI token requested under the same audience/scope, or
+    # vice-versa. For non-EGI this simply appends a constant and does not
+    # change cache-hit behaviour relative to previous runs of the same profile.
     key = hashlib.md5(
-        f"audience={audience};scope={requested_scope}".encode()
+        f"profile={scope_profile};audience={audience};scope={requested_scope}".encode()
     ).hexdigest()
     if use_cache and (token := _token_cache_get(key)):
         return token
+
     try:
+        data = {
+            "grant_type": "client_credentials",
+            "scope": requested_scope,
+        }
+        # EGI (RFC 8707): the `resource` param is what actually stamps the `aud`
+        # claim; `audience` alone does not. Send it on the EGI profile so FTS
+        # can persist a non-null audience.
+        if scope_profile == "egi" and _is_uri_audience(audience):
+            data["resource"] = audience
+        else:
+            data["audience"] = audience
         response = requests.post(
             url=OIDC_PROVIDER_ENDPOINT,
             auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
-            data={
-                "grant_type": "client_credentials",
-                "audience": audience,
-                "scope": requested_scope,
-            },
+            data=data,
         )
         response.raise_for_status()
         token = response.json()["access_token"]
     except Exception:
         logging.warning("Failed to procure a token", exc_info=True)
         return None
+
     if use_cache:
         _token_cache_set(key, token)
     return token
@@ -810,8 +840,14 @@ def __get_admin_token_oidc(
             "client_secret": oidc_client.client_secret,
             "grant_type": "client_credentials",
             "scope": req_scope,
-            "audience": req_audience,
         }
+        scope_profile = config_get(
+            "oidc", "scope_profile", raise_exception=False, default="wlcg"
+        )
+        if scope_profile == "egi" and _is_uri_audience(req_audience):
+            args["resource"] = req_audience
+        else:
+            args["audience"] = req_audience
         # in the future should use oauth2 pyoidc client (base) instead
         oidc_tokens = oidc_client.do_any(
             request=CCAccessTokenRequest,
@@ -1126,6 +1162,14 @@ def __exchange_token_oidc(
     jwt_row_dict["identity"] = kwargs.get("identity", "")
     extra_dict["ip"] = kwargs.get("ip", None)
 
+    # Resolve the scope profile the same way request_token() does. On EGI,
+    # `audience=` alone does not stamp a real `aud` claim (no per-endpoint
+    # client registration exists there) — RFC 8707's `resource` request
+    # parameter is what's needed instead, sent alongside the exchange grant.
+    scope_profile = config_get(
+        "oidc", "scope_profile", raise_exception=False, default="wlcg"
+    )
+
     # if subject token has offline access scope but *no* refresh token in the DB
     # (happens when user presents subject token acquired from other sources then Rucio CLI mechanism),
     # add offline_access scope to the token exchange request !
@@ -1150,10 +1194,17 @@ def __exchange_token_oidc(
         oidc_client = oidc_dict["client"]
         args = {
             "subject_token": subject_token_object.token,
+            "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
             "scope": jwt_row_dict["authz_scope"],
-            "audience": jwt_row_dict["audience"],
             "grant_type": grant_type,
         }
+        if scope_profile == "egi" and _is_uri_audience(jwt_row_dict["audience"]):
+            # EGI validates `audience=` against a registered client and rejects
+            # storage RSEs that were never registered as clients there — even
+            # when `resource=` is also present. Use `resource=` only, no `audience=`.
+            args["resource"] = jwt_row_dict["audience"]
+        else:
+            args["audience"] = jwt_row_dict["audience"]
         # exchange , access token for a new one
         oidc_token_response = oidc_dict["client"].do_any(
             Message,

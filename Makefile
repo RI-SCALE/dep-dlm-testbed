@@ -25,6 +25,39 @@ GITOPS_REVISION ?= main
 GITOPS_REPO_URL ?=
 ARGOCD_NAMESPACE ?= argocd
 FLUX_NAMESPACE ?= flux-system
+
+# ── COPERNICUS S3 credentials (env-overridable; defaults = empty) ──
+S3_ACCESS_KEY ?=
+S3_SECRET_KEY ?=
+
+# ── OIDC provider (env-overridable; empty = use test defaults / Keycloak) ──
+OIDC_ISSUER           ?=
+OIDC_CLIENT_ID        ?=
+OIDC_CLIENT_SECRET    ?=
+OIDC_STORAGE_SCOPE    ?=
+OIDC_TEAPOT_AUD_SCOPE ?=
+OIDC_GRANT_TYPE       ?= password
+
+# ── Test env injection: only export OIDC_* overrides when targeting an
+# external IdP profile. Passing OIDC_ISSUER='' etc. unconditionally would
+# shadow conftest.py's os.environ.get(..., default) fallback for the local/
+# Keycloak path, since an empty string still counts as "set".
+ifeq ($(SCOPE_PROFILE),local)
+  TEST_OIDC_ENV :=
+else
+  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
+    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+endif
+
+SCOPE_PROFILE ?= local
+
+ifeq ($(SCOPE_PROFILE),local)
+  export CONFIG_PROFILE_DIR :=
+else
+  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
+endif
+
 # ── Validation ─────────────────────────────────────────────────────
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
@@ -59,9 +92,10 @@ help: ## Show this help (default target)
 	@echo '  DAEMON_MODE = $(DAEMON_MODE) (direct | daemons)'
 	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
+	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev>] [SERVICES="svc1 svc2"]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
@@ -75,7 +109,7 @@ certs: ## Generate certificates (CA, host certs)
 
 .PHONY: init
 init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
-	./shared/scripts/init-testbed.sh
+	SCOPE_PROFILE=$(SCOPE_PROFILE) ./shared/scripts/init-testbed.sh
 
 ## Lifecycle
 
@@ -88,7 +122,9 @@ else
 	$(HELM) dependency update $(HELM_CHART)
 	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set global.daemonMode=$(DAEMON_MODE) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	--set global.daemonMode=$(DAEMON_MODE) \
+	--set global.scopeProfile=$(SCOPE_PROFILE) \
+	$(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
@@ -205,9 +241,8 @@ helm-template: ## Render manifests without installing
 
 ## Tests
 
-.PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E TPC transfer test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)

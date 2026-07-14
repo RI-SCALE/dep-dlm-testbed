@@ -37,7 +37,8 @@ from jwt import PyJWKClient
 config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
 config.read("/etc/teapot/config.ini")
 
-JWKS_URL = "https://keycloak:8443/realms/rucio/protocol/openid-connect/certs"
+TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
+JWKS_URL = f"{TRUSTED_ISS.rstrip('/')}/protocol/openid-connect/certs"
 TRUSTED_ISS = config["Teapot"]["trusted_OP"]
 _jwk_client = PyJWKClient(JWKS_URL)
 

@@ -53,7 +53,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-        {{- toYaml .Values.volumes | nindent 8 }}
+        {{- tpl (toYaml .Values.volumes) $ | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

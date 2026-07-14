@@ -10,8 +10,8 @@
     "forwardPorts": [
         8446, 8449,
         3306, 8443,
-        1096, 1097,
-        8080, 8090, 8448
+        1094, 1095,
+        8080, 8090
     ],
     "postCreateCommand": "bash .devcontainer/setup.sh",
     "remoteUser": "root",

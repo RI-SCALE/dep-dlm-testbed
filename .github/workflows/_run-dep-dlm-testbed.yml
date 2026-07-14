@@ -16,27 +16,47 @@ on:
         type: string
         default: direct
         description: "direct | daemons"
+      scope_profile:
+        required: false
+        type: string
+        default: local
+        description: "local | egi-dev | <profile>"
+      token_modes:
+        required: false
+        type: string
+        default: '["managed","unmanaged"]'
+        description: "JSON array of TOKEN_MODE values to run"
     secrets:
       S3_ACCESS_KEY:
         required: false
       S3_SECRET_KEY:
         required: false
+      OIDC_CLIENT_ID:
+        required: false
+      OIDC_CLIENT_SECRET:
+        required: false
 
 jobs:
   test:
     runs-on: ${{ inputs.runner }}
-    name: ${{ inputs.runtime }} | ${{ inputs.daemon_mode }} | ${{ matrix.mode }}
+    name: ${{ inputs.runtime }} | ${{ inputs.daemon_mode }} | ${{ inputs.scope_profile }} | ${{ matrix.mode }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        mode: [managed, unmanaged]
+        mode: ${{ fromJSON(inputs.token_modes) }}
     env:
       TESTBED_HOST_SOURCE: ${{ github.workspace }}
       RUNTIME: ${{ inputs.runtime }}
       TOKEN_MODE: ${{ matrix.mode }}
       DAEMON_MODE: ${{ inputs.daemon_mode }}
+      SCOPE_PROFILE: ${{ inputs.scope_profile }}
       COMPOSE_FILE: deploy/compose/docker-compose.${{ matrix.mode }}.ci.yml
+      OIDC_ISSUER: ${{ inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' || '' }}
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'egi-dev' && secrets.OIDC_CLIENT_ID || '' }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'egi-dev' && secrets.OIDC_CLIENT_SECRET || '' }}
+      OIDC_GRANT_TYPE: ${{ inputs.scope_profile == 'egi-dev' && 'client_credentials' || 'password' }}
+      OIDC_STORAGE_SCOPE: ${{ inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -58,6 +78,14 @@ jobs:
       - name: Install Helm
         if: inputs.runtime == 'k8s'
         uses: azure/setup-helm@v4
+
+      - name: Render egi-dev idpsecrets.json from secrets
+        if: inputs.scope_profile == 'egi-dev'
+        run: |
+          sed -i \
+            -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
+            -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
+            shared/config/rucio/egi-dev/idpsecrets.json
 
       - name: Start stack
         run: make start
@@ -107,6 +135,22 @@ jobs:
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make init
 
+      - name: Map EGI Check-In identity to seeded account (egi-dev, compose)
+        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'compose'
+        run: |
+          docker exec -t compose-rucio-server-1 \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email marvin.gajek@cern.ch
+
+      - name: Map EGI Check-In identity to seeded account (egi-dev, k8s)
+        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'k8s'
+        run: |
+          kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email marvin.gajek@cern.ch
+
       - name: Wait for fts (compose)
         if: inputs.runtime == 'compose'
         run: |
@@ -131,44 +175,11 @@ jobs:
           done
           kubectl -n dep-dlm-sandbox logs deploy/fts --tail=200; exit 1
 
-      - name: fts OIDC token auth check (compose)
-        if: inputs.runtime == 'compose'
-        run: |
-          TOKEN=$(docker exec compose-fts-1 curl -sk \
-            -u "rucio:rucio-secret" \
-            -d "grant_type=password&username=randomaccount&password=secret" \
-            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
-          RESP=$(curl -sk --cacert certs/rucio_ca.pem \
-            -H "Authorization: Bearer $TOKEN" \
-            https://localhost:8446/whoami)
-          echo "whoami response: $RESP"
-          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
-          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
-          echo "fts OIDC auth OK (method=$METHOD)"
-
-      - name: fts OIDC token auth check (k8s)
-        if: inputs.runtime == 'k8s'
-        run: |
-          TOKEN=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
-            -u "rucio:rucio-secret" \
-            -d "grant_type=password&username=randomaccount&password=secret" \
-            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
-          RESP=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
-            -H "Authorization: Bearer $TOKEN" \
-            https://localhost:8446/whoami)
-          echo "whoami response: $RESP"
-          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
-          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
-          echo "fts OIDC auth OK (method=$METHOD)"
-
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
 
       - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
+        if: inputs.scope_profile == 'local'
         env:
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}

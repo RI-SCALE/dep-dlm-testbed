@@ -2,7 +2,7 @@
 set -e
 
 # Register any newly mounted CA certs into the system trust store
-update-ca-certificates --fresh 2>/dev/null || true
+update-ca-certificates --fresh
 
 # Ensure the data volume is writable by the teapot user
 chown -R teapot:teapot /data 2>/dev/null || true

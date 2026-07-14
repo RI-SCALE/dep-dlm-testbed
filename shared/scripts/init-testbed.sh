@@ -6,7 +6,10 @@ K8S_NAMESPACE="${K8S_NAMESPACE:-dep-dlm-sandbox}"
 TOKEN_MODE="${TOKEN_MODE:-managed}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/deploy/compose/docker-compose.${TOKEN_MODE}.yml}"
 
+
+FTS_OIDC="https://fts:8446"
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
+OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}"
 
 # Every Rucio account that can OWN a transfer needs a seeded OIDC subject
 # token, because the conveyor submitter calls request_token(account=<rule
@@ -25,6 +28,11 @@ KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
 declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
+
+SCOPE_PROFILE="${SCOPE_PROFILE:-local}"   # local (default) | egi
+
+OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
+OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER}/protocol/openid-connect/token}"
 
 # ─── Cross-runtime helpers ───────────────────────────────────────
 
@@ -84,7 +92,6 @@ _http_probe_local() {
 
 
 # ── Service URLs ─────────────────────────────────────────────────
-FTS_OIDC="https://fts:8446"
 
 ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
 
@@ -103,7 +110,7 @@ wait_for_infrastructure() {
 
     for i in $(seq 1 30); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            https://keycloak:8443/realms/rucio/.well-known/openid-configuration \
+            "${OIDC_ISSUER}/.well-known/openid-configuration" \
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
         echo "  [$i] Keycloak HTTP $code — waiting..."; sleep 5
@@ -122,11 +129,18 @@ setup_accounts_and_identities() {
     ra account add --type USER --email randomaccount@rucio randomaccount || true
     ra account add-attribute randomaccount --key admin --value True || true
 
+    if [ "$SCOPE_PROFILE" != "local" ]; then
+        echo "  Skipping password-grant identity registration (SCOPE_PROFILE=$SCOPE_PROFILE)."
+        echo "  Map the external identity manually — see runbook 02 Step 3"
+        echo "  (rucio-admin identity add --type OIDC --id \"SUB=..., ISS=$OIDC_ISSUER\" ...)."
+        return 0
+    fi
+
     echo "  Verifying Keycloak token endpoint..."
     AUTH=$(echo -n "rucio:rucio-secret" | base64)
     for i in $(seq 1 12); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            -X POST https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+            -X POST "$OIDC_TOKEN_URL" \
             -H "Authorization: Basic $AUTH" \
             -d "grant_type=password&username=randomaccount&password=secret" \
             2>/dev/null) || true
@@ -135,8 +149,9 @@ setup_accounts_and_identities() {
     done
 
     echo "  Registering OIDC identity for randomaccount..."
-    _exec rucio-server python3 -c "
+    _exec rucio-server env OIDC_TOKEN_URL="$OIDC_TOKEN_URL" python3 -c "
 import urllib.request, urllib.parse, json, base64
+import os
 from rucio.core.identity import add_identity, add_account_identity
 from rucio.common.types import InternalAccount
 from rucio.common import exception
@@ -175,7 +190,7 @@ def ensure_account_identity(identity, id_type, account, email):
 try:
     data = urllib.parse.urlencode({'grant_type':'password','username':'randomaccount','password':'secret'}).encode()
     _auth = base64.b64encode(b'rucio:rucio-secret').decode()
-    req = urllib.request.Request('https://keycloak:8443/realms/rucio/protocol/openid-connect/token',
+    req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'],
         data=data, headers={'Authorization': f'Basic {_auth}'})
     resp = json.loads(urllib.request.urlopen(req).read())
     claims = json.loads(base64.urlsafe_b64decode(resp['access_token'].split('.')[1] + '=='))
@@ -219,7 +234,27 @@ seed_subject_tokens() {
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    _exec rucio-server env SEED_ACCOUNTS="$accounts_csv" OIDC_SEED_SCOPE="${OIDC_SEED_SCOPE}" python3 -c "
+    local grant_mode token_url="$OIDC_TOKEN_URL"
+    if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+        grant_mode="client_credentials"
+    else
+        grant_mode="password"
+    fi
+
+    for acct in "${SEED_ACCOUNTS[@]}"; do
+        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+        "DELETE FROM tokens WHERE account='${acct}' AND identity LIKE 'SUB=%';"
+    done
+
+    _exec rucio-server env \
+        SEED_ACCOUNTS="$accounts_csv" \
+        OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
+        OIDC_TOKEN_URL="$token_url" \
+        OIDC_GRANT_MODE="$grant_mode" \
+        OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
+        OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
+        OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}" \
+        python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
 from rucio.core.identity import add_account_identity
@@ -227,9 +262,13 @@ from rucio.core import oidc
 from rucio.common.types import InternalAccount
 from rucio.common import exception
 
-SEED_SCOPE = os.environ['OIDC_SEED_SCOPE']
-ACCOUNTS   = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
-TOKEN_URL  = 'https://keycloak:8443/realms/rucio/protocol/openid-connect/token'
+SEED_SCOPE    = os.environ['OIDC_SEED_SCOPE']
+TOKEN_URL     = os.environ['OIDC_TOKEN_URL']
+GRANT_MODE    = os.environ['OIDC_GRANT_MODE']
+CLIENT_ID     = os.environ['OIDC_CLIENT_ID']
+CLIENT_SECRET = os.environ['OIDC_CLIENT_SECRET']
+ACCOUNTS      = [a for a in os.environ['SEED_ACCOUNTS'].split(',') if a]
+EXPECTED_AUDIENCE = os.environ['OIDC_EXPECTED_AUDIENCE']
 
 
 def _b64json(segment):
@@ -237,16 +276,27 @@ def _b64json(segment):
 
 
 def _mint_token():
-    # Each call is a fresh password grant -> a distinct JWT (different jti/iat),
-    # so each account gets its own token string. The tokens table PK is the
-    # token column, so reusing one JWT across accounts violates TOKENS_PK.
-    data = urllib.parse.urlencode({
-        'grant_type': 'password',
-        'username': 'randomaccount',
-        'password': 'secret',
-        'scope': SEED_SCOPE,
-    }).encode()
-    _auth = base64.b64encode(b'rucio:rucio-secret').decode()
+    # Each call is a fresh grant -> a distinct JWT (different jti/iat), so each
+    # account gets its own token string. The tokens table PK is the token
+    # column, so reusing one JWT across accounts violates TOKENS_PK.
+    if GRANT_MODE == 'client_credentials':
+        data = {
+            'grant_type': 'client_credentials',
+            'scope': SEED_SCOPE,
+        }
+        # EGI: stamp a real aud so this subject token satisfies
+        # get_token_for_account_operation()'s EXPECTED_OIDC_AUDIENCE check.
+        if EXPECTED_AUDIENCE.startswith(('http://', 'https://')):
+            data['resource'] = EXPECTED_AUDIENCE
+        data = urllib.parse.urlencode(data).encode()
+    else:
+        data = urllib.parse.urlencode({
+            'grant_type': 'password',
+            'username': 'randomaccount',
+            'password': 'secret',
+            'scope': SEED_SCOPE,
+        }).encode()
+    _auth = base64.b64encode(f'{CLIENT_ID}:{CLIENT_SECRET}'.encode()).decode()
     req = urllib.request.Request(TOKEN_URL, data=data,
                                  headers={'Authorization': f'Basic {_auth}'})
     return json.loads(urllib.request.urlopen(req).read())['access_token']
@@ -273,7 +323,7 @@ def _store(account, access_token):
     granted_scope = claims.get('scope', '')
     granted_aud   = claims.get('aud', '')
     exp           = claims.get('exp')
-    if 'offline_access' not in granted_scope:
+    if GRANT_MODE == 'password' and 'offline_access' not in granted_scope:
         print('  ⚠ offline_access NOT granted by Keycloak - the exchange will '
               'not be able to mint a refresh token. Check that offline_access '
               'is an allowed scope on the rucio client.')
@@ -295,7 +345,6 @@ def _store(account, access_token):
     except Exception as e:
         msg = str(e).lower()
         if 'duplicate key' in msg or 'tokens_pk' in msg or 'unique constraint' in msg:
-            # token row already present for this account (idempotent re-run)
             print(f'  ✓ Subject token already present for {account}')
         else:
             raise
@@ -305,7 +354,6 @@ def _store(account, access_token):
 try:
     last = None
     for account in ACCOUNTS:
-        # fresh grant per account -> unique token string -> no PK collision
         last = _store(account, _mint_token())
 
     if last:
@@ -316,7 +364,7 @@ try:
         print(f'      expires  = {lifetime}')
 
 except urllib.error.HTTPError as e:
-    print(f'  ✗ Keycloak token request failed: HTTP {e.code} {e.read().decode()[:300]}')
+    print(f'  ✗ Token request failed: HTTP {e.code} {e.read().decode()[:300]}')
     sys.exit(1)
 except AttributeError as e:
     print(f'  ✗ Subject-token seeding failed: {e}')
@@ -363,7 +411,11 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
@@ -381,7 +433,11 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        ra rse set-attribute --rse "$rse" --key audience --value "$instance"
+        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "$instance"
+        fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \
@@ -539,10 +595,18 @@ setup_fts_oidc_provider() {
     done
 
 
-    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-    INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
-    ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'fts', 'fts-secret'),
-    ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'fts', 'fts-secret');"
+    # provider rows: always seed both slash/no-slash forms (the FK lesson)
+    if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
+        ('egi-checkin-dev', 'https://aai-dev.egi.eu/auth/realms/egi', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\"),
+        ('egi-checkin-dev-slash', 'https://aai-dev.egi.eu/auth/realms/egi/', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\");"
+    else
+        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
+        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
+        ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'fts', 'fts-secret'),
+        ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'fts', 'fts-secret');"
+    fi
 
     echo "  Restarting fts..."
     _restart fts
@@ -674,12 +738,17 @@ grant_token_exchange() {
 # assert a refresh_token comes back. Off by default to keep init fast.
 verify_token_exchange() {
     [ "${INIT_VERIFY_EXCHANGE:-0}" = "1" ] || return 0
+    if [ "$SCOPE_PROFILE" != "local" ]; then
+        echo "=== Skipping token-exchange self-test: non-viable on SCOPE_PROFILE=$SCOPE_PROFILE ==="
+        echo "    (see docs/runbooks/02-bring-your-own-idp.md — token_strategy=exchange caveat)"
+        return 0
+    fi
     echo "=== Self-test: token-exchange as each requester -> each target ==="
 
     local subject
     subject=$(_exec fts curl -sk \
         -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" \
-        https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+        "$OIDC_TOKEN_URL" \
         | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
     echo "  subject token: ${subject:0:30}..."
 
@@ -693,7 +762,7 @@ verify_token_exchange() {
                 -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
                 -d "subject_token=$subject" \
                 -d "audience=$aud" \
-                https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+                "$OIDC_TOKEN_URL" \
                 | python3 -c "import sys,json;r=json.load(sys.stdin);print('OK' if 'refresh_token' in r else r)"
         done
     done

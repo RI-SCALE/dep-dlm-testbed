@@ -22,6 +22,7 @@ lifecycle:
         - /bin/bash
         - -c
         - |
+          update-ca-trust extract
           dnf -y install yum-utils epel-release.noarch &&
           dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
             python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -75,8 +76,6 @@ reaper:
 
 additionalEnvs:
   - name: REQUESTS_CA_BUNDLE
-    value: /etc/grid-security/certificates/rucio_ca.pem
-  - name: SSL_CERT_FILE
     value: /etc/pki/tls/certs/ca-bundle.crt
 
 secretMounts:
@@ -85,11 +84,12 @@ secretMounts:
     mountPath: /etc/grid-security
     defaultMode: 0600
     items:
-      - { key: hostcert.pem,          path: hostcert.pem }
-      - { key: hostkey.pem,           path: hostkey.pem }
-      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem }
-      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem }
-      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0 }
+      - { key: hostcert.pem,          path: hostcert.pem, mode: 0644 }
+      - { key: hostkey.pem,           path: hostkey.pem, mode: 0600 }
+      - { key: hostcert_with_key.pem, path: hostcert_with_key.pem, mode: 0600 }
+      - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
+      - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
+      - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
   - secretFullName: rucio-server-cfg
     volumeName: rucio-cfg-server
     mountPath: /opt/rucio/etc/rucio.cfg
@@ -114,3 +114,7 @@ secretMounts:
     volumeName: constants-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
     subPath: rucio--constants.py
+  - secretFullName: testbed-patches
+    volumeName: rse-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
+    subPath: rucio--rse.py

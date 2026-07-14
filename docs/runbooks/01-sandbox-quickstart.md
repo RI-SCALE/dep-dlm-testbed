@@ -51,9 +51,6 @@ grants plus seeded OIDC subject tokens.
 FTS moves the bytes server-side):
 ```bash
 make test-rucio-transfers
-# or
-kubectl exec -n dep-dlm-sandbox deploy/rucio-client -- \
-   bash -c "RUNTIME=k8s K8S_NAMESPACE=dep-dlm-sandbox pytest /tests/test_rucio_transfers.py -v"
 ```
 Expected: `TestXRootDOIDC`, `TestTeapotOIDC`, `TestCrossProtocolOIDC`,
 `TestDatasetOIDC` all pass — rules reach `state=OK`.
@@ -69,8 +66,8 @@ token-copy, no pod hop.
 
 ```ini
 [client]
-rucio_host  = http://localhost:8080
-auth_host   = http://localhost:8080
+rucio_host  = http://localhost:8090
+auth_host   = http://localhost:8090
 auth_type   = oidc
 account     = randomaccount
 oidc_scope  = openid offline_access storage.read:/ storage.modify:/ aud:rucio
@@ -135,7 +132,7 @@ flow will fail.
 
 ```bash
 # control-plane + auth forwards
-kubectl -n dep-dlm-sandbox port-forward svc/rucio-server 8080:80 &
+kubectl -n dep-dlm-sandbox port-forward svc/rucio-server 8090:80 &
 kubectl -n dep-dlm-sandbox port-forward svc/keycloak     8443:8443 &
 # storage forwards (gfal2 hits these directly; the local port must match the
 # RSE PFN port: Teapot davs = 8081, XRootD davs = 1094)
@@ -178,6 +175,9 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLI
 # verify the rule and the destination replica
 rucio rule show <rule_id>                            # REPLICATING -> OK
 rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
+
+# Download the replicated file
+rucio download randomaccount:hello-xrd.txt --rse XRD4
 ```
 
 A rule state of `OK` with a replica on the destination means catalog → FTS →
@@ -302,7 +302,7 @@ kill %1 %2 %3 %4
 | Rule `STUCK` / `NO_SOURCES` | No RSE distance, or no source replica | Add a distance; ensure the source DID has bytes |
 | Rule `STUCK` + `exchange returned no token aud=<rse>` | FTS token path not seeded | Re-run `make init TOKEN_MODE=managed`; check `ftsdb-0` `t_token_provider` |
 | OIDC `whoami` -> `500` | apache worker can't read CA (`0600 root`) -> discovery `PermissionError(13)` | Mount `rucio_ca.pem` `0644` per-item; `rollout restart deploy/rucio-server` |
-| OIDC login -> `Invalid parameter: redirect_uri` | `rucio` client `redirectUris` lacks the sent URI | Add `http://localhost:8080/auth/*` and re-import the realm |
+| OIDC login -> `Invalid parameter: redirect_uri` | `rucio` client `redirectUris` lacks the sent URI | Add `http://localhost:8090/auth/*` and re-import the realm |
 | OIDC login -> `invalid_scope` | Requested scope includes `profile` or a non-requestable scope | Use `openid offline_access storage.read:/ storage.modify:/ aud:rucio` (all requestable on the `rucio` client) |
 | OIDC URL is `https://` but forward is `http` | Server advertises `https` via `X-Forwarded-Proto` | Open the `http://` form of the printed URL |
 | OIDC redirect goes to `https://rucio/...` | `oidc.py` picks the redirect at random | Trim the idpsecrets issuer-URL key's `redirect_uris` to the `localhost:8080` forms only |
