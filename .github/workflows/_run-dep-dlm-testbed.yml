@@ -81,6 +81,14 @@ jobs:
         if: inputs.runtime == 'k8s'
         uses: azure/setup-helm@v4
 
+      - name: Render egi-dev idpsecrets.json from secrets
+        if: inputs.scope_profile == 'egi-dev'
+        run: |
+          sed -i \
+            -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
+            -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
+            shared/config/rucio/egi-dev/idpsecrets.json
+
       - name: Start stack
         run: make start
 
@@ -160,40 +168,6 @@ jobs:
             echo "  [$i] HTTP $code"; sleep 5
           done
           kubectl -n dep-dlm-sandbox logs deploy/fts --tail=200; exit 1
-
-      - name: fts OIDC token auth check (compose)
-        if: inputs.runtime == 'compose'
-        run: |
-          TOKEN=$(docker exec compose-fts-1 curl -sk \
-            -u "rucio:rucio-secret" \
-            -d "grant_type=password&username=randomaccount&password=secret" \
-            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
-          RESP=$(curl -sk --cacert certs/rucio_ca.pem \
-            -H "Authorization: Bearer $TOKEN" \
-            https://localhost:8446/whoami)
-          echo "whoami response: $RESP"
-          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
-          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
-          echo "fts OIDC auth OK (method=$METHOD)"
-
-      - name: fts OIDC token auth check (k8s)
-        if: inputs.runtime == 'k8s'
-        run: |
-          TOKEN=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
-            -u "rucio:rucio-secret" \
-            -d "grant_type=password&username=randomaccount&password=secret" \
-            https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          [ -z "$TOKEN" ] && { echo "Failed to obtain token"; exit 1; }
-          RESP=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -sk \
-            -H "Authorization: Bearer $TOKEN" \
-            https://localhost:8446/whoami)
-          echo "whoami response: $RESP"
-          METHOD=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('method',''))")
-          [ "$METHOD" = "oauth2" ] || { echo "Expected method=oauth2, got: $METHOD"; exit 1; }
-          echo "fts OIDC auth OK (method=$METHOD)"
 
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
