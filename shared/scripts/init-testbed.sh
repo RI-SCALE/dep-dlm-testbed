@@ -31,6 +31,9 @@ declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"   # local (default) | egi
 
+OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
+OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER}/protocol/openid-connect/token}"
+
 # ─── Cross-runtime helpers ───────────────────────────────────────
 
 _exec() {
@@ -107,7 +110,7 @@ wait_for_infrastructure() {
 
     for i in $(seq 1 30); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            https://keycloak:8443/realms/rucio/.well-known/openid-configuration \
+            "${OIDC_ISSUER}/.well-known/openid-configuration" \
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
         echo "  [$i] Keycloak HTTP $code — waiting..."; sleep 5
@@ -126,11 +129,18 @@ setup_accounts_and_identities() {
     ra account add --type USER --email randomaccount@rucio randomaccount || true
     ra account add-attribute randomaccount --key admin --value True || true
 
+    if [ "$SCOPE_PROFILE" != "local" ]; then
+        echo "  Skipping password-grant identity registration (SCOPE_PROFILE=$SCOPE_PROFILE)."
+        echo "  Map the external identity manually — see runbook 02 Step 3"
+        echo "  (rucio-admin identity add --type OIDC --id \"SUB=..., ISS=$OIDC_ISSUER\" ...)."
+        return 0
+    fi
+
     echo "  Verifying Keycloak token endpoint..."
     AUTH=$(echo -n "rucio:rucio-secret" | base64)
     for i in $(seq 1 12); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            -X POST https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+            -X POST "$OIDC_TOKEN_URL" \
             -H "Authorization: Basic $AUTH" \
             -d "grant_type=password&username=randomaccount&password=secret" \
             2>/dev/null) || true
@@ -139,8 +149,9 @@ setup_accounts_and_identities() {
     done
 
     echo "  Registering OIDC identity for randomaccount..."
-    _exec rucio-server python3 -c "
+    _exec rucio-server env OIDC_TOKEN_URL="$OIDC_TOKEN_URL" python3 -c "
 import urllib.request, urllib.parse, json, base64
+import os
 from rucio.core.identity import add_identity, add_account_identity
 from rucio.common.types import InternalAccount
 from rucio.common import exception
@@ -179,7 +190,7 @@ def ensure_account_identity(identity, id_type, account, email):
 try:
     data = urllib.parse.urlencode({'grant_type':'password','username':'randomaccount','password':'secret'}).encode()
     _auth = base64.b64encode(b'rucio:rucio-secret').decode()
-    req = urllib.request.Request('https://keycloak:8443/realms/rucio/protocol/openid-connect/token',
+    req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'],
         data=data, headers={'Authorization': f'Basic {_auth}'})
     resp = json.loads(urllib.request.urlopen(req).read())
     claims = json.loads(base64.urlsafe_b64decode(resp['access_token'].split('.')[1] + '=='))
@@ -223,13 +234,11 @@ seed_subject_tokens() {
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    local grant_mode token_url
+    local grant_mode token_url="$OIDC_TOKEN_URL"
     if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
         grant_mode="client_credentials"
-        token_url="${OIDC_ISSUER}/protocol/openid-connect/token"
     else
         grant_mode="password"
-        token_url="https://keycloak:8443/realms/rucio/protocol/openid-connect/token"
     fi
 
     for acct in "${SEED_ACCOUNTS[@]}"; do
@@ -729,12 +738,17 @@ grant_token_exchange() {
 # assert a refresh_token comes back. Off by default to keep init fast.
 verify_token_exchange() {
     [ "${INIT_VERIFY_EXCHANGE:-0}" = "1" ] || return 0
+    if [ "$SCOPE_PROFILE" != "local" ]; then
+        echo "=== Skipping token-exchange self-test: non-viable on SCOPE_PROFILE=$SCOPE_PROFILE ==="
+        echo "    (see docs/runbooks/02-bring-your-own-idp.md — token_strategy=exchange caveat)"
+        return 0
+    fi
     echo "=== Self-test: token-exchange as each requester -> each target ==="
 
     local subject
     subject=$(_exec fts curl -sk \
         -d "client_id=rucio&client_secret=rucio-secret&grant_type=password&username=randomaccount&password=secret" \
-        https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+        "$OIDC_TOKEN_URL" \
         | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
     echo "  subject token: ${subject:0:30}..."
 
@@ -748,7 +762,7 @@ verify_token_exchange() {
                 -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
                 -d "subject_token=$subject" \
                 -d "audience=$aud" \
-                https://keycloak:8443/realms/rucio/protocol/openid-connect/token \
+                "$OIDC_TOKEN_URL" \
                 | python3 -c "import sys,json;r=json.load(sys.stdin);print('OK' if 'refresh_token' in r else r)"
         done
     done
