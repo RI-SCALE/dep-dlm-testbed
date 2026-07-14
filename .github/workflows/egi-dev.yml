@@ -34,4 +34,3 @@ jobs:
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
       OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
       OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
-      EGI_TEST_SUB: ${{ secrets.EGI_TEST_SUB }}

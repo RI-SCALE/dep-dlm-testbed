@@ -35,8 +35,6 @@ on:
         required: false
       OIDC_CLIENT_SECRET:
         required: false
-      EGI_TEST_SUB:
-        required: false
 
 jobs:
   test:
@@ -137,13 +135,21 @@ jobs:
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make init
 
+      - name: Map EGI Check-In identity to seeded account (egi-dev, compose)
+        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'compose'
+        run: |
+          docker exec -t compose-rucio-server-1 \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email marvin.gajek@cern.ch
+
       - name: Map EGI Check-In identity to seeded account (egi-dev, k8s)
         if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'k8s'
         run: |
           kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
             rucio-admin identity add --type OIDC \
-              --id "SUB=${{ secrets.EGI_TEST_SUB }}, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
-              --account randomaccount --email ci@example.org
+              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email marvin.gajek@cern.ch
 
       - name: Wait for fts (compose)
         if: inputs.runtime == 'compose'
