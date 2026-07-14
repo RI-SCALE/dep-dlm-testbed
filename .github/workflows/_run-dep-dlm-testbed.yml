@@ -179,6 +179,7 @@ jobs:
         run: make test-rucio-transfers
 
       - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
+        if: inputs.scope_profile == 'local'
         env:
           S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
           S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
