@@ -22,8 +22,8 @@ log = logging.getLogger("conftest")
 
 # ── Runtime ───────────────────────────────────────────────────────────────
 
-RUNTIME = os.environ.get("RUNTIME", "compose")
-K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", "dep-dlm-sandbox")
+RUNTIME = os.environ.get("RUNTIME") or "compose"
+K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE") or "dep-dlm-sandbox"
 
 # Maps service name → (k8s resource kind, container name or None)
 K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
@@ -48,7 +48,7 @@ TEAPOT2_URL = "https://teapot2:8081"
 # Rucio client config (userpass, single instance)
 CFG_RUCIO = "/opt/rucio/etc/rucio.cfg"
 
-DAEMON_MODE = os.environ.get("DAEMON_MODE", "direct")
+DAEMON_MODE = os.environ.get("DAEMON_MODE") or "direct"
 
 DEFAULT_CONVEYOR = (
     ["rucio-judge-evaluator", "--run-once"],
@@ -64,32 +64,30 @@ DELETION_DAEMONS = (
 
 # ── OIDC provider config (env-overridable; defaults = internal Keycloak) ──
 
-OIDC_ISSUER = os.environ.get("OIDC_ISSUER", "https://keycloak:8443/realms/rucio")
-OIDC_TOKEN_URL = os.environ.get(
-    "OIDC_TOKEN_URL", f"{OIDC_ISSUER}/protocol/openid-connect/token"
+OIDC_ISSUER = os.environ.get("OIDC_ISSUER") or "https://keycloak:8443/realms/rucio"
+OIDC_TOKEN_URL = (
+    os.environ.get("OIDC_TOKEN_URL") or f"{OIDC_ISSUER}/protocol/openid-connect/token"
 )
-OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "rucio")
-OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "rucio-secret")
-OIDC_USERNAME = os.environ.get("OIDC_USERNAME", "randomaccount")
-OIDC_PASSWORD = os.environ.get("OIDC_PASSWORD", "secret")
-OIDC_GRANT_TYPE = os.environ.get(
-    "OIDC_GRANT_TYPE", "password"
+OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID") or "rucio"
+OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET") or "rucio-secret"
+OIDC_USERNAME = os.environ.get("OIDC_USERNAME") or "randomaccount"
+OIDC_PASSWORD = os.environ.get("OIDC_PASSWORD") or "secret"
+OIDC_GRANT_TYPE = (
+    os.environ.get("OIDC_GRANT_TYPE") or "password"
 )  # password | client_credentials
 
-# Storage scopes — split so audience tokens can be toggled per provider
-OIDC_STORAGE_SCOPE = os.environ.get(
-    "OIDC_STORAGE_SCOPE", "openid storage.read:/ storage.modify:/"
+OIDC_STORAGE_SCOPE = (
+    os.environ.get("OIDC_STORAGE_SCOPE") or "openid storage.read:/ storage.modify:/"
 )
-# aud:* is Keycloak-only syntax; blank it for EGI
-OIDC_TEAPOT_AUD_SCOPE = os.environ.get(
-    "OIDC_TEAPOT_AUD_SCOPE", "aud:teapot1 aud:teapot2"
+OIDC_TEAPOT_AUD_SCOPE = (
+    os.environ.get("OIDC_TEAPOT_AUD_SCOPE") or "aud:teapot1 aud:teapot2"
 )
 
 # EGI (RFC 8707) resource indicators require a URI. Local/Keycloak's
 # aud:* scope syntax works with bare RSE names, so this helper is only
 # consulted when OIDC_GRANT_TYPE == "client_credentials" (the EGI path);
 # under the password grant it's never even passed to the token request.
-OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX", ".example.org")
+OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX") or ".example.org"
 
 
 def _rse_resource(name: str) -> str:
@@ -400,7 +398,12 @@ def fetch_token_password(
         verify=False,
         timeout=10,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        raise requests.exceptions.HTTPError(
+            f"{e}: {resp.text}", response=resp
+        ) from None
     return resp.json()["access_token"]
 
 
@@ -422,7 +425,12 @@ def fetch_token_client_credentials(
         verify=False,
         timeout=10,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        raise requests.exceptions.HTTPError(
+            f"{e}: {resp.text}", response=resp
+        ) from None
     return resp.json()["access_token"]
 
 
