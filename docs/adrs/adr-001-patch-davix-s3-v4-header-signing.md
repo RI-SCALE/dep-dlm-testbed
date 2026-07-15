@@ -66,50 +66,26 @@ Header-signing is selected per storage via configuration; the default
 remains query-string signing, so any deployment not opting in is
 unaffected.
 
+The implementation requires coordinated changes across davix, gfal2,
+and FTS3, because the signing configuration for the FTS transfer path
+is generated dynamically by FTS at transfer time rather than read
+statically from gfal2 config. The full call path and per-layer changes
+are documented in [`implementation-notes/davix-s3-v4-header-signing.md`](../implementation-notes/davix-s3-v4-header-signing.md).
+
 The boto3 staging service (option 2) is retained as a documented
 fallback pattern for future external sources whose incompatibilities
 cannot be addressed by a davix change — for example, sources using
 auth models other than SigV4, or non-S3 protocols. It is not built
 now.
 
-> The fix in fact spans three layers. The FTS path does not read
-> the static gfal2 config for S3 credentials: at transfer time the server
-> writes a short-lived `--cloud-config` (via `writeS3Creds()` in
-> `CloudStorageConfig.cpp`) and passes it to the per-file `fts_url_copy`
-> executor — that file, not `/etc/gfal2.d`, is authoritative on the FTS
-> path. So `region`/`sigv4_header_mode` must also be modelled per storage
-> in FTS3 (`t_cloudStorage` → `CloudStorageAuth` → `writeS3Creds`) and
-> emitted into the generated cloud-config. The required changes therefore
-> are: **davix** (v4 header-signing branch + `setAwsSigV4HeaderMode`),
-> **gfal2** (read `SIGV4_HEADER_MODE`/`REGION` from `[S3:HOST]`, call the
-> setter), and **FTS3** (per-storage modelling + cloud-config emit). A mistake
-> at any layer leaves the feature compiled but inactive.
-
-## Subsequent findings (post-implementation)
-
-The three signing layers (davix + gfal2 + FTS3) make the **source read**
-succeed, but two further, independent concerns had to be resolved before an
-S3-source → token-WebDAV-destination transfer completed end-to-end. Both are
-documented in detail in `patches.md`:
-
-1. **Copy mode must be STREAMED, not third-party-pull.** An S3 (SigV4) source
-   and a token-WebDAV destination cannot do a direct TPC: neither endpoint can
-   present the other's credential, and CDSE issues no pre-signed URLs. FTS's
-   `getCopyMode()` defaults a row-less SE to full TPC support, yielding
-   `--copy-mode pull`. The streaming branch is gated on the *destination*'s
-   `t_se.tpc_support`, so both the S3 source and the WebDAV destination must be
-   marked `tpc_support=NONE` to force `CopyMode::STREAMING`.
-
-2. **Cloud-storage credential resolution is keyed on `user_dn`.** FTS resolves
-   the SigV4 keys from `t_cloudStorageUser` by `(cloudStorage_name, user_dn,
-   vo_name)`. For a token-authenticated job the DN FTS sees is the OIDC subject,
-   not `/CN=fts-oidc`; a mismatch makes the lookup miss, davix signs with an
-   empty secret, and CDSE returns 403 even though signing, region and keys are
-   all correct.
-
-Net: the davix signing fix is necessary but not sufficient. The end-to-end
-path also requires the copy-mode and `user_dn` configuration captured in
-`patches.md` and applied by `init-testbed.sh`.
+During implementation, two further, independent configuration
+constraints were discovered that were necessary to complete an
+end-to-end S3-source → token-WebDAV-destination transfer, beyond the
+signing fix itself: FTS's copy-mode selection and its cloud-credential
+lookup identity. Both are implementation prerequisites, not part of
+this decision, and are documented in
+[`implementation-notes/davix-s3-v4-header-signing.md`](../implementation-notes/davix-s3-v4-header-signing.md)
+and applied by `init-testbed.sh` / `patches.md`.
 
 ### Positive Consequences
 
@@ -132,6 +108,9 @@ path also requires the copy-mode and `user_dn` configuration captured in
 * The fix touches two separately-released libraries (davix and gfal2);
   a davix-only build silently fails to activate the feature,
   so both must be version-matched in the image.
+* The fix spans three components (davix, gfal2, FTS3); a mistake in
+  any one leaves the feature compiled but inactive — see
+  implementation notes.
 
 ## Confirmation
 
@@ -144,10 +123,10 @@ path also requires the copy-mode and `user_dn` configuration captured in
   consumers.
 * The Copernicus integration test
   (`tests/test_rucio_transfers_with_copernicus.py`) moves from `xfail`
-  to expected-pass both patched libraries are in use (`davix` with the
-  header-signing branch, `gfal2` with the `SIGV4_HEADER_MODE` reader).
-  With only the davix patch, the test still fails with `HTTP 403`,
-  because the header-signing path is never selected.
+  to expected-pass once both patched libraries are in use (`davix`
+  with the header-signing branch, `gfal2` with the `SIGV4_HEADER_MODE`
+  reader). With only the davix patch, the test still fails with
+  `HTTP 403`, because the header-signing path is never selected.
 
 ## Pros and Cons of the Options
 
@@ -229,3 +208,7 @@ path also requires the copy-mode and `user_dn` configuration captured in
 
 * Copernicus community evidence:
   <https://forum.dataspace.copernicus.eu/t/aws-presigned-urls-do-not-work-on-the-s3-resources/3962>
+
+* Implementation detail (call paths, per-layer changes, copy-mode and
+  `user_dn` findings):
+  [`implementation-notes/davix-s3-v4-header-signing.md`](../implementation-notes/davix-s3-v4-header-signing.md)

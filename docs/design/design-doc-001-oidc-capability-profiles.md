@@ -1,8 +1,8 @@
-# Design: Per-Issuer OIDC Capability Profiles
+# Design-001: Per-Issuer OIDC Capability Profiles
 
-**Status:** Proposed
-**Owner:** DEP DLM testbed / Rucio patches
-**Related:** backlog item "Integrate testbed against LS AAI (Perun)"; RT ticket LS-AAI #1538309 (open, unanswered)
+- **Status:** Proposed
+- **Owner:** DEP DLM testbed / Rucio patches
+- **Related:** backlog item "Integrate testbed against LS AAI (Perun)"
 
 ## Problem
 
