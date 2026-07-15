@@ -1,10 +1,10 @@
 # dep-dlm-testbed
 
-Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`).
+Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`), with GitOps-based deployment (ArgoCD or Flux) across sandbox, staging and production environments.
 
-The testbed supports both managed and unmanaged token flows and can be extended to support data discovery, popularity, and preparation services, as well as broader integration scenarios involving external token providers and external WebDAV or XRootD interfaces.
+The testbed supports both managed and unmanaged token flows and integrates against external OIDC providers beyond the bundled Keycloak, validated end-to-end against EGI Check-In, with LS AAI / Perun integration in progress, as well as external storage backends including S3 (e.g. Copernicus Data Space). It can be further extended to validate data discovery, popularity and preparation services end-to-end.
 
-The testbed also applies minimal source patches to upstream components (e.g. Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches and their rationale are documented in [patches.md](docs/patches.md).
+The testbed also applies minimal source patches to upstream components (e.g. Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches, their rationale and the surrounding architectural decisions are documented in [docs/patches.md](./docs/patches.md), [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/).
 
 ## Backlog
 
@@ -74,7 +74,7 @@ for instructions on setting up an S3 account and generating the credentials requ
 to access Copernicus Data Space EO Data.
 
 Export them **before `make init` and the test**. Init creates the S3 RSE and
-FTS cloud-storage rows from these credentials, and the test reads them back:
+FTS cloud-storage rows from these credentials and the test reads them back:
 
 ```bash
 export S3_ACCESS_KEY=... S3_SECRET_KEY=...
