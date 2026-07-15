@@ -1,441 +1,92 @@
 # Patches
 
-Minimal patches applied to upstream components to make OIDC-only token-based
-transfers work in the testbed. X.509/GSI is explicitly out of scope.
-Each patch is applied by bind-mounting the patched file over the original
-inside the container (Compose) or via a ConfigMap volume mount (Kubernetes).
+Minimal patches to upstream components enabling OIDC-only token-based
+transfers (X.509/GSI is out of scope). Each patch is bind-mounted (Compose)
+or ConfigMap-mounted (Kubernetes) over the original file.
 
----
+## Files touched
 
-## FTS DB configuration — `t_se` and `t_cloudStorageUser` (applied by `init-testbed.sh`)
+| File | Component | Essential change |
+|---|---|---|
+| `rucio/oidc.py` | Rucio | Adds an account-based RFC 8693 token-exchange subsystem not present upstream (`get_token_for_account_operation`, `__exchange_token_oidc`, `__get_admin_token_oidc`, `__get_admin_account_for_issuer`); fixes discovery-URL construction; adds `aud:<audience>` scope-append for `client_credentials`; `scope_profile`-aware `resource=`/`audience=` selection (EGI vs. WLCG); `save_subject_token()` seeding helper; promotes silent failures to WARNING |
+| `rucio/fts3.py` | Rucio | Passes `account` + per-RSE `audience` to `request_token` (upstream has neither); sets `unmanaged_tokens` from `oidc.token_strategy`; selects `fts`/`read:/ write:/` scope via `scope_profile`; skips minting source tokens for S3 sources |
+| `rucio/rse.py` | Rucio | Adds `determine_audience_for_rse()`'s `scope_profile=egi` branch and all of `determine_scope_for_rse()`'s EGI path (`_EGI_SCOPE_MAP`) — upstream has only the WLCG hostname/prefix-join logic, unconditionally |
+| `rucio/constants.py` | Rucio | `BASE_SCHEME_MAP` (renamed/restructured from upstream's smaller `SCHEME_MAP`): adds `srm`, `gsiftp`, `s3s` as top-level keys and `root`↔`https` cross-protocol compatibility (XRootD↔S3) |
+| `fts/middleware.py` | FTS | Stores OIDC issuer without trailing-slash normalization, matching Keycloak's raw `iss` claim |
+| `fts/openidconnect.py` | FTS | `get_token_issuer()` returns raw `iss` claim (companion to `middleware.py` — apply/remove together) |
+| `fts/JobBuilder.py` | FTS | Accepts asymmetric token/cloud_storage transfers (S3 source needs no token, WebDAV destination does); `_cloud_storage_exists` adds a live DB query (`t_cloudStorage`) to the per-request validation path, fails closed to "token required" on query error |
+| `teapot/teapot.py` | Teapot | Replaces `@flaat.is_authenticated()` (live `/userinfo` call) with offline JWT verification (`verify_token()`, JWKS via `PyJWKClient`) plus an explicit audience check — required because FTS presents RFC 8693 token-exchanged tokens that Keycloak's `/userinfo`/`/introspect` reject as non-live-session; also: robust process matching (`_get_proc`) by key parts instead of exact cmdline, explicit `httpx.Timeout` for slow aarch64 JVM cold-start |
 
-These are not source patches but FTS-database rows set at init time. They are
-load-bearing and easy to lose on a rebuild (init reset them, costing days of
-re-diagnosis), so they are documented here alongside the code patches.
+## `scope_profile` — the shared config knob
 
-### 1. `t_se.tpc_support = NONE` — force STREAMED copy mode for S3↔WebDAV
+`oidc.py`, `fts3.py`, and `rse.py` all read `config_get("oidc", "scope_profile",
+default="wlcg")`. `"wlcg"` (default) preserves stock behavior; `"egi"` opts
+into EGI Check-In specifics: `resource=` instead of `audience=`/`aud:` scope,
+and WLCG→EGI scope-name mapping. This is orthogonal to the deployment-level
+`SCOPE_PROFILE=egi-dev` (which selects *which config files* get mounted) —
+`scope_profile=egi` is the value one of those mounted files (`server.client-
+credentials.cfg`) sets.
 
-`FileTransferExecutor` calls `getCopyMode(sourceSe, destSe)`
-(`fts3/src/db/mysql/Config.cpp`), which reads `t_se.tpc_support` for each side.
-A storage with **no row** is assumed to have FULL TPC support, so an
-`s3s://…` → `davs://…` pair resolves to `CopyMode::ANY` →
-`--copy-mode "pull"`. A third-party pull has the WebDAV destination fetch from
-S3, but Storm-WebDAV cannot SigV4-sign a Copernicus request and CDSE issues no
-pre-signed URLs → `HTTP 403`.
+## FTS DB rows (not source patches, set by `init-testbed.sh`)
 
-The STREAMING branch (`Config.cpp`) is reached only when the **destination** is
-not FULL/PULL. Therefore both sides are marked `NONE`:
+Load-bearing, easy to lose on rebuild:
 
-```sql
-INSERT INTO t_se (storage, tpc_support) VALUES
-  ('s3s://eodata.dataspace.copernicus.eu', 'NONE'),  -- source (init)
-  ('davs://teapot2', 'NONE'), ('https://teapot2', 'NONE')  -- dest (test fixture)
-ON DUPLICATE KEY UPDATE tpc_support='NONE';
-```
-
-The `storage` value must exactly match what FTS records as `source_se`/`dest_se`
-in `t_file` (scheme + host, **no port** — `davs://teapot2`, not
-`davs://teapot2:8081`). TEAPOT2 is registered with both `davs` and `https`
-protocols, so both forms are set. The **source** row is set permanently in
-`configure_fts_cloud_storage`; the **destination** rows are set by a test
-fixture with teardown, so the davs↔davs TPC tests keep pull mode.
-
-**Replacement path:** testbed-specific. In production, per-SE `tpc_support` is
-the documented FTS knob for exactly this; the values belong in SE config, not a
-patch.
-
-### 2. `t_cloudStorageUser.user_dn` = OIDC subject — so SigV4 keys resolve
-
-FTS resolves the S3 SigV4 keys from `t_cloudStorageUser` by
-`(cloudStorage_name, user_dn, vo_name)`. For a token-authenticated (oauth2) job,
-the DN FTS sees is the **OIDC subject** (e.g.
-`e8af11a6-76bb-44dd-abf7-32988c769cfc`), not the default `/CN=fts-oidc`. If
-`user_dn` doesn't match, the cloud-storage lookup misses, davix signs the source
-request with an empty secret, and CDSE returns `403` — even though region, keys
-and canonical request are all correct (proven by an identical boto3 request
-succeeding).
-
-`configure_fts_cloud_storage` therefore defaults `user_dn` to the OIDC subject:
-
-```bash
-local user_dn="${FTS_USER_DN:-e8af11a6-76bb-44dd-abf7-32988c769cfc}"
-```
-
-**Replacement path:** the OIDC-subject value is testbed-specific (it's this
-realm's `rucio`/`fts` client subject); the *mechanism* — `user_dn` must equal
-the authenticated identity FTS sees — is general and worth a note in any
-token + cloud_storage deployment.
-
----
-
-## Rucio — `transfertool/fts3.py`
-
-**Source:** `rucio/rucio-server` image, Python package `rucio.transfertool.fts3`
-**Upstream ref:** [rucio/rucio @ main — transfertool/fts3.py](https://github.com/rucio/rucio/blob/master/lib/rucio/transfertool/fts3.py)
-
-### Changes
-
-**1. `_file_from_transfer` — pass `account` and per-RSE `audience` to `request_token`**
-
-Upstream calls `request_token(audience, scope)` for source and destination
-storage tokens. The testbed adds `account=rws.account` and uses the
-per-RSE audience derived via `determine_audience_for_rse(rse_id)`. The
-`account` argument routes the call through the exchange path in the
-patched `oidc.py` (managed mode); in unmanaged mode the same call falls
-through to `client_credentials`, where the patched `oidc.py` activates
-the matching `aud:<audience>` optional scope. The patch also raises
-`TransferToolWrongAnswer` when `request_token` returns `None`, so
-silent token-acquisition failures become visible.
-
-```python
-# Patch
-src_token = request_token(src_audience, src_scope, account=rws.account)
-if src_token is None:
-    raise TransferToolWrongAnswer(
-        f"Could not procure source token for {transfer.src.rse.name}"
-    )
-# Upstream
-t_file["source_tokens"].append(request_token(src_audience, src_scope))
-```
-
-**2. `build_job_params` — set `unmanaged_tokens` based on `oidc.token_strategy`**
-
-In unmanaged mode FTS must accept pre-fetched bearer tokens as-is and
-skip the `TOKEN_PREP` exchange and refresh. In managed mode FTS owns
-the lifecycle and the flag must be absent. The patch reads
-`oidc.token_strategy` and sets the flag conditionally:
-
-```python
-token_strategy = config_get(
-    "oidc", "token_strategy", raise_exception=False, default="client_credentials"
-)
-if token_strategy != "exchange":
-    job_params["unmanaged_tokens"] = True
-```
-
-This is paired with `AllowNonManagedTokens=True` in
-`unmanaged.fts3restconfig`. The two settings must agree.
-
-## Rucio — `core/oidc.py`
-
-**Source:** `rucio/rucio-server` image, Python package `rucio.core.oidc`
-**Upstream ref:** [rucio/rucio @ main — core/oidc.py](https://github.com/rucio/rucio/blob/master/lib/rucio/core/oidc.py)
-
-### Changes
-
-**1. OIDC discovery URL — string concatenation instead of `urljoin`**
-
-Upstream constructs the discovery URL with
-`urljoin(issuer, '.well-known/openid-configuration')`, which strips the
-last path segment when `issuer` lacks a trailing slash — for the
-Keycloak issuer `https://keycloak:8443/realms/rucio` it yields
-`/realms/.well-known/openid-configuration` (HTTP 404). The patch uses
-`issuer.rstrip('/') + '/.well-known/openid-configuration'`, which is
-both `urljoin`-safe and trailing-slash-agnostic.
-
-**2. `request_token` — route through `get_token_for_account_operation` for exchange**
-
-When `oidc.token_strategy == 'exchange'` and an `account` is provided,
-the patch routes through `get_token_for_account_operation`, performing
-RFC 8693 token-exchange against the account's seeded subject token.
-Without an account or exchange strategy the call falls through to the
-upstream `client_credentials` path.
-
-**3. `request_token` — append `aud:<audience>` scope in the `client_credentials` branch**
-
-Keycloak's `audience` POST parameter on a `client_credentials` grant
-does **not** activate an audience-mapper that lives inside an *optional*
-client scope. In this testbed the per-RSE `aud:*` scopes are optional
-(so managed-mode exchanged tokens can carry a single audience). To make
-unmanaged-mode tokens carry the audience, the patch appends
-`aud:<audience>` to the requested scope so Keycloak activates the
-optional scope and runs its mapper:
-
-```python
-requested_scope = scope
-if audience:
-    aud_scope = f"aud:{audience}"
-    if aud_scope not in requested_scope.split():
-        requested_scope = f"{requested_scope} {aud_scope}".strip()
-```
-
-The cache key uses `requested_scope`, not `scope`, to avoid serving an
-audience-less cached token when an audience-bearing one is requested.
-
-**4. `__exchange_token_oidc` — caller's audience wins; guarantee `openid` scope**
-
-Upstream's exchange used the subject token's audience by default; the
-patch inverts the precedence so the caller's per-RSE audience (set in
-`fts3.py`) takes priority. The patch also guarantees `openid` is in
-the requested scope so exchanged tokens are accepted by OIDC
-userinfo-based validators (Teapot's pre-offline-JWT auth path; not
-needed once Teapot validates JWTs offline, but harmless).
-
-**5. `save_subject_token` — wrapper to seed subject tokens with an explicit account**
-
-A thin wrapper around the internal token-saver used by `validate_jwt`,
-exposed so `init-testbed.sh` can persist subject tokens for an
-explicitly-named account. `validate_jwt` resolves accounts via
-`get_default_account`, which is ambiguous when one OIDC identity maps
-to multiple accounts.
-
-**6. Permanent WARNING logging on swallowed exceptions**
-
-Two `except` blocks in the exchange path previously logged at `DEBUG`
-and silently returned `None`. The patch promotes them to `WARNING` and
-logs when `request_token` returns `None`, so token-acquisition failures
-surface in production logs rather than vanishing.
-
-### Realm coupling
-
-Patch changes 3 and 4 above only work because the testbed's Keycloak
-realm exposes per-RSE audience scopes (`aud:xrd3`, `aud:xrd4`,
-`aud:teapot1`, `aud:teapot2`) as **optional** client scopes on the
-`rucio` and `fts` clients, with `include.in.token.scope: false` on
-each mapper. Switching them to default scopes would put every audience
-on every token (breaks managed-mode single-audience tokens); removing
-the optional declaration breaks unmanaged-mode entirely. See
-`shared/config/keycloak/realm.json`.
+- **`t_se.tpc_support='NONE'`** for both sides of an S3↔WebDAV transfer,
+  forcing STREAMED copy mode (Storm-WebDAV can't SigV4-sign a pull from
+  Copernicus S3). Source row is permanent; destination rows are set/torn
+  down by a test fixture so davs↔davs tests keep pull mode.
+- **`t_cloudStorageUser.user_dn`** defaults to the OIDC subject FTS sees
+  for oauth2 jobs (not the X.509 DN) — required for SigV4 key lookup to
+  resolve at all.
 
 ## Replacement paths
 
-**Candidates for upstreaming to Rucio:**
+Patches below are testbed-local until upstreamed. Confidence in "should this
+go upstream as-is" varies — noted per item.
 
-- Discovery-URL `urljoin` fix in `oidc.py` (correctness bug for issuers
-  without trailing slashes; affects any non-Keycloak IdP whose issuer
-  omits the slash too).
-- `account` and per-RSE `audience` passthrough in `fts3.py` storage
-  token requests (required for any token-exchange or
-  audience-scoped-client deployment, not specific to this testbed).
-- Audience-precedence inversion in `__exchange_token_oidc` (per-RSE
-  audience is the more useful default than the subject token's
-  audience).
-- WARNING-level logging on the previously silent failure paths.
+**High confidence — general correctness fixes, not testbed-specific:**
+- `oidc.py`'s discovery-URL construction — `urljoin(issuer, '.well-known/...')`
+  drops the last path segment when `issuer` lacks a trailing slash (confirmed
+  against this testbed's Keycloak issuer); string-concatenation is
+  trailing-slash-agnostic. Whether upstream treats this as a bug or expects
+  callers to always supply a trailing-slash issuer is worth raising with
+  them rather than assuming.
+- `constants.py`'s `root`↔`https` scheme compatibility for
+  `BASE_SCHEME_MAP`.
+- Promoting previously-silent exception handling to WARNING-level logging.
 
-**Testbed-specific, retained by design:**
+**Worth proposing, needs upstream discussion on API shape:**
+- `oidc.py`'s account-based exchange subsystem
+  (`get_token_for_account_operation` + supporting functions) — this is new
+  functionality, not a fix to an existing upstream function, so it needs a
+  design conversation with upstream (API shape, whether it belongs in core
+  vs. a plugin) rather than a PR-sized proposal.
+- `fts3.py`'s `account` + per-RSE `audience` passthrough to `request_token`
+  — useful for any token-exchange or audience-scoped-client deployment, but
+  changes a function signature others may depend on.
+- `JobBuilder.py`'s asymmetric token/cloud_storage validation — legitimate
+  for any S3-source/token-destination transfer, not testbed-specific, but
+  adds a live DB query to a per-request validation path and touches FTS's
+  auth validation logic, so it should get FTS maintainer review on both
+  the approach and the performance implication.
+- `teapot.py`'s offline JWT verification in place of `flaat`'s live
+  `/userinfo` call — the underlying problem (RFC 8693 exchanged tokens
+  aren't accepted by `/userinfo`) is general to any WLCG-style token
+  consumer behind Teapot, but replacing the auth mechanism outright is a
+  bigger change for upstream to evaluate than a bugfix.
+- `teapot.py`'s `_get_proc` robustness fix and hardcoded `httpx.Timeout` —
+  the matching-by-key-parts logic is a genuine robustness improvement, but
+  the timeout value should become a `config.ini` knob before proposing
+  upstream, rather than a hardcoded constant.
 
-- `unmanaged_tokens` is the documented FTS mechanism for pre-fetched
-  long-lived tokens; the conditional setting based on `token_strategy`
-  is how Rucio is expected to integrate with both modes.
-- The `aud:<audience>` scope-append in `oidc.py`'s `client_credentials`
-  branch is a workaround for Keycloak's optional-scope semantics; it's
-  correct behaviour for *this* realm topology, but other IdPs may not
-  need it. Worth keeping behind the existing patched path rather than
-  upstreaming as default.
-- `save_subject_token` exists only to support the testbed's seeding
-  flow; production deployments use the auth-code flow to populate
-  subject tokens.
-
----
-
-## Rucio — `common/constants.py`
-
-**Source:** `rucio/rucio-server` image, Python package
-`rucio.common.constants`
-
-**Upstream ref:**
-[rucio/rucio @ main — common/constants.py](https://github.com/rucio/rucio/blob/master/lib/rucio/common/constants.py)
-
-### Changes
-
-**1. `BASE_SCHEME_MAP` — add `https` to `root` compatible schemes and vice versa**
-
-Upstream maps `root` only to `['root']`. The patch extends this to
-`['root', 'https']` and adds `https` → `root` compatibility, enabling
-XRootD → S3 (`root://` source, `https://` destination) and S3 → XRootD
-(`https://` source, `root://` destination) cross-protocol transfers.
-Without this, the conveyor submitter raises `MISMATCH_SCHEME` and the
-request goes immediately STUCK.
-
-```python
-# Patch
-"root": ["root", "https"],
-"https": ["https", "http", "davs", "srm+https", "cs3s", "root"],
-
-# Upstream
-'root': ['root'],
-'https': ['https', 'davs', 'srm+https', 'cs3s'],
-```
-
-**2. Formatting only** — all other diff hunks are cosmetic (Black-style
-reformatting, single → double quotes). No semantic changes.
-
-### Replacement path
-
-The `BASE_SCHEME_MAP` change is a candidate for upstreaming or for
-configuring via the Rucio `conveyor` config section once the relevant
-config knob exists. Track against the Rucio issue tracker.
-
----
-
-## FTS — `fts-rest-flask/middleware.py`
-
-**Source:** `fts-rest-flask` package inside the FTS container
-
-**Upstream ref:**
-[fts/fts-rest-flask @ 3.14.x-release — middleware.py](https://gitlab.cern.ch/fts/fts-rest-flask/-/blob/3.14.x-release/src/fts3rest/fts3rest/config/middleware.py)
-
-### Changes
-
-**1. `load_providers` — do not normalize issuer URL with trailing slash**
-
-Upstream adds a trailing slash to the issuer URL read from the database
-(`provider_url + "/"`). Keycloak's OIDC discovery endpoint returns `iss`
-claims **without** a trailing slash (e.g.
-`https://keycloak:8443/realms/rucio`). When the providers dict is keyed
-with a trailing slash but `get_token_issuer()` returns a bare URL, the
-lookup fails and token-based auth is rejected.
-
-The patch stores the issuer exactly as returned by the database, without
-normalization, so the key matches the raw `iss` claim.
-
-```python
-# Patch — store as-is
-# provider_url stored without trailing slash to match raw iss claim
-
-# Upstream
-if provider_url and not provider_url.endswith("/"):
-    provider_url = provider_url + "/"
-```
-
-**2. Formatting only** — all other diff hunks are comments added upstream
-or whitespace. No semantic changes.
-
-### Replacement path
-
-Aligning the Keycloak issuer URL to include a trailing slash is not viable —
-Keycloak derives the `iss` claim directly from the realm URL and does not
-expose a direct issuer override. Setting `frontendUrl` affects all Keycloak
-URLs, not just the `iss` claim.
-
-File a bug against fts-rest-flask to remove or make the trailing-slash
-normalization configurable. The OIDC specification does not require a trailing
-slash on issuer URLs and Keycloak omits it by convention.
-
----
-
-## FTS — `fts-rest-flask/openidconnect.py`
-
-**Source:** `fts-rest-flask` package inside the FTS container
-
-**Upstream ref:**
-[fts/fts-rest-flask @ 3.14.x-release — openidconnect.py](https://gitlab.cern.ch/fts/fts-rest-flask/-/blob/3.14.x-release/src/fts3rest/fts3rest/lib/openidconnect.py)
-
-### Changes
-
-**1. `get_token_issuer` — return raw `iss` claim without trailing slash**
-
-Upstream inlines the issuer extraction and relies on the normalized
-(trailing-slash) key in the providers dict. The patch extracts
-`get_token_issuer()` as a separate method that returns the raw `iss`
-claim from the JWT payload without modification, keeping it consistent
-with the middleware.py patch above.
-
-```python
-# Patch
-def get_token_issuer(self, access_token):
-    unverified_payload = jwt.decode(access_token, options=jwt_options_unverified())
-    issuer = unverified_payload["iss"]
-    # Return issuer as-is — no trailing slash normalization
-    return issuer
-```
-
-### Replacement path
-
-Same as `middleware.py` — the two patches are complementary halves of the
-same fix and must be applied or removed together.
-
-## FTS — `fts-rest-flask/JobBuilder.py`
-
-**Source:** `fts-rest-flask` package inside the FTS container
-**Upstream ref:** [fts/fts-rest-flask @ 3.14.x-release — JobBuilder.py](https://gitlab.cern.ch/fts/fts-rest-flask/-/blob/3.14.x-release/src/fts3rest/fts3rest/lib/JobBuilder.py)
-
-### Changes
-
-**Accept asymmetric token / cloud_storage transfers.** Upstream `_validate_transfer_tokens`
-requires a token on every side of an oauth2 transfer. An S3 source authenticates
-via `cloud_storage` (static keys), so it legitimately carries **no** source
-token. The patch validates per-side: a side whose URLs are all backed by a
-`cloud_storage` entry (`_all_cloud_storage` / `_cloud_storage_exists`, matching
-on host against `t_cloudStorage`) is treated as satisfied, and length/per-token
-checks apply only to a side that actually carries tokens. This allows
-`s3s://` source (cloud_storage, no token) → token-based WebDAV destination.
-
-### Replacement path
-
-Candidate for upstreaming: supporting an asymmetric cloud_storage-source /
-token-destination transfer is general, not testbed-specific. Pairs with the
-Rucio `fts3.py` change that omits empty `source_tokens` for `s3s` sources.
-
----
-
-## Teapot — `teapot.py`
-
-**Source:** `teapot` package inside the Teapot container
-
-**Upstream ref:**
-[interTwin-eu/teapot @ main — teapot.py](https://github.com/interTwin-eu/teapot/blob/main/teapot.py)
-
-### Changes
-
-**1. `_get_proc` — match process by key parts instead of full command string**
-
-Upstream matches a running Storm-WebDAV process by comparing the full
-command string exactly. This is fragile — minor differences in whitespace,
-argument ordering, or JVM version flags cause the match to fail, leaving
-Teapot unable to find and manage the subprocess. The patch extracts key
-identifying parts (`storm-webdav-server.jar`, `java.io.tmpdir`) and checks
-that all are present in the process command line.
-
-```python
-# Patch
-key_parts = [p for p in cmd.split()
-             if "storm-webdav-server.jar" in p or "java.io.tmpdir" in p]
-if all(part in cmdline for part in key_parts):
-    return proc
-
-# Upstream
-if cmd == " ".join(proc.cmdline()):
-    return proc
-```
-
-**2. `httpx.Timeout` — retain explicit timeout for aarch64 JVM cold-start**
-
-The upstream code at the Storm-WebDAV readiness check uses the global
-`httpx.AsyncClient` timeout of `connect=10.0, read=None`. The patch
-replaces the per-call timeout with explicit values to bound the
-readiness probe on slow aarch64 CI runners where the JVM cold-start
-can take 20-40 seconds. See [run](https://github.com/RI-SCALE/dep-dlm-testbed/actions/runs/26224436098/job/77167597491) failing with:
-
-```bash
-12:01:20 INFO    conftest: === Warming up teapot1 Storm-WebDAV instance ===
-12:03:17 INFO    conftest:   [1] teapot1 returned HTTP 500 — retrying in 10s
-ERROR
-```
-
-```python
-# Patch
-resp = httpx.get(
-    "https://" + config["Storm-webdav"]["SERVER_ADDRESS"] + ":" + str(port) + "/",
-    verify=context1,
-    timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
-)
-
-# Upstream
-resp = httpx.get(
-    "https://" + config["Storm-webdav"]["SERVER_ADDRESS"] + ":" + str(port) + "/",
-    verify=context1,
-)
-```
-
-Observed failure on aarch64 CI without this patch: Teapot returns HTTP 500
-during warm-up while the Storm-WebDAV JVM is still initialising, causing
-the readiness loop to time out before the instance becomes healthy.
-
-### Replacement path
-
-The `_get_proc` robustness fix and the explicit `httpx.Timeout` are both
-candidates for upstreaming to
-[interTwin-eu/teapot](https://github.com/interTwin-eu/teapot).
-The timeout value should be made configurable via `config.ini` rather than
-hardcoded, to accommodate varying hardware performance.
+**Testbed-specific, not intended for upstreaming:**
+- `unmanaged_tokens` conditional logic in `fts3.py` — this *is* the
+  documented FTS mechanism for pre-fetched long-lived tokens; the
+  conditional wiring to `oidc.token_strategy` is testbed integration, not
+  a fix.
+- `oidc.py`'s `aud:<audience>` scope-append — a workaround for this
+  realm's specific Keycloak optional-scope topology; other IdPs may not
+  need it.
+- `oidc.py`'s `save_subject_token()` — exists only to support the
+  testbed's token-seeding flow; production deployments populate subject
+  tokens via the real auth-code flow.
