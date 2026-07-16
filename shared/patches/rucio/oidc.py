@@ -62,6 +62,21 @@ if TYPE_CHECKING:
 
     from rucio.common.types import InternalAccount
 
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class GrantCapabilities:
+    resource_param: bool = False
+    audience_param: bool = True
+    scope_map: dict = field(default_factory=dict)
+    drop_scopes: frozenset = field(default_factory=frozenset)
+
+
+DEFAULT_GRANT_CAPABILITIES: dict = {"resource_param": False, "audience_param": True}
+
+_IDPSECRETS_CACHE: Optional[dict] = None
+
 # The WLCG Common JWT Profile dictates that the lifetime of access and ID tokens
 # should range from five minutes to six hours.
 TOKEN_MIN_LIFETIME: Final = config_get_int("oidc", "token_min_lifetime", default=300)
@@ -93,6 +108,38 @@ LEEWAY_SECS = 120
 
 # TO-DO permission layer: if scope == 'wlcg.groups'
 # --> check 'profile' info (requested profile scope)
+
+
+def _idpsecrets() -> dict:
+    """Load and cache idpsecrets.json.
+
+    Lazy-load-once, following the same pattern already used for
+    OIDC_CLIENTS/OIDC_ADMIN_CLIENTS in this module — no mtime tracking,
+    since nothing else here re-reads config off disk mid-process either.
+    """
+    global _IDPSECRETS_CACHE
+    if _IDPSECRETS_CACHE is None:
+        try:
+            with open(IDPSECRETS) as f:
+                _IDPSECRETS_CACHE = json.load(f)
+        except Exception:
+            logging.warning(
+                "Failed to parse idpsecrets file: %s", IDPSECRETS, exc_info=True
+            )
+            _IDPSECRETS_CACHE = {}
+    return _IDPSECRETS_CACHE
+
+
+def get_capabilities(issuer: str, grant: str) -> GrantCapabilities:
+    entry = _idpsecrets().get(issuer, {})
+    caps = entry.get("capabilities", {})
+    grant_caps = dict(caps.get(grant, DEFAULT_GRANT_CAPABILITIES))
+    # scope_map/drop_scopes are issuer-wide (declared once per issuer, not
+    # duplicated per grant type in idpsecrets.json) — merge them in unless
+    # the grant-specific dict already overrides them.
+    grant_caps.setdefault("scope_map", caps.get("scope_map", {}))
+    grant_caps.setdefault("drop_scopes", caps.get("drop_scopes", []))
+    return GrantCapabilities(**grant_caps)
 
 
 @METRICS.time_it
@@ -151,11 +198,7 @@ def request_token(
     token via RFC 8693 token-exchange of that account's stored subject token.
     Otherwise fall back to the stock client_credentials grant.
     """
-    # Resolve the scope profile once. Default "wlcg" preserves stock behaviour;
-    # "egi" opts into EGI Check-In specifics (resource= param, no aud: scope).
-    scope_profile = config_get(
-        "oidc", "scope_profile", raise_exception=False, default="wlcg"
-    )
+    capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
 
     token_strategy = config_get("oidc", "token_strategy", False, "client_credentials")
     if token_strategy == "exchange" and account is not None:
@@ -189,11 +232,7 @@ def request_token(
 
     requested_scope = scope
     if audience:
-        # aud:<audience> is Keycloak audience-scope syntax; EGI (and other
-        # RFC-8693/param-audience IdPs) reject it. Only append it when NOT on
-        # the EGI scope profile — on EGI the audience is conveyed via the
-        # `resource` request parameter (RFC 8707) instead.
-        if scope_profile != "egi":
+        if capabilities.audience_param:
             aud_scope = f"aud:{audience}"
             if aud_scope not in requested_scope.split():
                 requested_scope = f"{requested_scope} {aud_scope}".strip()
@@ -204,7 +243,7 @@ def request_token(
     # vice-versa. For non-EGI this simply appends a constant and does not
     # change cache-hit behaviour relative to previous runs of the same profile.
     key = hashlib.md5(
-        f"profile={scope_profile};audience={audience};scope={requested_scope}".encode()
+        f"issuer={ADMIN_ISSUER_ID};audience={audience};scope={requested_scope}".encode()
     ).hexdigest()
     if use_cache and (token := _token_cache_get(key)):
         return token
@@ -217,7 +256,7 @@ def request_token(
         # EGI (RFC 8707): the `resource` param is what actually stamps the `aud`
         # claim; `audience` alone does not. Send it on the EGI profile so FTS
         # can persist a non-null audience.
-        if scope_profile == "egi" and _is_uri_audience(audience):
+        if capabilities.resource_param and _is_uri_audience(audience):
             data["resource"] = audience
         else:
             data["audience"] = audience
@@ -841,10 +880,8 @@ def __get_admin_token_oidc(
             "grant_type": "client_credentials",
             "scope": req_scope,
         }
-        scope_profile = config_get(
-            "oidc", "scope_profile", raise_exception=False, default="wlcg"
-        )
-        if scope_profile == "egi" and _is_uri_audience(req_audience):
+        capabilities = get_capabilities(issuer, "admin_client_credentials")
+        if capabilities.resource_param and _is_uri_audience(req_audience):
             args["resource"] = req_audience
         else:
             args["audience"] = req_audience
@@ -1162,13 +1199,8 @@ def __exchange_token_oidc(
     jwt_row_dict["identity"] = kwargs.get("identity", "")
     extra_dict["ip"] = kwargs.get("ip", None)
 
-    # Resolve the scope profile the same way request_token() does. On EGI,
-    # `audience=` alone does not stamp a real `aud` claim (no per-endpoint
-    # client registration exists there) — RFC 8707's `resource` request
-    # parameter is what's needed instead, sent alongside the exchange grant.
-    scope_profile = config_get(
-        "oidc", "scope_profile", raise_exception=False, default="wlcg"
-    )
+    issuer = subject_token_object.identity.split(", ")[1].split("=")[1]
+    capabilities = get_capabilities(issuer, "token_exchange")
 
     # if subject token has offline access scope but *no* refresh token in the DB
     # (happens when user presents subject token acquired from other sources then Rucio CLI mechanism),
@@ -1198,7 +1230,7 @@ def __exchange_token_oidc(
             "scope": jwt_row_dict["authz_scope"],
             "grant_type": grant_type,
         }
-        if scope_profile == "egi" and _is_uri_audience(jwt_row_dict["audience"]):
+        if capabilities.resource_param and _is_uri_audience(jwt_row_dict["audience"]):
             # EGI validates `audience=` against a registered client and rejects
             # storage RSEs that were never registered as clients there — even
             # when `resource=` is also present. Use `resource=` only, no `audience=`.

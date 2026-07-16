@@ -62,7 +62,6 @@ from rucio.db.sqla import models
 from rucio.db.sqla.constants import ReplicaState, RSEType
 from rucio.db.sqla.session import read_session, stream_session, transactional_session
 from rucio.db.sqla.util import temp_table_mngr
-from rucio.common.config import config_get
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -2144,8 +2143,12 @@ def fill_rse_expired(rse_id: str, *, session: "Session") -> None:
 
 def determine_audience_for_rse(rse_id: str) -> str:
     """Construct the Audience claim for an RSE."""
-    profile = _scope_profile()
-    if profile == "egi":
+    from rucio.core.oidc import get_capabilities, ADMIN_ISSUER_ID
+    # deferred: avoids
+    # a circular import (oidc.py -> rucio.core.account -> rucio.core.rse -> oidc.py)
+
+    capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
+    if capabilities.resource_param:
         # EGI Check-in resource indicators require a real URI, not a bare
         # hostname. The `audience` RSE attribute (set at RSE registration
         # time) already holds that URI — use it directly.
@@ -2160,37 +2163,29 @@ def determine_audience_for_rse(rse_id: str) -> str:
     return " ".join(sorted(filtered_hostnames))
 
 
-def _scope_profile() -> str:
-    # default "wlcg" preserves existing behavior; "egi" opts into EGI scopes
-    return config_get("oidc", "scope_profile", raise_exception=False, default="wlcg")
-
-
-def _map_scope(name: str, profile: str) -> str:
-    if profile == "egi":
-        return _EGI_SCOPE_MAP.get(name, name)
-    return name
-
-
 def determine_scope_for_rse(
     rse_id: str,
     scopes: "Iterable[str]",
     extra_scopes: Optional["Iterable[str]"] = None,
 ) -> str:
     """Construct the Scope claim for an RSE."""
+    from rucio.core.oidc import get_capabilities, ADMIN_ISSUER_ID  # deferred, see above
+
     if extra_scopes is None:
         extra_scopes = []
-    profile = _scope_profile()
+    capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
 
-    if profile == "egi":
-        # EGI scopes (read:/ write:/) already encode the path; don't append
-        # the RSE prefix, and drop offline_access (no refresh token on
-        # client_credentials).
+    if capabilities.scope_map or capabilities.drop_scopes:
+        # Capability-mapped scopes (e.g. EGI's read:/ write:/) already encode
+        # the path; don't append the RSE prefix, and drop any scopes the
+        # profile marks unsupported (e.g. offline_access with no refresh
+        # token on client_credentials).
         mapped = []
         for s in scopes:
-            m = _map_scope(s, profile)
+            m = capabilities.scope_map.get(s, s)
             if m not in mapped:
                 mapped.append(m)
-        extra = [s for s in extra_scopes if s != "offline_access"]
+        extra = [s for s in extra_scopes if s not in capabilities.drop_scopes]
         return " ".join(sorted(mapped + list(extra)))
 
     # default (wlcg): unchanged behaviour
