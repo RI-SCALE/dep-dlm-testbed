@@ -29,10 +29,11 @@ EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
 declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 
-SCOPE_PROFILE="${SCOPE_PROFILE:-local}"   # local (default) | egi
+SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 
 OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
 OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER}/protocol/openid-connect/token}"
+IDPSECRETS_PATH_IN_CONTAINER="${IDPSECRETS_PATH_IN_CONTAINER:-/opt/rucio/etc/idpsecrets.json}"
 
 # ─── Cross-runtime helpers ───────────────────────────────────────
 
@@ -90,6 +91,42 @@ _http_probe_local() {
     esac
 }
 
+# Map SCOPE_PROFILE to the OAuth grant used for the testbed's own
+# bootstrapping requests (identity registration, subject-token seeding).
+# Deliberately NOT sourced from idpsecrets.json capabilities: capabilities
+# there are read by Rucio's Python code (get_capabilities()); grant_mode is
+# read only by this script, so it stays keyed off SCOPE_PROFILE — the same
+# value that already selects which idpsecrets.json/rucio.cfg bundle gets
+# mounted for this profile.
+_grant_mode_for_profile() {
+    case "$SCOPE_PROFILE" in
+        egi-dev) echo "client_credentials" ;;
+        *)       echo "password" ;;
+    esac
+}
+
+# Read a dotted field under .capabilities for $OIDC_ISSUER from
+# idpsecrets.json as mounted in rucio-server. $1 = dotted path
+# (e.g. "client_credentials.resource_param", "token_exchange.audience_param"),
+# $2 = default if file/issuer/field is missing.
+_cap() {
+    local path="$1" default="$2"
+    _exec rucio-server env \
+        CAP_ISSUER="$OIDC_ISSUER" CAP_PATH="$path" CAP_DEFAULT="$default" \
+        CAP_FILE="$IDPSECRETS_PATH_IN_CONTAINER" \
+        python3 -c "
+import json, os
+try:
+    with open(os.environ['CAP_FILE']) as f:
+        data = json.load(f)
+    val = data.get(os.environ['CAP_ISSUER'], {}).get('capabilities', {})
+    for part in os.environ['CAP_PATH'].split('.'):
+        val = val[part]
+    print(str(val).lower())
+except Exception:
+    print(os.environ['CAP_DEFAULT'])
+"
+}
 
 # ── Service URLs ─────────────────────────────────────────────────
 
@@ -129,8 +166,10 @@ setup_accounts_and_identities() {
     ra account add --type USER --email randomaccount@rucio randomaccount || true
     ra account add-attribute randomaccount --key admin --value True || true
 
-    if [ "$SCOPE_PROFILE" != "local" ]; then
-        echo "  Skipping password-grant identity registration (SCOPE_PROFILE=$SCOPE_PROFILE)."
+    local grant_mode
+    grant_mode=$(_grant_mode_for_profile)
+    if [ "$grant_mode" != "password" ]; then
+        echo "  Skipping password-grant identity registration (grant_mode=$grant_mode for $OIDC_ISSUER)."
         echo "  Map the external identity manually — see runbook 02 Step 3"
         echo "  (rucio-admin identity add --type OIDC --id \"SUB=..., ISS=$OIDC_ISSUER\" ...)."
         return 0
@@ -234,12 +273,9 @@ seed_subject_tokens() {
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
     echo "=== Seeding OIDC subject tokens for accounts: ${SEED_ACCOUNTS[*]} ==="
 
-    local grant_mode token_url="$OIDC_TOKEN_URL"
-    if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
-        grant_mode="client_credentials"
-    else
-        grant_mode="password"
-    fi
+    local token_url="$OIDC_TOKEN_URL"
+    local grant_mode
+    grant_mode=$(_grant_mode_for_profile)
 
     for acct in "${SEED_ACCOUNTS[@]}"; do
         _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
@@ -403,6 +439,9 @@ cleanup_session_tokens() {
 configure_rses() {
     echo "=== Configuring RSEs ==="
 
+    local resource_param
+    resource_param=$(_cap "client_credentials.resource_param" "false")
+
     # XRootD SciTokens instances
     for rse in XRD3 XRD4; do
         local host
@@ -411,7 +450,7 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+        if [ "$resource_param" = "true" ]; then
             ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
@@ -433,7 +472,7 @@ configure_rses() {
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
-        if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+        if [ "$resource_param" = "true" ]; then
             ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
         else
             ra rse set-attribute --rse "$rse" --key audience --value "$instance"
@@ -738,8 +777,10 @@ grant_token_exchange() {
 # assert a refresh_token comes back. Off by default to keep init fast.
 verify_token_exchange() {
     [ "${INIT_VERIFY_EXCHANGE:-0}" = "1" ] || return 0
-    if [ "$SCOPE_PROFILE" != "local" ]; then
-        echo "=== Skipping token-exchange self-test: non-viable on SCOPE_PROFILE=$SCOPE_PROFILE ==="
+    local grant_mode
+    grant_mode=$(_grant_mode_for_profile)
+    if [ "$grant_mode" != "password" ]; then
+        echo "=== Skipping token-exchange self-test: non-viable on grant_mode=$grant_mode ==="
         echo "    (see docs/runbooks/02-bring-your-own-idp.md — token_strategy=exchange caveat)"
         return 0
     fi

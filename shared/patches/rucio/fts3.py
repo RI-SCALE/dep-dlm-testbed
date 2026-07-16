@@ -46,7 +46,7 @@ from rucio.common.policy import get_policy
 from rucio.common.stopwatch import Stopwatch
 from rucio.common.utils import APIEncoder, chunks, deep_merge_dict
 from rucio.core.monitor import MetricManager
-from rucio.core.oidc import request_token
+from rucio.core.oidc import request_token, get_capabilities, ADMIN_ISSUER_ID
 from rucio.core.request import get_source_rse, get_transfer_error
 from rucio.core.rse import (
     determine_audience_for_rse,
@@ -1233,10 +1233,12 @@ class FTS3Transfertool(Transfertool):
         if oidc_support:
             fts_hostname = urlparse(external_host).hostname
             if fts_hostname is not None:
-                scope_profile = config_get(
-                    "oidc", "scope_profile", raise_exception=False, default="wlcg"
+                capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
+                fts_scope = (
+                    " ".join(sorted(set(capabilities.scope_map.values())))
+                    if capabilities.scope_map
+                    else "fts"
                 )
-                fts_scope = "read:/ write:/" if scope_profile == "egi" else "fts"
                 token = request_token(audience=fts_hostname, scope=fts_scope)
                 if token is not None:
                     self.logger(

@@ -8,24 +8,74 @@ or ConfigMap-mounted (Kubernetes) over the original file.
 
 | File | Component | Essential change |
 |---|---|---|
-| `rucio/oidc.py` | Rucio | Adds an account-based RFC 8693 token-exchange subsystem not present upstream (`get_token_for_account_operation`, `__exchange_token_oidc`, `__get_admin_token_oidc`, `__get_admin_account_for_issuer`); fixes discovery-URL construction; adds `aud:<audience>` scope-append for `client_credentials`; `scope_profile`-aware `resource=`/`audience=` selection (EGI vs. WLCG); `save_subject_token()` seeding helper; promotes silent failures to WARNING |
-| `rucio/fts3.py` | Rucio | Passes `account` + per-RSE `audience` to `request_token` (upstream has neither); sets `unmanaged_tokens` from `oidc.token_strategy`; selects `fts`/`read:/ write:/` scope via `scope_profile`; skips minting source tokens for S3 sources |
-| `rucio/rse.py` | Rucio | Adds `determine_audience_for_rse()`'s `scope_profile=egi` branch and all of `determine_scope_for_rse()`'s EGI path (`_EGI_SCOPE_MAP`) — upstream has only the WLCG hostname/prefix-join logic, unconditionally |
+| `rucio/oidc.py` | Rucio | Adds an account-based RFC 8693 token-exchange subsystem not present upstream (`get_token_for_account_operation`, `__exchange_token_oidc`, `__get_admin_token_oidc`, `__get_admin_account_for_issuer`); fixes discovery-URL construction; adds `aud:<audience>` scope-append for `client_credentials`; per-issuer, per-grant-type `resource=`/`audience=` selection via `get_capabilities()` (see below); `save_subject_token()` seeding helper; promotes silent failures to WARNING |
+| `rucio/fts3.py` | Rucio | Passes `account` + per-RSE `audience` to `request_token` (upstream has neither); sets `unmanaged_tokens` from `oidc.token_strategy`; derives FTS's own client_credentials scope from `get_capabilities(...).scope_map` (falls back to `"fts"` when empty); skips minting source tokens for S3 sources |
+| `rucio/rse.py` | Rucio | `determine_audience_for_rse()`/`determine_scope_for_rse()` consult `get_capabilities()` for `resource_param`/`scope_map`/`drop_scopes` instead of a hardcoded EGI branch — upstream has only the WLCG hostname/prefix-join logic, unconditionally |
 | `rucio/constants.py` | Rucio | `BASE_SCHEME_MAP` (renamed/restructured from upstream's smaller `SCHEME_MAP`): adds `srm`, `gsiftp`, `s3s` as top-level keys and `root`↔`https` cross-protocol compatibility (XRootD↔S3) |
 | `fts/middleware.py` | FTS | Stores OIDC issuer without trailing-slash normalization, matching Keycloak's raw `iss` claim |
 | `fts/openidconnect.py` | FTS | `get_token_issuer()` returns raw `iss` claim (companion to `middleware.py` — apply/remove together) |
 | `fts/JobBuilder.py` | FTS | Accepts asymmetric token/cloud_storage transfers (S3 source needs no token, WebDAV destination does); `_cloud_storage_exists` adds a live DB query (`t_cloudStorage`) to the per-request validation path, fails closed to "token required" on query error |
 | `teapot/teapot.py` | Teapot | Replaces `@flaat.is_authenticated()` (live `/userinfo` call) with offline JWT verification (`verify_token()`, JWKS via `PyJWKClient`) plus an explicit audience check — required because FTS presents RFC 8693 token-exchanged tokens that Keycloak's `/userinfo`/`/introspect` reject as non-live-session; also: robust process matching (`_get_proc`) by key parts instead of exact cmdline, explicit `httpx.Timeout` for slow aarch64 JVM cold-start |
 
-## `scope_profile` — the shared config knob
+## Per-issuer OIDC capabilities — `get_capabilities()`
 
-`oidc.py`, `fts3.py`, and `rse.py` all read `config_get("oidc", "scope_profile",
-default="wlcg")`. `"wlcg"` (default) preserves stock behavior; `"egi"` opts
-into EGI Check-In specifics: `resource=` instead of `audience=`/`aud:` scope,
-and WLCG→EGI scope-name mapping. This is orthogonal to the deployment-level
-`SCOPE_PROFILE=egi-dev` (which selects *which config files* get mounted) —
-`scope_profile=egi` is the value one of those mounted files (`server.client-
-credentials.cfg`) sets.
+`oidc.py`, `fts3.py`, and `rse.py` all resolve OIDC request-shaping via
+`get_capabilities(issuer, grant)` in `oidc.py`, which reads an optional
+`capabilities` block per issuer entry in `idpsecrets.json`:
+
+```json
+{
+  "https://aai-dev.egi.eu/auth/realms/egi": {
+    "issuer": "...", "client_id": "...", "client_secret": "...",
+    "capabilities": {
+      "client_credentials":       { "resource_param": true,  "audience_param": false },
+      "admin_client_credentials": { "resource_param": true,  "audience_param": false },
+      "token_exchange":           { "resource_param": false, "audience_param": true  },
+      "scope_map":   { "storage.read": "read:/", "storage.modify": "write:/", "storage.create": "write:/" },
+      "drop_scopes": ["offline_access"]
+    }
+  }
+}
+```
+
+An issuer with no `capabilities` block (e.g. the local Keycloak realm) gets
+the WLCG default: `resource_param: false`, `audience_param: true`, no scope
+remapping. `resource_param`/`audience_param` and `scope_map`/`drop_scopes`
+are resolved **per grant type** (`client_credentials`,
+`admin_client_credentials`, `token_exchange`), not per issuer as a whole —
+EGI Check-In needs this: `resource=` is honored on `client_credentials` but
+silently ignored on `token-exchange`, which a single issuer-wide flag cannot
+express. See [`docs/design/design-doc-001-oidc-capability-profiles.md`](design/design-doc-001-oidc-capability-profiles.md)
+for the full rationale, and [`docs/adrs/adr-002-store-oidc-capabilities-in-idpsecrets.md`](adrs/adr-002-store-oidc-capabilities-in-idpsecrets.md)
+for why this lives in `idpsecrets.json` rather than a separate file.
+
+FTS's own `client_credentials` scope (used when FTS itself authenticates to
+Rucio) is **not** a separate capability field — `fts3.py` derives it from
+the same `scope_map` used for RSE storage-scope translation
+(`" ".join(sorted(scope_map.values()))`, falling back to the WLCG literal
+`"fts"` when `scope_map` is empty). This resolves to the same value FTS
+needs today (EGI: `"read:/ write:/"`), so a dedicated field was judged
+unnecessary; if a future IdP ever needs FTS's own scope to diverge from its
+RSE scope-mapping, that would be the trigger to add one back.
+
+This replaced an earlier `[oidc] scope_profile` config key (`wlcg`/`egi`,
+read via `config_get`) that branched identically across all grant types for
+a given issuer and could not express EGI's client_credentials/token-exchange
+split. `init-testbed.sh` resolves the same data via its own `_cap()` helper
+(inline `python3 -c` reading the same `idpsecrets.json`), but only for the
+subset of its `SCOPE_PROFILE`-driven decisions that are genuinely
+Rucio-consumed capability data (currently: `resource_param`, for the RSE
+audience-attribute shape). The OAuth grant the *init script itself* uses to
+bootstrap test identities and seed subject tokens (`grant_mode`:
+`password`/`client_credentials`) is **not** stored in `idpsecrets.json` —
+nothing in Rucio's Python reads it, so it stays out of `capabilities`
+entirely and is resolved by a small dedicated helper,
+`_grant_mode_for_profile()`, keyed on `SCOPE_PROFILE` directly. This keeps a
+hard line between the two files: `idpsecrets.json` capabilities are read by
+Rucio's Python (`get_capabilities()`), `SCOPE_PROFILE` drives decisions read
+only by this script. `SCOPE_PROFILE=egi-dev` (Makefile/CI/Helm) is also the
+deployment-time directory selector for *which config files get mounted* —
+unrelated to, and unchanged by, either lookup.
 
 ## FTS DB rows (not source patches, set by `init-testbed.sh`)
 
@@ -61,6 +111,12 @@ go upstream as-is" varies — noted per item.
   functionality, not a fix to an existing upstream function, so it needs a
   design conversation with upstream (API shape, whether it belongs in core
   vs. a plugin) rather than a PR-sized proposal.
+- `oidc.py`'s `get_capabilities()`/per-issuer `capabilities` model — the
+  underlying problem (different IdPs need different `resource=`/`audience=`
+  handling, sometimes per grant type) is general to any multi-IdP Rucio
+  deployment, not testbed-specific. Storing it in `idpsecrets.json` is a
+  testbed convenience (see ADR-002); upstream may prefer a different
+  location or a formal schema.
 - `fts3.py`'s `account` + per-RSE `audience` passthrough to `request_token`
   — useful for any token-exchange or audience-scoped-client deployment, but
   changes a function signature others may depend on.
