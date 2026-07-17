@@ -168,20 +168,78 @@ create a replication rule — the bytes are then moved **server-side by FTS** (t
 same path the transfer test suite exercises), not by your client. The rule
 starts `REPLICATING` and reaches `OK` once the conveyor cycle completes.
 
+> **Port-forward rule of thumb:** you only ever need a storage port-forward for
+> the RSE you're *uploading from* — the destination is always written
+> server-side by FTS, never by your client. `TEAPOT1 → TEAPOT2` needs no
+> `teapot2` forward; the same logic applies to every case below. With `xrd3`
+> and `teapot1` forwarded (see "Run it" above), every source RSE in the
+> matrix below is already covered — no extra forwards needed for any of it.
+
+The full matrix below mirrors what `test_rucio_transfers.py` exercises
+(`TestXRootDOIDC`, `TestTeapotOIDC`, `TestCrossProtocolOIDC`,
+`TestDatasetOIDC`), reproduced here as manual, client-side steps.
+
+**1. XRootD → XRootD**
 ```bash
+echo "Hello XRD upload" >> /tmp/hello-xrd.txt
+rucio -v upload --rse XRD3 --scope randomaccount /tmp/hello-xrd.txt
+
 rucio add-rule randomaccount:hello-xrd.txt 1 XRD4
 rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLICATING -> OK
 
-# verify the rule and the destination replica
 rucio rule show <rule_id>                            # REPLICATING -> OK
 rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
-
-# Download the replicated file
 rucio download randomaccount:hello-xrd.txt --rse XRD4
 ```
 
+**2. Teapot → Teapot**
+```bash
+echo "Hello Teapot upload" >> /tmp/hello-teapot.txt
+rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-teapot.txt
+
+rucio add-rule randomaccount:hello-teapot.txt 1 TEAPOT2
+rucio rule list --did randomaccount:hello-teapot.txt   # TEAPOT1 OK, TEAPOT2 -> OK
+```
+
+**3. Cross-protocol: XRootD → Teapot**
+```bash
+echo "Hello XRD to Teapot" >> /tmp/hello-xrd-to-teapot.txt
+rucio -v upload --rse XRD3 --scope randomaccount /tmp/hello-xrd-to-teapot.txt
+
+rucio add-rule randomaccount:hello-xrd-to-teapot.txt 1 TEAPOT1
+rucio rule list --did randomaccount:hello-xrd-to-teapot.txt   # XRD3 OK, TEAPOT1 -> OK
+```
+
+**4. Cross-protocol: Teapot → XRootD**
+```bash
+echo "Hello Teapot to XRD" >> /tmp/hello-teapot-to-xrd.txt
+rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-teapot-to-xrd.txt
+
+rucio add-rule randomaccount:hello-teapot-to-xrd.txt 1 XRD3
+rucio rule list --did randomaccount:hello-teapot-to-xrd.txt   # TEAPOT1 OK, XRD3 -> OK
+```
+
+**5. Dataset — register two files, replicate as a group**
+
+The pytest version seeds files via container exec straight into `xrd3`
+(`conftest.seed_and_register_files`). The manual, client-side equivalent
+below uploads them individually first, which still validates the same
+catalog + rule-evaluation path:
+```bash
+echo "file one" >> /tmp/ds-file1.txt
+echo "file two" >> /tmp/ds-file2.txt
+rucio -v upload --rse XRD3 --scope randomaccount /tmp/ds-file1.txt
+rucio -v upload --rse XRD3 --scope randomaccount /tmp/ds-file2.txt
+
+rucio did add --type dataset randomaccount:manual-test-dataset
+rucio attach randomaccount:manual-test-dataset randomaccount:ds-file1.txt randomaccount:ds-file2.txt
+
+rucio add-rule randomaccount:manual-test-dataset 1 XRD4
+rucio rule list --did randomaccount:manual-test-dataset   # both files -> OK on XRD4
+```
+
 A rule state of `OK` with a replica on the destination means catalog → FTS →
-storage works end to end.
+storage works end to end, for any RSE pair or dataset above.
 
 ### Watching the replication (FTS daemon logs)
 
