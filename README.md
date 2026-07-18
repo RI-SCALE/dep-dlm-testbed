@@ -113,7 +113,7 @@ dep-dlm-testbed
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
-  SCOPE_PROFILE = egi-dev (local | <profile>)
+  SCOPE_PROFILE = local (local | <profile>)
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev>] [SERVICES="svc1 svc2"]
@@ -122,21 +122,21 @@ Usage:
 
 Setup
   certs                Generate certificates (CA, host certs)
-  init                 Initialize the testbed (accounts, RSEs, OIDC seed)
+  init                 Initialize the testbed (accounts,RSEs, OIDC seed)
 
 Lifecycle
   start                Start the stack
-  stop                 Stop the stack and remove volumes / PVCs
+  stop                 Stop the stack and remove volumes/ PVCs
   restart              Tear down and start again
-  rebuild              Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
-  rebuild-clean        Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
+  rebuild              Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image;k8s: helm upgrade)
+  rebuild-clean        Rebuild from scratch (no cache) —use when a forked git dependency (davix/gfal2/fts) moved
   ps                   Show running services / pods
   logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
 
 GitOps
-  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
-  argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
-  flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
+  argocd-uninstall     Uninstall ArgoCD applications andArgoCD resources
+  flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
   flux-uninstall       Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
 
 Helm-only

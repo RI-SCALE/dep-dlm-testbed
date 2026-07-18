@@ -1,26 +1,10 @@
 # Rucio DB bootstrap Job — runs bootstrap-db.py once against ruciodb.
 # Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg) and the script
 # (testbed-scripts-rucio) — BOTH projected by ESO from Vault after vault-seed.
-#
-# ORDERING (the important part):
-#   Argo: this Job is applied with sync-wave "5", AFTER the ExternalSecrets
-#         (wave 0) in the SAME Application. Argo waits for wave 0 resources to be
-#         Healthy (ExternalSecret Ready == target Secret synced) before applying
-#         wave 5 — so the mounted Secrets exist when the Job's pod is created,
-#         eliminating the FailedMount race. hook: Sync + BeforeHookCreation keeps
-#         re-runs clean and logs until the next deploy.
-#   Flux: annotations ignored; the bootstrap Kustomization (dependsOn secrets,
-#         healthCheck on this Job) provides the same gate.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: rucio-bootstrap-db
-  annotations:
-    # Run as a normal wave-5 resource (not a hook) so Argo counts it toward
-    # Application health and does not prune it across syncs. Wave 5 still places
-    # it after the ExternalSecrets (wave 0). Flux ignores this annotation and
-    # gates the Job via the bootstrap Kustomization healthCheck.
-    argocd.argoproj.io/sync-wave: "5"      # after ExternalSecrets (wave 0)
 spec:
   backoffLimit: 6
   template:
