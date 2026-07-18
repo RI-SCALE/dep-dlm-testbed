@@ -28,7 +28,7 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/vault-seed-out-of-gitops
+                  targetRevision: main
                   ref: values
           - name: rucio-daemons
             spec:
@@ -38,17 +38,17 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/vault-seed-out-of-gitops
+                  targetRevision: main
                   ref: values
           - name: fts
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/vault-seed-out-of-gitops
+                  targetRevision: main
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/vault-seed-out-of-gitops
+                  targetRevision: main
                   ref: values
   template:
     metadata:
