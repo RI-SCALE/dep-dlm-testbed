@@ -25,6 +25,7 @@ jobs:
     env:
       GITOPS_ENV: ${{ matrix.env }}
       RUNTIME: k8s
+      DAEMON_MODE: daemons
     strategy:
       fail-fast: false
       matrix:
