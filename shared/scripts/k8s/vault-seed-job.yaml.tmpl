@@ -1,33 +1,28 @@
-# Sandbox seed Job — clones the repo, GENERATES the runtime certs (they are
-# gitignored, only the CA is committed), then loads everything into the dev
-# Vault so the base ExternalSecrets can project it. SANDBOX-ONLY.
+# ============================================================================
+# vault-seed-job.yaml.tmpl — one-shot Vault seed Job (rendered by seed-vault.sh)
+# ============================================================================
+# NOT applied by Argo CD / Flux, and NOT git-tracked as a live manifest — this
+# is a template rendered with envsubst and applied imperatively at bootstrap
+# time. That's the whole point of the refactor: FLOW/SCOPE_PROFILE become
+# script flags instead of values baked into a committed, Argo-PreSync-hooked
+# manifest that had to be hand-edited and recommitted to change.
 #
-# Pipeline (initContainers run in order, then the main container):
-#   1. clone     — git clone the repo+branch into /repo
-#   2. gen-certs — run shared/scripts/generate-certs.sh (needs openssl+bash);
-#                  uses the committed rucio_ca.pem/key to mint host/xrd/teapot/
-#                  keycloak certs + trust anchors into /repo/certs (an emptyDir,
-#                  so the generated files persist to the seed container)
-#   3. seed      — vault kv put key=@file for certs/configs/patches/rucio
-#
-# Argo PreSync hook so it runs before the ExternalSecrets need data.
-#
-# NOTE: FLOW and SCOPE_PROFILE (env, below) are static — there is no CLI flag
-# or kustomize patch wired up to override them at deploy time. To change
-# either, edit the env value here directly and commit. See TOKEN_MODE for the
-# same pattern already in use.
-#
-# TODO: set the clone URL/branch to match your Argo repoURL.
+# Only ${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION} are
+# substituted by seed-vault.sh (it calls envsubst with an explicit variable
+# list) — every other $VAR below (${CFG}, ${PDIR}, ${FLOW} as read INSIDE the
+# container's own shell, etc.) is evaluated at container runtime, not by the
+# host-side envsubst pass. Do not add new ${...} host placeholders here
+# without also adding them to that explicit list in seed-vault.sh, or they'll
+# either get silently substituted with an empty string or leak through
+# unresolved.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: vault-seed
-  namespace: dep-dlm-sandbox
-  annotations:
-    argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  name: vault-seed-once
+  namespace: ${K8S_NAMESPACE}
 spec:
   backoffLimit: 6
+  ttlSecondsAfterFinished: 300
   template:
     spec:
       restartPolicy: OnFailure
@@ -39,13 +34,12 @@ spec:
           args:
             - clone
             - --depth=1
-            - --branch=main
-            - https://github.com/ri-scale/dep-dlm-testbed.git
+            - "--branch=${REVISION}"
+            - "${REPO_URL}"
             - /repo
           volumeMounts:
             - { name: repo, mountPath: /repo }
         - name: gen-certs
-          # alpine + openssl + bash: generate-certs.sh needs all three.
           image: alpine:3.20
           command: ["/bin/sh","-c"]
           args:
@@ -53,7 +47,6 @@ spec:
               set -e
               apk add --no-cache bash openssl >/dev/null
               cd /repo
-              # The script writes into ./certs and requires the committed CA.
               test -f certs/rucio_ca.pem || { echo "CA missing in clone"; exit 1; }
               bash shared/scripts/generate-certs.sh
               echo "generated certs:"; ls -1 certs | head -40
@@ -63,10 +56,10 @@ spec:
         - name: seed
           image: hashicorp/vault:1.17
           env:
-            - { name: VAULT_ADDR,  value: "http://vault.dep-dlm-sandbox.svc:8200" }
-            - { name: VAULT_TOKEN, value: "root" }     # sandbox dev token
-            - { name: FLOW,        value: "managed" }  # managed|unmanaged
-            - { name: SCOPE_PROFILE, value: "local" }    # local|egi-dev
+            - { name: VAULT_ADDR,    value: "http://vault.${K8S_NAMESPACE}.svc:8200" }
+            - { name: VAULT_TOKEN,   value: "root" }     # sandbox dev token
+            - { name: FLOW,          value: "${FLOW}" }
+            - { name: SCOPE_PROFILE, value: "${SCOPE_PROFILE}" }
           command: ["/bin/sh","-c"]
           args:
             - |
@@ -78,9 +71,9 @@ spec:
               PDIR=""
               [ "$SCOPE_PROFILE" != "local" ] && PDIR="${SCOPE_PROFILE}/"
 
-               # Trust-anchor names (5fca1cb1.*, b96dc756.*) are the new+old
-              # openssl hashes of the COMMITTED CA, so they are deterministic and
-              # match what base/values/* mount. Seed them by their known names.
+              # Trust-anchor names (5fca1cb1.*, b96dc756.*) are the new+old
+              # openssl hashes of the COMMITTED CA, so they are deterministic
+              # and match what base/values/* mount. Seed them by known names.
               vault kv put secret/dep-dlm/certs \
                 hostcert.pem=@certs/hostcert.pem \
                 hostkey.pem=@certs/hostkey.pem \
@@ -140,6 +133,6 @@ spec:
               vault kv put secret/dep-dlm/scripts \
                 init-testbed.sh=@shared/scripts/init-testbed.sh \
                 generate-certs.sh=@shared/scripts/generate-certs.sh
-              echo "seed complete"
+              echo "seed complete: FLOW=$FLOW SCOPE_PROFILE=$SCOPE_PROFILE"
           volumeMounts:
             - { name: repo, mountPath: /repo }

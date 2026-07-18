@@ -17,7 +17,6 @@ spec:
     - list:
         elementsYaml: |
           - name: external-secrets
-            wave: "-20"
             spec:
               source:
                 repoURL: https://charts.external-secrets.io
@@ -25,7 +24,6 @@ spec:
                 targetRevision: 0.10.7
                 helm: { values: "installCRDs: true\n" }
           - name: vault
-            wave: "-15"
             spec:
               source:
                 repoURL: https://helm.releases.hashicorp.com
@@ -39,7 +37,6 @@ spec:
                       dataStorage: { enabled: false }
                       ha: { enabled: false }
           - name: ruciodb
-            wave: "0"
             spec:
               source:
                 repoURL: https://charts.bitnami.com/bitnami
@@ -55,109 +52,98 @@ spec:
                     auth: { username: rucio, password: rucio, database: rucio }
                     primary: { persistence: { enabled: true } }
           - name: rucio-server
-            wave: "10"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-server
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: rucio-daemons
-            wave: "11"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   path: deploy/helm-charts/rucio-daemons
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: rucio-client
-            wave: "12"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/rucio-client
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-client.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: keycloak
-            wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/keycloak
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/keycloak.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: xrd3
-            wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd3.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: xrd4
-            wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd4.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: teapot1
-            wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot1.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: teapot2
-            wave: "5"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot2.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: fts
-            wave: "8"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
   template:
     metadata:
       name: '{{ .name }}-sandbox'
-      annotations:
-        argocd.argoproj.io/sync-wave: '{{ .wave }}'
     spec:
       project: default
       destination:

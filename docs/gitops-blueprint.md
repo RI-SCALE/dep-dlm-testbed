@@ -5,7 +5,7 @@ validated end-to-end on the sandbox environment in CI. Staging and production ar
 authored but need external Vault/DB/IdP to converge (tracked in `BACKLOG.md`).
 
 This document explains the *intent* and the *shape* of the deployment. For exact
-manifests, directory contents, chart versions, and sync ordering, read the tree
+manifests, directory contents, chart versions and sync ordering, read the tree
 under `deploy/gitops/` — those details change with the code and are deliberately
 not duplicated here.
 
@@ -39,14 +39,18 @@ margin (Vault target, component selection, namespace). Both engines consume the
 same `base/` and `environments/` tree; each engine has its own thin entrypoint
 layer.
 
-- `base/` — engine-agnostic: ExternalSecrets, per-component chart values, the
-  DB-bootstrap Job.
-- `environments/<env>/secrets/` — the per-env `ClusterSecretStore` (+ a seed Job
-  in sandbox) and the ExternalSecrets, plus the bootstrap Job gated behind them.
+- `base/` — engine-agnostic: ExternalSecrets, per-component chart values.
+- `environments/<env>/secrets/` — the per-env `ClusterSecretStore` and the
+  ExternalSecrets. **Not** in this tree anymore: Vault seeding and the DB-bootstrap
+  Job. Both are imperative, one-shot steps (`shared/scripts/seed-vault.sh`,
+  `shared/scripts/run-bootstrap-db.sh`), invoked by `init-argocd.sh`/`init-flux.sh`
+  at the right point in the bootstrap sequence — not GitOps-synced resources. This
+  is what lets the FTS token mode and OIDC scope profile be `--flow`/
+  `--scope-profile` flags instead of values hand-edited into a committed manifest.
 - `argocd/` — per-env ApplicationSet (component selection) + app-of-apps
   entrypoints.
 - `flux/` — per-component HelmReleases, HelmRepository sources, a dedicated ESO
-  Kustomization, and staged per-env entrypoints.
+  Kustomization and staged per-env entrypoints.
 
 Below table shows the **Argo→Flux construct mapping**:
 
@@ -105,7 +109,7 @@ omit the externalised components.
 
 The substance of "disable a chart" is **pointing its dependents at the external
 endpoint**, not just the on/off switch — e.g. using an external IdP means setting
-the Rucio OIDC issuer, the FTS `fts3restconfig`, and the RSE `audience` to that
+the Rucio OIDC issuer, the FTS `fts3restconfig` and the RSE `audience` to that
 issuer. Those values live in `base/values/` and the per-env secrets overlay (for
 endpoints carried via Vault), so changing an endpoint is an overlay edit, not a
 structural change.
@@ -121,9 +125,11 @@ abstraction so internal vs external Vault is one parameter:
   ExternalSecret. A `ClusterSecretStore` (same name across envs) targets whichever
   Vault the environment uses; ExternalSecrets project the certs/configs/patches and
   the Rucio config into native Secrets that the charts mount.
-- Sandbox seeds its dev Vault with a Job (clones the repo, generates the runtime
-  certs, loads everything via `vault kv put`); staging/production assume the Vault
-  is seeded out-of-band by an operator.
+- Sandbox seeds its dev Vault via `shared/scripts/seed-vault.sh` — an imperative
+  script invoked by `init-argocd.sh`/`init-flux.sh`, not a GitOps-tracked resource.
+  It clones the repo at the revision you're bootstrapping, generates the runtime
+  certs and loads everything via `vault kv put`. Staging/production assume the
+  Vault is seeded out-of-band by an operator, same as before.
 
 Links:
 - External Secrets Operator: https://external-secrets.io/latest/
@@ -134,21 +140,40 @@ Links:
 
 ## Ordering (both engines)
 
-The stateful infra and secrets must exist before the workloads, and the DB schema
-before the daemons. The same logical order is enforced on each engine by its native
-mechanism:
+The stateful infra and secrets must exist before the workloads and the DB schema
+before the daemons. **This ordering is enforced by the bootstrap scripts
+(`init-argocd.sh`/`init-flux.sh`), not by sync-wave annotations or
+`dependsOn`+healthCheck Kustomizations** — both of those were tried and removed:
 
-`ESO → core (Vault + PostgreSQL) → secrets (seed + ExternalSecrets) → DB bootstrap → components`
+- **Sync-wave annotations have no effect across independent
+  ApplicationSet-generated Applications.** They only order resources *within* a
+  single Application's own sync. Argo's ApplicationSet controller creates each
+  component (`vault-<env>`, `rucio-server-<env>`, ...) as an independent,
+  separately auto-syncing Application — there is no parent Application
+  orchestrating their relative sync order, so a `sync-wave` annotation on one of
+  them is inert. Confirmed empirically: components were already `ContainerCreating`
+  before Vault/ESO existed, despite wave annotations saying otherwise.
+- **A `dependsOn`+healthCheck-gated bootstrap Job creates a circular dependency,**
+  not just an ordering guarantee. `rucio-daemons` crash-loops on a missing
+  `heartbeats` table until the DB-bootstrap Job creates it — so if that Job is
+  itself gated behind "all components Healthy," it can never run, because
+  `rucio-daemons` can never be Healthy without it. This was the actual failure mode
+  hit when this was structured as a gated GitOps resource.
 
-- **Argo CD**: sync-waves order the apply; the bootstrap Job lives in the secrets
-  Application and is wave-ordered *behind* the ExternalSecrets, so it mounts secrets
-  that already exist.
-- **Flux**: `dependsOn` + `wait` between staged Kustomizations, with a Job
-  healthCheck gating the components stage on the schema being created.
+The real order is now:
 
-The key reason this ordering exists: the bootstrap Job mounts ESO-projected
-Secrets, and a missing Secret is a mount-time (kubelet) failure — so the Secret
-must exist before the Job's pod is created, not merely be waited for inside it.
+`apps root applied → core tier (Vault + ESO) explicitly waited on by name →
+secrets root applied (not waited on — not the real gate) → seed-vault.sh
+(needs only the Vault pod Ready) → run-bootstrap-db.sh (needs only the
+ruciodb Service to exist, checked internally) → everything else self-heals
+via Kubernetes' own mount-retry + selfHeal once secrets and schema exist`
+
+The key reason the ordering exists at all: the bootstrap Job mounts ESO-projected
+Secrets and a missing Secret is a mount-time (kubelet) failure — so the Secret
+must exist before the Job's pod is created. But *enforcing* that is now a script
+responsibility (explicit `kubectl wait`s on concrete preconditions — a pod Ready,
+a Service existing), not something either GitOps engine's declarative primitives
+turned out to express correctly for this dependency shape.
 
 ## Runbooks to ship
 

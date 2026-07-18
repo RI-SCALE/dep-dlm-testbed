@@ -178,8 +178,9 @@ endif
 ## GitOps
 
 .PHONY: argocd-install
-argocd-install: ## Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+argocd-install: ## Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
 	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
+	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
@@ -194,7 +195,10 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
-	# 4. Now the namespace can finalize.
+	# 4. Now the namespace can finalize. NOTE: vault-seed-once and
+	#    rucio-bootstrap-db are imperative Jobs (shared/scripts/seed-vault.sh,
+	#    run-bootstrap-db.sh) — not GitOps-managed, so nothing above prunes
+	#    them, but they live in this namespace and are deleted with it here.
 	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
 	# 5. Finally remove ESO and Argo.
 	kubectl -n $(ARGOCD_NAMESPACE) delete application external-secrets --ignore-not-found
@@ -202,8 +206,9 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
 
 .PHONY: flux-install
-flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production)
+flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
 	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
+	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
@@ -217,7 +222,10 @@ flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository)
 	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
-	# 3. Now the workload namespace can finalize.
+	# 3. Now the workload namespace can finalize. NOTE: vault-seed-once and
+	#    rucio-bootstrap-db are imperative Jobs (shared/scripts/seed-vault.sh,
+	#    run-bootstrap-db.sh) — not GitOps-managed, so nothing above prunes
+	#    them, but they live in this namespace and are deleted with it here.
 	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
 	# 4. Remove ESO (its own Kustomization) and the HelmReleases it managed.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-eso --ignore-not-found --wait=false

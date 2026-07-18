@@ -72,6 +72,14 @@ install_rucio_gfal() {
   echo -e "${GREEN}rucio: $(/opt/conda/envs/rucio/bin/rucio --version)  |  gfal CLIs: $(ls /opt/conda/envs/rucio/bin/gfal-* | wc -l) found${NC}\n"
 }
 
+install_yq() {
+    local YQ_VERSION="v4.44.3"
+    echo -e "${BLUE}Installing yq $YQ_VERSION...${NC}"
+    curl -Lo /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${ARCH}"
+    chmod +x /usr/local/bin/yq
+    echo -e "${GREEN}yq: $(yq --version)${NC}\n"
+}
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -88,5 +96,6 @@ echo -e "${BLUE}╚════════════════════�
 
 check_requirements
 install_kind
+install_yq
 install_rucio_gfal
 print_summary

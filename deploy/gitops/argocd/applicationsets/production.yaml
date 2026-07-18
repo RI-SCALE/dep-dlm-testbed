@@ -14,7 +14,6 @@ spec:
     - list:
         elementsYaml: |
           - name: external-secrets
-            wave: "-20"
             spec:
               source:
                 repoURL: https://charts.external-secrets.io
@@ -22,7 +21,6 @@ spec:
                 targetRevision: 0.10.7
                 helm: { values: "installCRDs: true\n" }
           - name: rucio-server
-            wave: "10"
             spec:
               sources:
                 - repoURL: https://rucio.github.io/helm-charts
@@ -30,10 +28,9 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: rucio-daemons
-            wave: "11"
             spec:
               sources:
                 - repoURL: https://rucio.github.io/helm-charts
@@ -41,24 +38,21 @@ spec:
                   targetRevision: 40.0.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
           - name: fts
-            wave: "8"
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: refactor/vault-seed-out-of-gitops
                   ref: values
   template:
     metadata:
       name: '{{ .name }}-production'
-      annotations:
-        argocd.argoproj.io/sync-wave: '{{ .wave }}'
     spec:
       project: default
       destination:
