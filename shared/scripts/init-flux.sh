@@ -196,14 +196,6 @@ if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
     --flow "$FLOW" \
     --scope-profile "$SCOPE_PROFILE"
 
-  # ExternalSecrets have a slow default refresh interval (1h per this
-  # repo's config). Force an immediate refresh instead of waiting on
-  # anything — dependent pods' FailedMount errors self-heal automatically
-  # via kubelet's own mount retries once the target Secret exists.
-  log "Forcing ExternalSecrets in ${APP_NS} to re-sync now that Vault is seeded"
-  for es in $(kubectl -n "$APP_NS" get externalsecret -o name 2>/dev/null); do
-    kubectl -n "$APP_NS" annotate "$es" force-sync="$(date +%s)" --overwrite >/dev/null
-  done
 elif [[ "$SEED" -eq 0 ]]; then
   log "Skipping Vault seeding (--no-seed)"
 fi
