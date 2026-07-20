@@ -91,6 +91,9 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/openidconnect.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/fts/JobBuilder.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/cloudStorage.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/model/cloudStorage.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/cloud.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/cloud.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/tokenproviders.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/tokenproviders.py:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     entrypoint:
       - bash

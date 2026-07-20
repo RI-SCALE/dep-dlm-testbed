@@ -392,7 +392,15 @@ fts:
     - name: patches
       mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py
       subPath: fts--JobBuilder.py
-
+    - name: patches
+      mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/model/cloudStorage.py
+      subPath: fts--cloudStorage.py
+    - name: patches
+      mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/cloud.py
+      subPath: fts--cloud.py
+    - name: patches
+      mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/tokenproviders.py
+      subPath: fts--tokenproviders.py
 
 # Keycloak
 

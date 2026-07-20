@@ -118,6 +118,9 @@ spec:
                 fts--middleware.py=@shared/patches/fts/middleware.py \
                 fts--openidconnect.py=@shared/patches/fts/openidconnect.py \
                 fts--JobBuilder.py=@shared/patches/fts/JobBuilder.py \
+                fts--cloudStorage.py=@shared/patches/fts/cloudStorage.py \
+                fts--cloud.py=@shared/patches/fts/cloud.py \
+                fts--tokenproviders.py=@shared/patches/fts/tokenproviders.py \
                 teapot--teapot.py=@shared/patches/teapot/teapot.py
               vault kv put secret/dep-dlm/rucio \
                 server.cfg=@shared/config/rucio/${PDIR}${CFG} \
