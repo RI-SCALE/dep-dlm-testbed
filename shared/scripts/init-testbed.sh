@@ -11,18 +11,8 @@ FTS_OIDC="https://fts:8446"
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
 OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}"
 
-# Every Rucio account that can OWN a transfer needs a seeded OIDC subject
-# token, because the conveyor submitter calls request_token(account=<rule
-# owner>) and get_token_for_account_operation walks that account's
-# identity->subject-token chain. compose submits as root; the k8s rucio-client
-# is configured account=ddmlab. Seed both so the testbed works under either.
 SEED_ACCOUNTS=( root ddmlab )
 
-# ── Token-exchange (FGAP) configuration ──────────────────────────
-# Clients that PERFORM token-exchange (need the FGAP permission):
-#   - rucio: submission-time exchange (core/oidc.py) -> per-RSE source/dest tokens
-#   - fts:   FTS-server TokenExchangeService -> refresh tokens
-# Targets are the storage-audience clients the exchange is allowed to mint for.
 KCADM="/opt/keycloak/bin/kcadm.sh"
 KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
@@ -91,13 +81,6 @@ _http_probe_local() {
     esac
 }
 
-# Map SCOPE_PROFILE to the OAuth grant used for the testbed's own
-# bootstrapping requests (identity registration, subject-token seeding).
-# Deliberately NOT sourced from idpsecrets.json capabilities: capabilities
-# there are read by Rucio's Python code (get_capabilities()); grant_mode is
-# read only by this script, so it stays keyed off SCOPE_PROFILE — the same
-# value that already selects which idpsecrets.json/rucio.cfg bundle gets
-# mounted for this profile.
 _grant_mode_for_profile() {
     case "$SCOPE_PROFILE" in
         egi-dev) echo "client_credentials" ;;
@@ -105,10 +88,6 @@ _grant_mode_for_profile() {
     esac
 }
 
-# Read a dotted field under .capabilities for $OIDC_ISSUER from
-# idpsecrets.json as mounted in rucio-server. $1 = dotted path
-# (e.g. "client_credentials.resource_param", "token_exchange.audience_param"),
-# $2 = default if file/issuer/field is missing.
 _cap() {
     local path="$1" default="$2"
     _exec rucio-server env \
@@ -132,8 +111,27 @@ except Exception:
 
 ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
 
-# Run kcadm inside the keycloak service (compose container or k8s pod).
 _kc() { _exec keycloak "$KCADM" "$@"; }
+
+_fts_admin() {
+    local attempt rc
+    for attempt in 1 2 3; do
+        if _exec fts curl -skS --tls-max 1.2 \
+            --cert /etc/grid-security/hostcert.pem \
+            --key /etc/grid-security/hostkey.pem \
+            "$@"; then
+            rc=0
+        else
+            rc=$?
+        fi
+        [ "$rc" -eq 0 ] && return 0
+        [ "$rc" -eq 18 ] && { echo "  ⚠ curl exit 18 (response truncated at transport layer, request itself succeeds server-side — continuing" >&2; return 0; }
+        echo "  ⚠ FTS admin call failed (curl exit ${rc}), attempt ${attempt}/3 — retrying in 5s..." >&2
+        sleep 5
+    done
+    echo "  ✗ FTS admin call failed after 3 attempts: $*" >&2
+    return 1
+}
 
 # ── Infrastructure Readiness ─────────────────────────────────────
 
@@ -151,6 +149,12 @@ wait_for_infrastructure() {
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
         echo "  [$i] Keycloak HTTP $code — waiting..."; sleep 5
+    done
+
+    for i in $(seq 1 30); do
+        code=$(_fts_admin -o /dev/null -w '%{http_code}' https://localhost:8446/whoami 2>/dev/null) || code=0
+        [[ "$code" == "200" || "$code" == "403" ]] && { echo "  ✓ FTS ready"; break; }
+        echo "  [$i] FTS HTTP $code — waiting..."; sleep 5
     done
 }
 
@@ -197,9 +201,6 @@ from rucio.common import exception
 
 
 def ensure_identity(identity, id_type, email):
-    # Idempotently create an identity row. add_identity does NOT normalise a
-    # PK collision into exception.Duplicate on this Rucio version - it lets the
-    # raw DatabaseException through - so we also match on the message text.
     try:
         add_identity(identity, id_type, email)
     except exception.Duplicate:
@@ -213,7 +214,6 @@ def ensure_identity(identity, id_type, email):
 
 
 def ensure_account_identity(identity, id_type, account, email):
-    # Idempotently map an identity to an account.
     try:
         add_account_identity(identity, id_type, account, email)
     except exception.Duplicate:
@@ -244,30 +244,6 @@ except Exception as e:
 }
 
 # ── Subject-token seeding (managed-mode token exchange) ──────────
-#
-# In managed-token mode (oidc.token_strategy = exchange), Rucio mints per-file
-# FTS tokens by exchanging the *transfer-owning account's* stored OIDC subject
-# token (RFC 8693). The owning account is whoever created the rule: compose
-# submits as root, the k8s rucio-client is account=ddmlab. An unattended
-# account never acquires a subject token on its own, so we seed one for each
-# account in SEED_ACCOUNTS here:
-#
-#   1. obtain a user access token via the password grant, WITH offline_access
-#      in scope (required for the exchange to mint a refresh token);
-#   2. map the corresponding OIDC identity to each account;
-#   3. persist the token into the Rucio `tokens` table for each account.
-#
-# One OIDC identity (randomaccount's) is intentionally mapped to multiple
-# Rucio accounts — Rucio supports this, and get_token_for_account_operation
-# resolves the issuer from the identity string, not from a 1:1 mapping.
-#
-# The token row MUST have:
-#   - identity in Rucio's internal "SUB=<sub>, ISS=<iss>" form (NOT iss#sub),
-#     because get_token_for_account_operation() parses the issuer out of it as
-#     identity.split(", ")[1].split("=")[1];
-#   - a non-empty oidc_scope containing offline_access;
-#   - a non-empty audience.
-
 seed_subject_tokens() {
     local accounts_csv
     accounts_csv=$(printf '%s,' "${SEED_ACCOUNTS[@]}"); accounts_csv="${accounts_csv%,}"
@@ -312,16 +288,11 @@ def _b64json(segment):
 
 
 def _mint_token():
-    # Each call is a fresh grant -> a distinct JWT (different jti/iat), so each
-    # account gets its own token string. The tokens table PK is the token
-    # column, so reusing one JWT across accounts violates TOKENS_PK.
     if GRANT_MODE == 'client_credentials':
         data = {
             'grant_type': 'client_credentials',
             'scope': SEED_SCOPE,
         }
-        # EGI: stamp a real aud so this subject token satisfies
-        # get_token_for_account_operation()'s EXPECTED_OIDC_AUDIENCE check.
         if EXPECTED_AUDIENCE.startswith(('http://', 'https://')):
             data['resource'] = EXPECTED_AUDIENCE
         data = urllib.parse.urlencode(data).encode()
@@ -415,8 +386,6 @@ except Exception as e:
     sys.exit(1)
 "
 
-    # Remove non-OIDC (userpass session) token rows for every seeded account,
-    # so each account's token set is exactly the seeded OIDC subject token.
     echo "  Removing non-OIDC token rows for seeded accounts..."
     local acct
     for acct in "${SEED_ACCOUNTS[@]}"; do
@@ -442,7 +411,6 @@ configure_rses() {
     local resource_param
     resource_param=$(_cap "client_credentials.resource_param" "false")
 
-    # XRootD SciTokens instances
     for rse in XRD3 XRD4; do
         local host
         host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
@@ -464,7 +432,6 @@ configure_rses() {
     ra rse add-distance XRD3 XRD4 --distance 1 || true
     ra rse add-distance XRD4 XRD3 --distance 1 || true
 
-    # Teapot WebDAV instances
     for rse in TEAPOT1 TEAPOT2; do
         local instance
         instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
@@ -495,28 +462,13 @@ configure_rses() {
     ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
 }
 
-# ── S3 source RSE (FTS-server-side credentials, per FTS S3 docs) ──
-# Rucio just registers the RSE + protocol with scheme=s3s. FTS resolves
-# credentials by matching the URL host against t_cloudStorage entries —
-# see configure_fts_cloud_storage() below for the FTS-side bits.
-#
-# Env vars:
-#   S3_ENDPOINT     hostname only, e.g. eodata.dataspace.copernicus.eu
-#                   (https:// scheme will be stripped automatically)
-#   S3_BUCKET       e.g. eodata
-#   S3_ACCESS_KEY   only used by configure_fts_cloud_storage
-#   S3_SECRET_KEY   only used by configure_fts_cloud_storage
-#   S3_REGION       optional; if set, FTS uses S3v4 signatures
+# ── S3 source RSE ──
 configure_s3_source_rse() {
     if [ -z "${S3_ACCESS_KEY:-}" ] || [ -z "${S3_SECRET_KEY:-}" ]; then
         echo "=== COPERNICUS_S3 skipped (ACCESS_KEY / SECRET_KEY not set) ==="
         return 0
     fi
 
-    # Normalise endpoint: strip scheme (https?://) and any /path tail.
-    # Mirrors configure_fts_cloud_storage so the two stay in sync — a stale
-    # https:// in $S3_ENDPOINT would otherwise produce a malformed hostname
-    # in the rse_protocols table and a PFN scheme mismatch at registration.
     local raw_endpoint="${S3_ENDPOINT:-eodata.dataspace.copernicus.eu}"
     local s3_endpoint="${raw_endpoint#*://}"
     s3_endpoint="${s3_endpoint%%/*}"
@@ -544,66 +496,45 @@ configure_s3_source_rse() {
 }
 
 # ── FTS server-side S3 configuration ─────────────────────────────
-# Per the FTS docs, three things are needed:
-#   1. t_cloudStorage row naming the storage as "S3:<hostname>"
-#   2. t_cloudStorageUser row mapping (user_dn, vo_name) → (access_key, secret_key)
-#   3. /etc/gfal2.d/s3.conf section setting ALTERNATE + optional REGION
-# Naming convention is "S3:" + the URL hostname (NOT an arbitrary label).
-# user_dn must match the DN/sub FTS sees when Rucio submits — check via
-# /whoami after delegation. We use "*" for vo_name so the mapping applies
-# regardless of VOMS attributes.
 configure_fts_cloud_storage() {
     if [ -z "${S3_ACCESS_KEY:-}" ] || [ -z "${S3_SECRET_KEY:-}" ]; then
         echo "=== FTS cloud_storage skipped (ACCESS_KEY / SECRET_KEY not set) ==="
         return 0
     fi
 
-    # Normalise: strip scheme (https?://) and any trailing path/slash, so
-    # callers can pass either "eodata.dataspace.copernicus.eu" or
-    # "https://eodata.dataspace.copernicus.eu" — FTS storage_name needs the
-    # bare hostname.
     local raw_endpoint="${S3_ENDPOINT:-eodata.dataspace.copernicus.eu}"
-    local s3_endpoint="${raw_endpoint#*://}"   # strip any scheme://
-    s3_endpoint="${s3_endpoint%%/*}"           # strip any /path tail
+    local s3_endpoint="${raw_endpoint#*://}"
+    s3_endpoint="${s3_endpoint%%/*}"
     local s3_region="${S3_REGION:-default}"
     local storage_name="S3:${s3_endpoint}"
-    # FTS_USER_DN must match what /whoami returns when Rucio authenticates.
-    # Default matches the test cert used in this testbed.
     local user_dn="${FTS_USER_DN:-e8af11a6-76bb-44dd-abf7-32988c769cfc}"
 
-    echo "=== Configuring FTS cloud_storage entry for ${storage_name} ==="
+    echo "=== Configuring FTS cloud_storage entry for ${storage_name} (via REST) ==="
 
-    # 1 + 2: registry and credential mapping in the FTS DB.
-    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-    INSERT INTO t_cloudStorage (cloudStorage_name, region, sigv4_header_mode)
-      VALUES ('${storage_name}', '${s3_region}', 1)
-      ON DUPLICATE KEY UPDATE region = VALUES(region),
-                              sigv4_header_mode = VALUES(sigv4_header_mode);
-    DELETE FROM t_cloudStorageUser
-      WHERE cloudStorage_name = '${storage_name}' AND user_dn = '${user_dn}';
-    INSERT INTO t_cloudStorageUser
-      (cloudStorage_name, user_dn, vo_name, access_token, access_token_secret)
-      VALUES ('${storage_name}', '${user_dn}', '*',
-              '${S3_ACCESS_KEY}', '${S3_SECRET_KEY}');"
+    _fts_admin -X POST -H "Content-Type: application/json" \
+        -d "{\"storage_name\":\"${storage_name}\",\"region\":\"${s3_region}\",\"sigv4_header_mode\":1}" \
+        https://localhost:8446/config/cloud_storage
+
+    # OPEN QUESTION — not resolved by this migration:
+    # the old raw insert set BOTH user_dn AND vo_name='*' on one row.
+    # add_user_to_cloud_storage() REJECTS that combination outright.
+    # This picks user_dn (exact-match only) — unconfirmed against
+    # CSInterface.py as a like-for-like replacement.
+    _fts_admin -X POST -H "Content-Type: application/json" \
+        -d "{\"user_dn\":\"${user_dn}\",\"access_key\":\"${S3_ACCESS_KEY}\",\"secret_key\":\"${S3_SECRET_KEY}\"}" \
+        "https://localhost:8446/config/cloud_storage/${storage_name}"
 
     local s3_se="s3s://${s3_endpoint}"
     echo "  Marking ${s3_se} as tpc_support=NONE (force streamed copy mode)..."
-    _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-    INSERT INTO t_se (storage, tpc_support)
-      VALUES ('${s3_se}', 'NONE')
-      ON DUPLICATE KEY UPDATE tpc_support = 'NONE';"
+    _fts_admin -X POST -H "Content-Type: application/json" \
+        -d "{\"${s3_se}\":{\"se_info\":{\"tpc_support\":\"NONE\"}}}" \
+        https://localhost:8446/config/se
 
-    # 3: gfal2 config inside the FTS container. ALTERNATE=true → path-style
-    # buckets (required for non-AWS endpoints like Copernicus / MinIO).
-    # REGION=<value> switches gfal2 from S3v2 to S3v4 signatures.
     local gfal_section
     gfal_section="[S3:$(echo "$s3_endpoint" | tr '[:lower:]' '[:upper:]')]"
     local region_line=""
     [ -n "$s3_region" ] && region_line="REGION=${s3_region}"
-
-    # Filename also uses the normalised hostname (no slashes).
     local conf_path="/etc/gfal2.d/s3-${s3_endpoint}.conf"
-
     _exec fts bash -c "cat > '${conf_path}' <<CONF
 ${gfal_section}
 ALTERNATE=true
@@ -615,36 +546,39 @@ CONF"
     _restart fts
 }
 
+
 # ── FTS OIDC Provider Registration ───────────────────────────────
 
 setup_fts_oidc_provider() {
-    echo "=== Registering Keycloak in FTS Database ==="
+    echo "=== Registering Keycloak in FTS Database (via REST) ==="
 
-    echo "  Waiting for fts.t_token_provider schema..."
+    echo "  Waiting for FTS config API to be ready..."
     for i in $(seq 1 60); do
-        if _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts \
-            -e "SELECT 1 FROM t_token_provider LIMIT 1" >/dev/null 2>&1; then
-            echo "  ✓ Schema ready"; break
-        fi
-        if [ "$i" = "60" ]; then
-            echo "  ✗ Schema never appeared"
-            exit 1
-        fi
+        code=$(_fts_admin -o /dev/null -w '%{http_code}' https://localhost:8446/config/token_providers 2>/dev/null) || code=0
+        [[ "$code" == "200" ]] && { echo "  ✓ Config API ready"; break; }
+        [ "$i" = "60" ] && { echo "  ✗ Config API never became ready (last code: $code)"; exit 1; }
         sleep 5
     done
 
-
-    # provider rows: always seed both slash/no-slash forms (the FK lesson)
+    # Both slash and no-slash forms are genuinely required (not just belt-
+    # and-braces): submit-time lookup matches the raw JWT 'iss' claim
+    # verbatim (no slash), while t_token has an FK (fk_token_issuer)
+    # requiring the SLASHED form. shared/patches/fts/tokenproviders.py
+    # stores issuer exactly as given, so both calls are needed.
     if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
-        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
-        ('egi-checkin-dev', 'https://aai-dev.egi.eu/auth/realms/egi', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\"),
-        ('egi-checkin-dev-slash', 'https://aai-dev.egi.eu/auth/realms/egi/', \"$OIDC_CLIENT_ID\", \"$OIDC_CLIENT_SECRET\");"
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"egi-checkin-dev\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
     else
-        _exec ftsdb mysql -h 127.0.0.1 --protocol=tcp -ufts -pfts fts -e "
-        INSERT IGNORE INTO t_token_provider (name, issuer, client_id, client_secret) VALUES
-        ('keycloak-rucio',       'https://keycloak:8443/realms/rucio',  'fts', 'fts-secret'),
-        ('keycloak-rucio-slash', 'https://keycloak:8443/realms/rucio/', 'fts', 'fts-secret');"
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"keycloak-rucio\",\"issuer\":\"https://keycloak:8443/realms/rucio\",\"client_id\":\"fts\",\"client_secret\":\"fts-secret\"}" \
+            https://localhost:8446/config/token_providers
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"keycloak-rucio-slash\",\"issuer\":\"https://keycloak:8443/realms/rucio/\",\"client_id\":\"fts\",\"client_secret\":\"fts-secret\"}" \
+            https://localhost:8446/config/token_providers
     fi
 
     echo "  Restarting fts..."
@@ -680,22 +614,13 @@ setup_scopes_and_quotas() {
 }
 
 # ── Token-exchange grant (merged from grant-token-exchange.sh) ────
-#
-# Grants EXCHANGE_REQUESTERS (rucio, fts) permission to perform standard
-# (legacy V1) token-exchange targeting each storage-audience client
-# (EXCHANGE_TARGETS). For each target: enable management permissions, create
-# (or update) a client policy whose members are all requesters, and bind that
-# policy to the target's token-exchange scope permission. Idempotent.
-# Keycloak 23.0.1.
 grant_token_exchange() {
     echo "=== Granting token-exchange permissions ==="
 
-    # 1. authenticate kcadm against the master realm
     _kc config credentials \
         --server http://localhost:8080 \
         --realm master --user admin --password admin
 
-    # 2. resolve every requester client UUID
     local rc uuid
     local requester_uuids=()
     for rc in "${EXCHANGE_REQUESTERS[@]}"; do
@@ -712,7 +637,6 @@ grant_token_exchange() {
     requester_uuids_json=$(printf '"%s",' "${requester_uuids[@]}")
     requester_uuids_json="[${requester_uuids_json%,}]"
 
-    # 3. per target: enable permissions, create/refresh policy, bind it
     local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
     for target in "${EXCHANGE_TARGETS[@]}"; do
         echo "  === target: $target ==="
@@ -746,8 +670,6 @@ grant_token_exchange() {
             "clients/$rm_uuid/authz/resource-server/policy?name=$policy_name" \
             -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
 
-        # ensure an existing policy lists BOTH requesters (a stale single-client
-        # policy from an earlier run would otherwise permit only fts).
         if [ -n "$policy_id" ]; then
             _kc update \
                 "clients/$rm_uuid/authz/resource-server/policy/client/$policy_id" \
@@ -773,8 +695,6 @@ grant_token_exchange() {
 }
 
 # ── Token-exchange self-test (optional, gated) ───────────────────
-# Set INIT_VERIFY_EXCHANGE=1 to exchange as each requester for each target and
-# assert a refresh_token comes back. Off by default to keep init fast.
 verify_token_exchange() {
     [ "${INIT_VERIFY_EXCHANGE:-0}" = "1" ] || return 0
     local grant_mode
