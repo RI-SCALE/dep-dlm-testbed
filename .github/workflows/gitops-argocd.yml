@@ -19,17 +19,32 @@ on:
 
 jobs:
   argocd:
-    name: argocd | ${{ matrix.env }}
+    name: argocd | ${{ matrix.env }} | ${{ matrix.scope_profile }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      GITOPS_ENV: ${{ matrix.env }}
-      RUNTIME: k8s
-      DAEMON_MODE: daemons
     strategy:
       fail-fast: false
       matrix:
         env: [sandbox]          # staging/production need external Vault/DB/IdP
+        scope_profile: [local, egi-dev]
+    env:
+      GITOPS_ENV: ${{ matrix.env }}
+      # Point Argo/Flux at THIS PR's repo+branch — see inline comment below,
+      # unchanged from before.
+      GITOPS_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+      GITOPS_REVISION: ${{ github.head_ref || github.ref_name }}
+      SCOPE_PROFILE: ${{ matrix.scope_profile }}
+      # egi-dev only passes with client_credentials — token-exchange is
+      # non-viable against EGI Check-In Dev (see BYO IdP runbook, "CA trust"
+      # / token_strategy caveat). local keeps the default managed flow.
+      TOKEN_MODE: ${{ matrix.scope_profile == 'egi-dev' && 'unmanaged' || 'managed' }}
+      OIDC_ISSUER: ${{ matrix.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' || '' }}
+      OIDC_CLIENT_ID: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_ID || '' }}
+      OIDC_CLIENT_SECRET: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_SECRET || '' }}
+      OIDC_GRANT_TYPE: ${{ matrix.scope_profile == 'egi-dev' && 'client_credentials' || '' }}
+      OIDC_STORAGE_SCOPE: ${{ matrix.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
+      RUNTIME: k8s
+      DAEMON_MODE: daemons
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -40,12 +55,6 @@ jobs:
           cluster_name: dep-dlm-gitops
 
       - name: Install Argo CD + bootstrap ${{ matrix.env }}
-        env:
-          GITOPS_ENV: ${{ matrix.env }}
-          # Point Argo at THIS PR's repo+branch (Argo reads git, not the runner's
-          # working tree). Without this it would track the default branch.
-          GITOPS_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          GITOPS_REVISION: ${{ github.head_ref || github.ref_name }}
         run: make argocd-install
 
       - name: Wait for Applications to become Healthy
@@ -86,6 +95,27 @@ jobs:
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns get pods
 
+      - name: Patch Vault egi-dev OIDC credentials
+        if: matrix.scope_profile == 'egi-dev'
+        run: |
+          ns=dep-dlm-${{ matrix.env }}
+          kubectl exec -n "$ns" vault-0 -- sh -c '
+            VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
+            vault kv get -mount=secret -field=idpsecrets.json dep-dlm/rucio
+          ' | sed -e "s|<valid client id>|$OIDC_CLIENT_ID|g" -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" > /tmp/idpsecrets.json
+          kubectl cp /tmp/idpsecrets.json "$ns"/vault-0:/tmp/idpsecrets.json
+          kubectl exec -n "$ns" vault-0 -- sh -c '
+            VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
+            vault kv patch -mount=secret dep-dlm/rucio idpsecrets.json=@/tmp/idpsecrets.json
+          '
+          rm /tmp/idpsecrets.json
+          kubectl annotate externalsecret rucio-server-cfg -n "$ns" force-sync=$(date +%s) --overwrite
+          kubectl rollout restart deployment rucio-server rucio-daemons-conveyor-finisher \
+            rucio-daemons-conveyor-poller rucio-daemons-conveyor-submitter \
+            rucio-daemons-judge-cleaner rucio-daemons-judge-evaluator rucio-daemons-reaper \
+            -n "$ns"
+          kubectl -n "$ns" rollout status deploy/rucio-server --timeout=300s
+
       - name: Initialize testbed (accounts, RSEs, OIDC)
         run: make init
 
@@ -109,6 +139,4 @@ jobs:
 
       - name: Tear down
         if: always()
-        env:
-          GITOPS_ENV: ${{ matrix.env }}
         run: make argocd-uninstall || true
