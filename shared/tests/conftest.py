@@ -412,11 +412,16 @@ def fetch_token_client_credentials(
     client_id: str,
     client_secret: str,
     scope: str = "openid",
-    resource: str = None,
+    resource=None,  # str, list[str], or None
 ) -> str:
     data = {"grant_type": "client_credentials", "scope": scope}
     if resource:
         # EGI (RFC 8707): resource stamps the aud claim; audience= does not.
+        # requests encodes a list value as repeated resource= form fields,
+        # which is how RFC 8707 expresses multiple audiences in one request —
+        # needed so a single Teapot token is valid against both teapot1 and
+        # teapot2 (each has its own registered audience; a token scoped to
+        # only one is rejected by the other).
         data["resource"] = resource
     resp = requests.post(
         url,
@@ -550,8 +555,18 @@ def oidc_token():
 def teapot_token():
     # On EGI, audience comes from resource=, NOT the aud:teapot* scope
     # (Keycloak-only syntax → invalid_scope). Keep aud: scope only for wlcg.
+    #
+    # This single token is used against BOTH teapot1 and teapot2 (see
+    # teapots_ready below), so under client_credentials it must carry both
+    # audiences — request resource= for each RSE rather than just teapot1.
     if OIDC_GRANT_TYPE == "client_credentials":
-        return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("teapot1"))
+        return fetch_token_client_credentials(
+            OIDC_TOKEN_URL,
+            OIDC_CLIENT_ID,
+            OIDC_CLIENT_SECRET,
+            scope=OIDC_STORAGE_SCOPE,
+            resource=[_rse_resource("teapot1"), _rse_resource("teapot2")],
+        )
     scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
         OIDC_TOKEN_URL,
