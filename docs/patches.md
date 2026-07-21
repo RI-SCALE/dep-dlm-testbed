@@ -15,6 +15,8 @@ or ConfigMap-mounted (Kubernetes) over the original file.
 | `fts/middleware.py` | FTS | Stores OIDC issuer without trailing-slash normalization, matching Keycloak's raw `iss` claim |
 | `fts/openidconnect.py` | FTS | `get_token_issuer()` returns raw `iss` claim (companion to `middleware.py` — apply/remove together) |
 | `fts/JobBuilder.py` | FTS | Accepts asymmetric token/cloud_storage transfers (S3 source needs no token, WebDAV destination does); `_cloud_storage_exists` adds a live DB query (`t_cloudStorage`) to the per-request validation path, fails closed to "token required" on query error |
+| `fts/cloudStorage.py`, `fts/cloud.py` | FTS | Adds `region`/`sigv4_header_mode` to the `t_cloudStorage` ORM model — required for S3v4-signed transfers, absent upstream. Enables `init-testbed.sh` to set these via `/config/cloud_storage` REST instead of raw SQL |
+| `fts/tokenproviders.py` | FTS | Stores issuer exactly as given instead of force-appending a trailing slash — the unpatched controller broke submit-time issuer lookup (raw JWT `iss` match), causing 403 "Issuer not found in configured providers" |
 | `teapot/teapot.py` | Teapot | Replaces `@flaat.is_authenticated()` (live `/userinfo` call) with offline JWT verification (`verify_token()`, JWKS via `PyJWKClient`) plus an explicit audience check — required because FTS presents RFC 8693 token-exchanged tokens that Keycloak's `/userinfo`/`/introspect` reject as non-live-session; also: robust process matching (`_get_proc`) by key parts instead of exact cmdline, explicit `httpx.Timeout` for slow aarch64 JVM cold-start |
 
 ## Per-issuer OIDC capabilities — `get_capabilities()`
@@ -101,6 +103,9 @@ go upstream as-is" varies — noted per item.
   trailing-slash-agnostic. Whether upstream treats this as a bug or expects
   callers to always supply a trailing-slash issuer is worth raising with
   them rather than assuming.
+- `tokenproviders.py`'s trailing-slash fix — internal FTS inconsistency
+  (`t_token` FK needs the slashed form, submit-time lookup needs
+  unslashed), not testbed-specific.
 - `constants.py`'s `root`↔`https` scheme compatibility for
   `BASE_SCHEME_MAP`.
 - Promoting previously-silent exception handling to WARNING-level logging.
@@ -134,6 +139,8 @@ go upstream as-is" varies — noted per item.
   the matching-by-key-parts logic is a genuine robustness improvement, but
   the timeout value should become a `config.ini` knob before proposing
   upstream, rather than a hardcoded constant.
+- `cloudStorage.py`/`cloud.py`'s `region`/`sigv4_header_mode` fields — real
+  ORM gap for S3v4 signing, not yet raised upstream.
 
 **Testbed-specific, not intended for upstreaming:**
 - `unmanaged_tokens` conditional logic in `fts3.py` — this *is* the
