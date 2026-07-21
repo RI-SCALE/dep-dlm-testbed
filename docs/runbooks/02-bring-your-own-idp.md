@@ -96,19 +96,27 @@ requested, and for anyone with Federation Registry access to replicate it.
 ## CA trust: the server must trust the issuer
 
 Rucio's OIDC discovery (`oic`/`requests`) honours `REQUESTS_CA_BUNDLE`, pointing at
-`/etc/grid-security/certificates/rucio_ca.pem`. If that bundle only holds the
-internal Rucio CA, discovery fails with `CERTIFICATE_VERIFY_FAILED ... unable to
-get issuer certificate`, even though the image's system bundle
-(`/etc/pki/tls/certs/ca-bundle.crt`) trusts the issuer. Use a combined bundle =
-**system bundle + internal Rucio CA**, not a hand-assembled issuer chain.
+`/etc/grid-security/certificates/tls_ca_bundle.pem`. `rucio_ca.pem` in the same
+directory holds **only** the internal Rucio CA — using it for OIDC discovery
+against an external issuer fails with `CERTIFICATE_VERIFY_FAILED ... unable to
+get local issuer certificate`, even though the image's system bundle
+(`/etc/pki/tls/certs/ca-bundle.crt`) trusts the issuer on its own. Use a combined
+bundle = **system bundle + internal Rucio CA**, not a hand-assembled issuer
+chain, and make sure it's mounted as `tls_ca_bundle.pem`, not `rucio_ca.pem`.
 
-> **egi-dev:** a ready combined `rucio_ca.pem` (system roots + Rucio Dev CA,
+> **egi-dev:** a ready combined `tls_ca_bundle.pem` (system roots + Rucio Dev CA,
 > trusts the EGI GÉANT/HARICA chain) is checked in at
-> `shared/config/rucio/egi-dev/rucio_ca.pem`. To replicate the setup, copy it over
-> the active bundle: `cp shared/config/rucio/egi-dev/rucio_ca.pem certs/rucio_ca.pem`.
+> `shared/config/rucio/egi-dev/tls_ca_bundle.pem`. To replicate the setup, copy
+> it over the active bundle: `cp shared/config/rucio/egi-dev/tls_ca_bundle.pem
+> certs/tls_ca_bundle.pem`.
 > Do **not** inline the full system store into a Helm-tracked file — it trips
 > Helm's 1 MiB release-secret limit; keep it on the compose-mounted cert path or
 > concatenate at runtime.
+>
+> `rucio_ca.pem` still matters separately — it's what `rucio.cfg`'s
+> `[conveyor] cacert` points at for FTS/gfal transfers, which is a different
+> trust path from OIDC discovery. Don't conflate the two: verify each with its
+> own bundle, as shown in Verification below.
 
 ## Configuration reference — where things land
 
@@ -244,12 +252,12 @@ get issuer certificate`, even though the image's system bundle
 # CA trust — should print 200 against the bundle REQUESTS_CA_BUNDLE points at
 python3 -c "import requests; print(requests.get(
   '<issuer>/.well-known/openid-configuration',
-  verify='/etc/grid-security/certificates/rucio_ca.pem').status_code)"
+  verify='/etc/grid-security/certificates/tls_ca_bundle.pem').status_code)"
 
 # e.g.
 python3 -c "import requests; print(requests.get(
   'https://aai-dev.egi.eu/auth/realms/egi/.well-known/openid-configuration',
-  verify='/etc/grid-security/certificates/rucio_ca.pem').status_code)"
+  verify='/etc/grid-security/certificates/tls_ca_bundle.pem').status_code)"
 
 # Exec into a daemon pod to ensure daemon client_credentials are correct — should return 200 with capability scopes
 python3 -c "
@@ -326,7 +334,7 @@ rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-egi.txt
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `CERTIFICATE_VERIFY_FAILED ... unable to get issuer certificate` on `/auth/oidc` | `rucio_ca.pem` lacks the issuer chain | Use combined bundle; for egi-dev copy `shared/config/rucio/egi-dev/rucio_ca.pem` → `certs/rucio_ca.pem` |
+| `CERTIFICATE_VERIFY_FAILED ... unable to get issuer certificate` on `/auth/oidc` | `tls_ca_bundle.pem` lacks the issuer chain | Use combined bundle; for egi-dev, the file is located at `certs/tls_ca_bundle.pem` |
 | `Invalid parameter: redirect_uri` at IdP | `https://localhost` requested, registration not deployed, or path mismatch | Web clients allow `http://localhost` (not `https://localhost`); exact-match all paths; confirm IdP reconfig is **deployed**, not pending |
 | Redirect goes to the wrong host | `redirect_uris` / `rucio_host`/`auth_host` point elsewhere | Point both at your host; restart server so it re-reads `idpsecrets.json` |
 | `OIDC authentication failed` but token is valid | Identity not mapped to the account | Run `rucio-admin identity add` (Step 3); SUB/ISS exact, account-matched |
