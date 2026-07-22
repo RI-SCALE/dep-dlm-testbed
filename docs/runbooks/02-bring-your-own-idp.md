@@ -29,8 +29,8 @@ flow and the daemon (service) flow, the most common source of errors.
 > export SCOPE_PROFILE=egi-dev
 > export TOKEN_MODE=unmanaged   # egi-dev only passes with client_credentials —
 >                                # see the token_strategy caveat below
-> kubectl delete job vault-seed-once -n dep-dlm-sandbox --ignore-not-found
 > make argocd-install   # or: make flux-install
+> make init
 > ```
 >
 > **To unblock a running sandbox without a reseed**, patch Vault directly
@@ -176,7 +176,9 @@ mounted as `tls_ca_bundle.pem`.
 > `{"error":"invalid_client","error_description":"Audience not found"}`, and
 > passes under `TOKEN_MODE=unmanaged`.
 >
-> Repro script confirming the gap (client id/secret redacted):
+> Repro script confirming the gap (client id/secret redacted). Run inside
+> the `fts` pod — swap `kubectl -n dep-dlm-sandbox exec deploy/fts --` for
+> `docker exec compose-fts-1` on compose:
 > ```bash
 > #!/usr/bin/env bash
 > set -euo pipefail
@@ -185,14 +187,14 @@ mounted as `tls_ca_bundle.pem`.
 > TOKEN_URL="${ISSUER}/protocol/openid-connect/token"
 >
 > # Step 1: mint a subject token via client_credentials + resource=
-> SUBJECT_TOKEN=$(docker exec compose-fts-1 curl -s -u "${CID}:${CSECRET}" \
+> SUBJECT_TOKEN=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -s -u "${CID}:${CSECRET}" \
 >   -d 'grant_type=client_credentials' \
 >   -d 'resource=https://fts.example.org/' \
 >   -d 'scope=openid profile eduperson_entitlement offline_access read:/ write:/' \
 >   "$TOKEN_URL" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 >
 > # Step 2: exchange it (RFC 8693), targeting a different resource
-> EXCHANGE_RESPONSE=$(docker exec compose-fts-1 curl -s -u "${CID}:${CSECRET}" \
+> EXCHANGE_RESPONSE=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -s -u "${CID}:${CSECRET}" \
 >   -d 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
 >   -d "subject_token=${SUBJECT_TOKEN}" \
 >   -d 'subject_token_type=urn:ietf:params:oauth:token-type:access_token' \
@@ -234,18 +236,14 @@ mounted as `tls_ca_bundle.pem`.
    uses OIDC and would deadlock on the broken flow:
 
    ```bash
-   # k8s (e.g.)
    kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
      rucio-admin identity add --type OIDC \
        --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
        --account randomaccount --email marvin.gajek@cern.ch
-
-   # compose (e.g.)
-   docker exec -t compose-rucio-server-1 \
-     rucio-admin identity add --type OIDC \
-       --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
-       --account randomaccount --email marvin.gajek@cern.ch
    ```
+
+   (Compose: `docker exec -t compose-rucio-server-1 rucio-admin identity add ...`, same flags.)
+
    `SUB`/`ISS` must match the token's claims exactly; `--account` must match
    the account in the client cfg. Get the user's `sub`/email from their EGI
    Check-In personal-info page.
@@ -257,18 +255,24 @@ mounted as `tls_ca_bundle.pem`.
 
 CI's `make test-rucio-transfers` / `make test-rucio-deletion` run the full
 XRootD/Teapot/cross-protocol suite end-to-end against egi-dev under
-`TOKEN_MODE=unmanaged` — that's the authoritative check. The scripts below
+`TOKEN_MODE=unmanaged` — that's the authoritative check. The commands below
 are for manual debugging when a CI failure needs isolating to a specific
-layer (CA trust vs. daemon credentials vs. TPC itself).
+layer (CA trust vs. daemon credentials vs. TPC itself). Run inside the pod
+that needs checking — `rucio-server` or `fts` below, depending on what
+you're isolating. (Compose equivalent: swap `kubectl -n dep-dlm-sandbox exec
+deploy/<svc> --` for `docker exec compose-<svc>-1`.)
 
 ```bash
 # CA trust — should print 200 against the bundle REQUESTS_CA_BUNDLE points at
-python3 -c "import requests; print(requests.get(
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- python3 -c "
+import requests
+print(requests.get(
   'https://aai-dev.egi.eu/auth/realms/egi/.well-known/openid-configuration',
-  verify='/etc/grid-security/certificates/tls_ca_bundle.pem').status_code)"
+  verify='/etc/grid-security/certificates/tls_ca_bundle.pem').status_code)
+"
 
 # Daemon client_credentials sanity — should return 200 with capability scopes
-python3 -c "
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- python3 -c "
 import requests, json, base64
 cfg = list(json.load(open('/opt/rucio/etc/idpsecrets.json')).values())[0]
 r = requests.post(cfg['issuer']+'/protocol/openid-connect/token',
@@ -285,8 +289,6 @@ print('scope:', json.loads(base64.urlsafe_b64decode(p)).get('scope'))
 # Only works with token_strategy=client_credentials (TOKEN_MODE=unmanaged).
 # Under token_strategy=exchange this bypasses the daemon path entirely, so a
 # pass here does NOT confirm exchange-mode works — see the caveat above.
-
-# k8s
 kubectl -n dep-dlm-sandbox exec deploy/fts -- \
   env OIDC_CLIENT_ID="$OIDC_CLIENT_ID" OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
   bash -c '
@@ -304,23 +306,6 @@ kubectl -n dep-dlm-sandbox exec deploy/fts -- \
     gfal-copy -v file:///tmp/s.txt "$SRC"
     gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|error|done|copying|exit"
   '
-
-# compose
-docker exec -e OIDC_CLIENT_ID -e OIDC_CLIENT_SECRET compose-fts-1 bash -c '
-  TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
-    -d grant_type=client_credentials \
-    -d "scope=read:/ write:/" \
-    -d "resource=https://teapot2.example.org/" \
-    https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token \
-    | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get(\"access_token\") or d)")
-  export BEARER_TOKEN="$TOKEN"
-  TS=$(date +%s)
-  SRC="davs://teapot1:8081/data/test/src-$TS.txt"
-  DST="davs://teapot2:8081/data/test/dst-$TS.txt"
-  echo tpc > /tmp/s.txt
-  gfal-copy -v file:///tmp/s.txt "$SRC"
-  gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|error|done|copying|exit"
-'
 ```
 
 ```bash
