@@ -507,7 +507,31 @@ configure_fts_cloud_storage() {
     s3_endpoint="${s3_endpoint%%/*}"
     local s3_region="${S3_REGION:-default}"
     local storage_name="S3:${s3_endpoint}"
-    local user_dn="${FTS_USER_DN:-e8af11a6-76bb-44dd-abf7-32988c769cfc}"
+
+    local user_dn="${FTS_USER_DN:-}"
+    if [ -z "$user_dn" ]; then
+        echo "  Deriving user_dn from FTS's own client_credentials sub claim..."
+        user_dn=$(_exec fts env \
+            OIDC_TOKEN_URL="$OIDC_TOKEN_URL" \
+            OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
+            OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
+            OIDC_STORAGE_SCOPE="${OIDC_STORAGE_SCOPE:-openid}" \
+            python3 -c "
+import urllib.request, urllib.parse, json, base64, os
+data = urllib.parse.urlencode({'grant_type':'client_credentials','scope':os.environ['OIDC_STORAGE_SCOPE']}).encode()
+auth = base64.b64encode(f\"{os.environ['OIDC_CLIENT_ID']}:{os.environ['OIDC_CLIENT_SECRET']}\".encode()).decode()
+req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'], data=data, headers={'Authorization': f'Basic {auth}'})
+tok = json.loads(urllib.request.urlopen(req).read())['access_token']
+p = tok.split('.')[1]; p += '=' * (-len(p) % 4)
+print(json.loads(base64.urlsafe_b64decode(p))['sub'])
+")
+        if [ -z "$user_dn" ]; then
+            echo "  ✗ Failed to derive user_dn — falling back to placeholder (will 403 at transfer time)"
+            user_dn="e8af11a6-76bb-44dd-abf7-32988c769cfc"
+        else
+            echo "  ✓ Derived user_dn: $user_dn"
+        fi
+    fi
 
     echo "=== Configuring FTS cloud_storage entry for ${storage_name} (via REST) ==="
 
