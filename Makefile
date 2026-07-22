@@ -109,7 +109,10 @@ certs: ## Generate certificates (CA, host certs)
 
 .PHONY: init
 init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
-	SCOPE_PROFILE=$(SCOPE_PROFILE) ./shared/scripts/init-testbed.sh
+	SCOPE_PROFILE=$(SCOPE_PROFILE) \
+	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
+	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
+	./shared/scripts/init-testbed.sh
 
 ## Lifecycle
 
@@ -254,7 +257,7 @@ test-rucio-transfers: ## Rucio E2E TPC transfer test
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
-	$(EXEC_RUCIO) bash -c "\
+	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) \
 		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 		DAEMON_MODE=$(DAEMON_MODE) \
