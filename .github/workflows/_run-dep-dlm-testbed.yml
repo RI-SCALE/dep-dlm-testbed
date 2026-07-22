@@ -57,6 +57,8 @@ jobs:
       OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'egi-dev' && secrets.OIDC_CLIENT_SECRET || '' }}
       OIDC_GRANT_TYPE: ${{ inputs.scope_profile == 'egi-dev' && 'client_credentials' || 'password' }}
       OIDC_STORAGE_SCOPE: ${{ inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
+      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -130,9 +132,6 @@ jobs:
           echo "All daemons available"
 
       - name: Initialize DEP DLM testbed
-        env:
-          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make init
 
       - name: Map EGI Check-In identity to seeded account (egi-dev, compose)
@@ -179,9 +178,6 @@ jobs:
         run: make test-rucio-transfers
 
       - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
-        env:
-          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: make test-copernicus-transfers
 
       - name: Rucio E2E deletion test

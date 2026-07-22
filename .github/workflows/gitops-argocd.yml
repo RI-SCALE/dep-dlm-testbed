@@ -43,6 +43,8 @@ jobs:
       OIDC_CLIENT_SECRET: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_SECRET || '' }}
       OIDC_GRANT_TYPE: ${{ matrix.scope_profile == 'egi-dev' && 'client_credentials' || '' }}
       OIDC_STORAGE_SCOPE: ${{ matrix.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
+      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
       RUNTIME: k8s
       DAEMON_MODE: daemons
     steps:
@@ -121,6 +123,9 @@ jobs:
 
       - name: Rucio E2E transfer tests
         run: make test-rucio-transfers
+
+      - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
+        run: make test-copernicus-transfers
 
       - name: Rucio E2E deletion test
         run: make test-rucio-deletion
