@@ -143,7 +143,17 @@ class TestDeletionLifecycle:
         log.info("  ✓ Replica removed from Rucio catalogue on XRD4")
 
         # ── Step 6: verify physical deletion from storage ─────────────────
-        assert not replica_exists_on_xrd("xrd4", dst_pfn), (
+        # Reaper removes the catalogue row after issuing the physical delete,
+        # but the storage backend isn't guaranteed to reflect it in the same
+        # instant — poll briefly rather than checking once immediately after
+        # the catalogue-removal loop exits (that's the flaky window).
+        deadline = time.time() + 30
+        still_exists = replica_exists_on_xrd("xrd4", dst_pfn)
+        while still_exists and time.time() < deadline:
+            time.sleep(3)
+            still_exists = replica_exists_on_xrd("xrd4", dst_pfn)
+
+        assert not still_exists, (
             f"Expected file to be physically deleted from XRD4: {dst_pfn}"
         )
         log.info("  ✓ File physically deleted from XRD4 storage")
