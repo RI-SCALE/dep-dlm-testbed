@@ -105,14 +105,20 @@ e.g. `echo "127.0.0.1 xrd3" | sudo tee -a /etc/hosts`:
 127.0.0.1 rucio
 127.0.0.1 keycloak
 127.0.0.1 teapot1
+127.0.0.1 teapot2
 127.0.0.1 xrd3
+127.0.0.1 xrd4
 ```
 
 These entries are required because:
 
 - `keycloak` is the OIDC issuer hostname used during browser authentication.
 - `teapot1` is the Teapot WebDAV endpoint used by `gfal2`.
+- `teapot2` is the second Teapot endpoint — only needed if you'll `rucio
+  download` directly from TEAPOT2 (see the port-forward note below).
 - `xrd3` is the XRootD (HTTP/davs) endpoint used by `gfal2`.
+- `xrd4` is the second XRootD endpoint — only needed if you'll `rucio
+  download` directly from XRD4 (see the port-forward note below).
 - `rucio` is the Rucio server hostname used by the client.
 
 No changes are required inside the dev container.
@@ -168,12 +174,24 @@ create a replication rule — the bytes are then moved **server-side by FTS** (t
 same path the transfer test suite exercises), not by your client. The rule
 starts `REPLICATING` and reaches `OK` once the conveyor cycle completes.
 
-> **Port-forward rule of thumb:** you only ever need a storage port-forward for
-> the RSE you're *uploading from* — the destination is always written
-> server-side by FTS, never by your client. `TEAPOT1 → TEAPOT2` needs no
-> `teapot2` forward; the same logic applies to every case below. With `xrd3`
-> and `teapot1` forwarded (see "Run it" above), every source RSE in the
-> matrix below is already covered — no extra forwards needed for any of it.
+> **Port-forward rule of thumb:** for a **rule**, you only ever need a storage
+> port-forward for the RSE you're *uploading from* — the destination is always
+> written server-side by FTS, never by your client. `TEAPOT1 → TEAPOT2` needs
+> no `teapot2` forward; the same logic applies to every case below.
+>
+> **Exception — `rucio download` is different.** It's a direct client pull, so
+> it needs a forward for whichever RSE you're downloading *from*, even if that
+> wasn't your original upload source (e.g. downloading from XRD4 or TEAPOT2
+> after replicating there). Each RSE pair shares a single PFN port (XRD3/XRD4
+> on `1094`, TEAPOT1/TEAPOT2 on `8081`), so their forwards can't run at the
+> same time — stop one before starting the other:
+> ```bash
+> kill %<xrd3-job-number>
+> kubectl -n dep-dlm-sandbox port-forward svc/xrd4 1094:1094 &
+> ```
+> With `xrd3` and `teapot1` forwarded (see "Run it" above), every rule in the
+> matrix below is already covered — the exception above only applies once you
+> add a verification `rucio download` step.
 
 The full matrix below mirrors what `test_rucio_transfers.py` exercises
 (`TestXRootDOIDC`, `TestTeapotOIDC`, `TestCrossProtocolOIDC`,
@@ -189,7 +207,11 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLI
 
 rucio rule show <rule_id>                            # REPLICATING -> OK
 rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
-rucio download randomaccount:hello-xrd.txt --rses XRD4
+
+# verifying by download needs its own forward — see the exception above
+kill %<xrd3-job-number>
+kubectl -n dep-dlm-sandbox port-forward svc/xrd4 1094:1094 &
+rucio -v download randomaccount:hello-xrd.txt --rses XRD4
 ```
 
 **2. Teapot → Teapot**
@@ -199,6 +221,14 @@ rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-teapot.txt
 
 rucio add-rule randomaccount:hello-teapot.txt 1 TEAPOT2
 rucio rule list --did randomaccount:hello-teapot.txt   # TEAPOT1 OK, TEAPOT2 -> OK
+
+rucio rule show <rule_id>                              # REPLICATING -> OK
+rucio replica list file randomaccount:hello-teapot.txt # replica on TEAPOT2
+
+# verifying by download needs its own forward — see the exception above
+kill %<teapot1-job-number>
+kubectl -n dep-dlm-sandbox port-forward svc/teapot2 8081:8081 &
+rucio -v download randomaccount:hello-teapot.txt --rses TEAPOT2
 ```
 
 **3. Cross-protocol: XRootD → Teapot**
@@ -301,6 +331,9 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD4 -> OK[1/0/0]
   PFN's port, not your forward's left side: Teapot davs is `8081`, XRootD davs is
   `1094`. A `Domain name resolution failed` or `connection reset` at the gfal PUT
   usually means a missing `/etc/hosts` entry or a port mismatch — not auth.
+- **`rucio download` needs its own forward.** Unlike a rule, download is a
+  direct client pull — forward whichever RSE you're downloading from, even if
+  it's the destination of a rule rather than your original upload source.
 - **A `401 AccessDenied` on `POST /replicas` is *authorization*, not auth** —
   the client misreads it and re-launches the browser login. The real fix is the
   `admin=True` attribute, not re-authenticating.
@@ -344,7 +377,7 @@ rucio replica list file randomaccount:hello-xrd.txt   # XRD4 replica removed
 make argocd-uninstall   # or: make flux-uninstall
 ```
 If you ran the interactive experiment, also stop the forwards and remove the
-`/etc/hosts` entries for `rucio`/`keycloak`/`teapot1`/`xrd3`:
+`/etc/hosts` entries for `rucio`/`keycloak`/`teapot1`/`teapot2`/`xrd3`/`xrd4`:
 
 ```bash
 jobs
@@ -366,6 +399,7 @@ kill %1 %2 %3 %4
 | OIDC redirect goes to `https://rucio/...` | `oidc.py` picks the redirect at random | Trim the idpsecrets issuer-URL key's `redirect_uris` to the `localhost:8080` forms only |
 | `rucio upload` -> `gfal2` import / build fails on jammy | libgfal2 2.20.3 lacks `bring_online_v2`; pip build can't compile | Use the conda-forge client (`install_rucio_gfal()`), not system pip |
 | Upload -> `Domain name resolution failed` / `connection reset` at the gfal PUT | Missing `/etc/hosts` entry for the storage host, or the port-forward doesn't match the RSE PFN port | Add `127.0.0.1 <host>`; forward the PFN's port (Teapot `8081`, XRootD `1094`) |
+| `rucio download` fails instantly, no useful error | No port-forward for the target RSE — download is a direct client pull, not server-side like a rule | Forward that RSE's service on its PFN port; if it's XRD3/XRD4 or TEAPOT1/TEAPOT2, stop the paired forward first (shared port) |
 | `gfal-ls` -> `issuer is not trusted` | `X509_CERT_DIR` points at a file, or no hash symlink | Make it a real dir; copy CA + `*.0`; `openssl rehash`; export `X509_CERT_DIR` |
 | `gfal-ls` -> `HTTP 401` | `gfal-ls` sends no token (expected) | Judge by `rucio upload`, which attaches the bearer token |
 | Upload -> `401` at `POST /replicas` | Account lacks `add_replicas` permission | `rucio-admin account add-attribute <acct> --key admin --value True` (run as admin) |
