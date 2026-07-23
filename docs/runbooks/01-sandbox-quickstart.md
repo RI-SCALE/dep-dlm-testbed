@@ -189,7 +189,7 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD3 OK[1/0/0], XRD4 REPLI
 
 rucio rule show <rule_id>                            # REPLICATING -> OK
 rucio replica list file randomaccount:hello-xrd.txt  # replica on XRD4
-rucio download randomaccount:hello-xrd.txt --rse XRD4
+rucio download randomaccount:hello-xrd.txt --rses XRD4
 ```
 
 **2. Teapot → Teapot**
