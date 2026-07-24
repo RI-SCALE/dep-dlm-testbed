@@ -55,6 +55,8 @@ make test-rucio-transfers
 Expected: `TestXRootDOIDC`, `TestTeapotOIDC`, `TestCrossProtocolOIDC`,
 `TestDatasetOIDC` all pass — rules reach `state=OK`.
 
+> **NOTE:** the automated tests above authenticate via non-interactive grants (password/client-credentials) — no browser involved. The interactive login below is the only path that exercises the real Authorization Code flow a human actually uses.
+
 ## Interactive OIDC login + upload (WORKING — dev-container recipe)
 
 Both interactive login **and** `rucio upload` run entirely from the dev
