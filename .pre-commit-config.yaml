@@ -11,6 +11,7 @@ repos:
       - id: check-json
         description: Validates realm.json and idpsecrets.json.
       - id: check-added-large-files
+        args: ['--maxkb=2000']
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: check-shebang-scripts-are-executable
