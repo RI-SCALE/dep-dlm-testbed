@@ -51,5 +51,12 @@ resource "google_service_account" "eso" {
 resource "google_service_account_iam_member" "eso_workload_identity" {
   service_account_id = google_service_account.eso.name
   role                = "roles/iam.workloadIdentityUser"
-  member              = "serviceAccount:${var.project_id}.svc.id.goog[${var.eso_namespace}/${var.eso_k8s_service_account}]"
+  # Reference the cluster's own computed workload_pool output, not a
+  # reconstructed "${var.project_id}.svc.id.goog" string. The identity
+  # pool only exists once the cluster provisions with Workload Identity
+  # enabled — building the string from a plain input variable creates no
+  # dependency edge, so Terraform can (and did) apply this binding in
+  # parallel with cluster creation and fail with "Identity Pool does not
+  # exist" before the cluster had finished.
+  member = "serviceAccount:${google_container_cluster.this.workload_identity_config[0].workload_pool}[${var.eso_namespace}/${var.eso_k8s_service_account}]"
 }

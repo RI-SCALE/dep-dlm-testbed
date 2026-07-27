@@ -1,0 +1,160 @@
+name: Terraform (staging)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  WORKING_DIR: deploy/terraform/environments/staging
+
+jobs:
+  fmt-check:
+    name: fmt check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8" # pin explicitly rather than "latest" for reproducible CI runs
+
+      - name: terraform fmt -check
+        working-directory: deploy/terraform
+        run: terraform fmt -check -recursive -no-color
+
+  prepare-backend:
+    name: prepare state bucket
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1006752094222/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: dep-dlm-terraform-ci@project-725bc3b5-635b-4922-bb9.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Idempotent by construction: existence is checked first rather than
+      # relying on `create` to no-op, since re-creating an existing bucket
+      # errors instead of succeeding silently. This step only ever
+      # CREATES — never deletes; see terraform-teardown.yml for that,
+      # deliberately isolated into its own manually-triggered workflow.
+      - name: Create state bucket if missing
+        run: |
+          BUCKET="${{ vars.TF_STATE_BUCKET }}"
+          if gcloud storage buckets describe "gs://${BUCKET}" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            echo "Bucket gs://${BUCKET} already exists — skipping create"
+          else
+            echo "Creating gs://${BUCKET}"
+            gcloud storage buckets create "gs://${BUCKET}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --location=EU \
+              --uniform-bucket-level-access
+          fi
+
+          # Idempotent: re-granting an already-held role is a no-op.
+          gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+            --member="serviceAccount:dep-dlm-terraform-ci@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --role="roles/storage.objectAdmin"
+
+  plan:
+    name: plan
+    needs: [fmt-check, prepare-backend]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for WIF OIDC token exchange
+      contents: read
+      pull-requests: write # to comment the plan on PRs
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1006752094222/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: dep-dlm-terraform-ci@project-725bc3b5-635b-4922-bb9.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=staging"
+
+      - name: terraform validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate -no-color
+
+      - name: terraform plan
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+          TF_VAR_region: ${{ vars.GCP_REGION }}
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-staging
+          path: ${{ env.WORKING_DIR }}/tfplan
+          retention-days: 5
+
+  apply:
+    name: apply
+    needs: plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging # GitHub Environment — add required reviewers here for a manual approval gate
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1006752094222/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: dep-dlm-terraform-ci@project-725bc3b5-635b-4922-bb9.iam.gserviceaccount.com
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=staging"
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-staging
+          path: ${{ env.WORKING_DIR }}
+
+      # Applying the exact plan artifact from the `plan` job, not a fresh
+      # plan — guarantees apply does precisely what was reviewed, not
+      # whatever `terraform plan` would produce if state drifted in
+      # between the two jobs.
+      - name: terraform apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -no-color -auto-approve tfplan
