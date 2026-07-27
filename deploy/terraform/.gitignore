@@ -22,3 +22,4 @@ terraform.rc
 
 # Plan output files, if ever saved locally
 *.tfplan
+tfplan

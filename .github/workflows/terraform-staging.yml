@@ -16,7 +16,10 @@ on:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  WORKING_DIR: deploy/terraform/environments/staging
+  TF_ENV: staging
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
 
 jobs:
   fmt-check:
@@ -28,9 +31,8 @@ jobs:
         with:
           terraform_version: "1.9.8" # pin explicitly rather than "latest" for reproducible CI runs
 
-      - name: terraform fmt -check
-        working-directory: deploy/terraform
-        run: terraform fmt -check -recursive -no-color
+      - name: make tf-fmt
+        run: make tf-fmt
 
   prepare-backend:
     name: prepare state bucket
@@ -39,6 +41,8 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - uses: actions/checkout@v6
+
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -47,28 +51,12 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      # Idempotent by construction: existence is checked first rather than
-      # relying on `create` to no-op, since re-creating an existing bucket
-      # errors instead of succeeding silently. This step only ever
-      # CREATES — never deletes; see terraform-teardown.yml for that,
-      # deliberately isolated into its own manually-triggered workflow.
-      - name: Create state bucket if missing
-        run: |
-          BUCKET="${{ vars.TF_STATE_BUCKET }}"
-          if gcloud storage buckets describe "gs://${BUCKET}" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            echo "Bucket gs://${BUCKET} already exists — skipping create"
-          else
-            echo "Creating gs://${BUCKET}"
-            gcloud storage buckets create "gs://${BUCKET}" \
-              --project="${{ vars.GCP_PROJECT_ID }}" \
-              --location=EU \
-              --uniform-bucket-level-access
-          fi
-
-          # Idempotent: re-granting an already-held role is a no-op.
-          gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
-            --member="serviceAccount:dep-dlm-terraform-ci@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/storage.objectAdmin"
+      # Idempotent by construction (see the Makefile target itself) —
+      # only ever CREATES, never deletes; see terraform-teardown.yml for
+      # that, deliberately isolated into its own manually-triggered
+      # workflow and its own make target (tf-destroy-state-bucket).
+      - name: make tf-prepare-backend
+        run: make tf-prepare-backend
 
   plan:
     name: plan
@@ -91,29 +79,20 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
-      - name: terraform init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
-            -backend-config="prefix=staging"
+      - name: make tf-init
+        run: make tf-init
 
-      - name: terraform validate
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform validate -no-color
+      - name: make tf-validate
+        run: make tf-validate
 
-      - name: terraform plan
-        working-directory: ${{ env.WORKING_DIR }}
-        env:
-          TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
-          TF_VAR_region: ${{ vars.GCP_REGION }}
-        run: terraform plan -no-color -out=tfplan
+      - name: make tf-plan
+        run: make tf-plan
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-staging
-          path: ${{ env.WORKING_DIR }}/tfplan
+          path: deploy/terraform/environments/staging/tfplan
           retention-days: 5
 
   apply:
@@ -138,23 +117,18 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
-      - name: terraform init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
-            -backend-config="prefix=staging"
+      - name: make tf-init
+        run: make tf-init
 
       - name: Download plan artifact
         uses: actions/download-artifact@v4
         with:
           name: tfplan-staging
-          path: ${{ env.WORKING_DIR }}
+          path: deploy/terraform/environments/staging
 
-      # Applying the exact plan artifact from the `plan` job, not a fresh
-      # plan — guarantees apply does precisely what was reviewed, not
-      # whatever `terraform plan` would produce if state drifted in
-      # between the two jobs.
-      - name: terraform apply
-        working-directory: ${{ env.WORKING_DIR }}
-        run: terraform apply -no-color -auto-approve tfplan
+      # tf-apply uses the downloaded tfplan artifact automatically if
+      # present (see the Makefile target) — guarantees apply does
+      # precisely what was reviewed in `plan`, not whatever a fresh
+      # `terraform plan` would produce if state drifted in between.
+      - name: make tf-apply
+        run: make tf-apply AUTO_APPROVE=1

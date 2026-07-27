@@ -26,11 +26,11 @@ GITOPS_REPO_URL ?=
 ARGOCD_NAMESPACE ?= argocd
 FLUX_NAMESPACE ?= flux-system
 
-# ── COPERNICUS S3 credentials (env-overridable; defaults = empty) ──
+# COPERNICUS S3 credentials (env-overridable; defaults = empty)
 S3_ACCESS_KEY ?=
 S3_SECRET_KEY ?=
 
-# ── OIDC provider (env-overridable; empty = use test defaults / Keycloak) ──
+# OIDC provider (env-overridable; empty = use test defaults / Keycloak)
 OIDC_ISSUER           ?=
 OIDC_TOKEN_URL        ?=
 OIDC_CLIENT_ID        ?=
@@ -39,7 +39,26 @@ OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 
-# ── Test env injection: only export OIDC_* overrides when targeting an
+## Terraform
+
+TF_ENV          ?= staging
+TF_DIR          := deploy/terraform/environments/$(TF_ENV)
+TF_STATE_BUCKET ?= dep-dlm-tfstate-$(TF_ENV)
+TF_STATE_PREFIX ?= $(TF_ENV)
+GCP_PROJECT_ID  ?=
+GCP_REGION      ?= europe-west3
+TERRAFORM       := terraform -chdir=$(TF_DIR)
+
+# CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
+# defaults to interactive confirmation, same as running terraform directly.
+AUTO_APPROVE ?=
+ifeq ($(AUTO_APPROVE),1)
+  TF_AUTO_APPROVE_FLAG := -auto-approve
+else
+  TF_AUTO_APPROVE_FLAG :=
+endif
+
+# Test env injection: only export OIDC_* overrides when targeting an
 # external IdP profile. Passing OIDC_ISSUER='' etc. unconditionally would
 # shadow conftest.py's os.environ.get(..., default) fallback for the local/
 # Keycloak path, since an empty string still counts as "set".
@@ -60,7 +79,7 @@ else
   export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
 endif
 
-# ── Validation ─────────────────────────────────────────────────────
+# Validation
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
 $(error TOKEN_MODE must be 'managed' or 'unmanaged', got '$(TOKEN_MODE)')
@@ -74,7 +93,7 @@ ifeq ($(filter $(RUNTIME),compose k8s),)
 $(error RUNTIME must be 'compose' or 'k8s', got '$(RUNTIME)')
 endif
 
-# ── Runtime-specific execution wrappers ────────────────────────────
+# Runtime-specific execution wrappers
 
 ifeq ($(RUNTIME),k8s)
 EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
@@ -82,7 +101,7 @@ else
 EXEC_RUCIO := docker exec compose-rucio-client-1
 endif
 
-# ── Help ───────────────────────────────────────────────────────────
+# Help
 
 .PHONY: help
 help: ## Show this help (default target)
@@ -292,6 +311,70 @@ test-rucio-deletion: ## Rucio E2E deletion test
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
 	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+
+## Terraform
+
+.PHONY: tf-fmt
+tf-fmt: ## Check Terraform formatting across deploy/terraform
+	terraform fmt -check -recursive -no-color deploy/terraform
+
+.PHONY: tf-prepare-backend
+tf-prepare-backend: ## Idempotently create/grant access to TF_ENV's GCS state bucket (requires GCP_PROJECT_ID)
+	@[ -n "$(GCP_PROJECT_ID)" ] || { echo "GCP_PROJECT_ID is required"; exit 1; }
+	if gcloud storage buckets describe "gs://$(TF_STATE_BUCKET)" --project="$(GCP_PROJECT_ID)" >/dev/null 2>&1; then \
+	  echo "Bucket gs://$(TF_STATE_BUCKET) already exists — skipping create"; \
+	else \
+	  echo "Creating gs://$(TF_STATE_BUCKET)"; \
+	  gcloud storage buckets create "gs://$(TF_STATE_BUCKET)" \
+	    --project="$(GCP_PROJECT_ID)" --location=EU --uniform-bucket-level-access; \
+	fi
+	gcloud storage buckets add-iam-policy-binding "gs://$(TF_STATE_BUCKET)" \
+	  --member="serviceAccount:dep-dlm-terraform-ci@$(GCP_PROJECT_ID).iam.gserviceaccount.com" \
+	  --role="roles/storage.objectAdmin"
+
+.PHONY: tf-init
+tf-init: ## Init Terraform for TF_ENV (default staging) against its GCS state bucket
+	$(TERRAFORM) init \
+	  -backend-config="bucket=$(TF_STATE_BUCKET)" \
+	  -backend-config="prefix=$(TF_STATE_PREFIX)"
+
+.PHONY: tf-validate
+tf-validate: ## Validate the TF_ENV config (run tf-init first)
+	$(TERRAFORM) validate -no-color
+
+.PHONY: tf-plan
+tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
+	TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+	  $(TERRAFORM) plan -no-color -out=tfplan
+
+.PHONY: tf-apply
+tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
+	@if [ -f $(TF_DIR)/tfplan ]; then \
+	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
+	else \
+	  TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG); \
+	fi
+
+.PHONY: tf-destroy
+tf-destroy: ## Destroy TF_ENV's infrastructure. AUTO_APPROVE=1 for CI, interactive otherwise.
+	TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
+
+.PHONY: tf-destroy-state-bucket
+tf-destroy-state-bucket: ## Empty and delete TF_ENV's GCS state bucket — irreversible, run tf-destroy first
+	@echo "Emptying and deleting gs://$(TF_STATE_BUCKET) — this cannot be undone."
+	gcloud storage rm --recursive "gs://$(TF_STATE_BUCKET)/**" 2>/dev/null || echo "(bucket already empty)"
+	gcloud storage buckets delete "gs://$(TF_STATE_BUCKET)"
+
+.PHONY: tf-output
+tf-output: ## Show Terraform outputs for TF_ENV
+	$(TERRAFORM) output
+
+.PHONY: tf-kubeconfig
+tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
+	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
+	  --region=$(GCP_REGION) --project=$(GCP_PROJECT_ID)
 
 ## Cleanup
 
