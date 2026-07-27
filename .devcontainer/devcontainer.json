@@ -2,10 +2,10 @@
     "name": "Kind Setup",
     "image": "mcr.microsoft.com/vscode/devcontainers/base:ubuntu-22.04",
     "features": {
-      "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-      "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
-      "ghcr.io/devcontainers/features/python:1": {},
-      "ghcr.io/prulloac/devcontainer-features/pre-commit:1": {}
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+        "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
+        "ghcr.io/devcontainers/features/python:1": {},
+        "ghcr.io/prulloac/devcontainer-features/pre-commit:1": {}
     },
     "forwardPorts": [
         8446, 8449,
@@ -21,7 +21,14 @@
     ],
     "runArgs": ["--network=host"],
     "remoteEnv": {
-      "TESTBED_HOST_SOURCE": "${localWorkspaceFolder}",
-      "PATH": "/opt/conda/envs/rucio/bin:${containerEnv:PATH}"
+        "TESTBED_HOST_SOURCE": "${localWorkspaceFolder}",
+        "PATH": "/opt/conda/envs/rucio/bin:${containerEnv:PATH}"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "hashicorp.terraform"
+            ]
+        }
     }
 }
