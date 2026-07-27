@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and fill in — terraform.tfvars itself should
+# stay out of git (see infra/terraform/.gitignore).
+
+project_id = "your-gcp-project-id"
+region     = "europe-west3" # revisit per ADR-003's region-selection open point
+
+environment          = "staging"
+deletion_protection  = false
