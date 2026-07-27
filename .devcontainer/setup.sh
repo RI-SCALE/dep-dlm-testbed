@@ -80,6 +80,27 @@ install_yq() {
     echo -e "${GREEN}yq: $(yq --version)${NC}\n"
 }
 
+install_diagrams() {
+    echo -e "${BLUE}Installing Graphviz + diagrams (Python)...${NC}"
+
+    if ! command -v dot > /dev/null 2>&1; then
+        apt-get update
+        apt-get install -y graphviz
+    fi
+
+    if ! command -v dot > /dev/null 2>&1; then
+        echo -e "${RED}dot still not found after apt install — check PATH or package availability${NC}"
+        return 1
+    fi
+
+    /opt/conda/envs/rucio/bin/pip install --no-cache-dir diagrams 2>/dev/null \
+        || pip install --no-cache-dir diagrams
+
+    python3 -c "from diagrams import Diagram; print('diagrams OK')" \
+        || { echo -e "${RED}diagrams import failed${NC}"; return 1; }
+    echo -e "${GREEN}diagrams: $(dot -V 2>&1)${NC}\n"
+}
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -98,4 +119,5 @@ check_requirements
 install_kind
 install_yq
 install_rucio_gfal
+install_diagrams
 print_summary
