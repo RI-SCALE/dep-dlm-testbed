@@ -37,8 +37,15 @@
 #   SA_NAME                    (default: dep-dlm-terraform-ci)
 #   POOL_NAME                  (default: github-actions-pool)
 #   PROVIDER_NAME               (default: github-actions-provider)
-#   ROLES                       (default: the six roles deploy/terraform's modules
-#                                need — see the loop below; space-separated to override)
+#   ROLES                       (default: the seven project-level roles
+#                                deploy/terraform's modules need — six for the
+#                                resources themselves plus roles/storage.admin
+#                                for state-bucket management; see the loop
+#                                below; space-separated to override. Does NOT
+#                                include the default-compute-SA grant below,
+#                                which is a per-service-account binding, not a
+#                                project-level role, and therefore not part of
+#                                this list.)
 #   GRANT_LOCAL_IMPERSONATION  (default: false) — same as --grant-local-impersonation
 #   IMPERSONATOR                (default: your current `gcloud config get-value account`)
 set -euo pipefail
@@ -132,7 +139,25 @@ for role in $ROLES; do
   done
 done
 
-# 3. Workload Identity pool.
+# 3. GKE Autopilot provisions node VMs under the project's default compute
+#    engine service account (PROJECT_NUMBER-compute@developer.gserviceaccount.com)
+#    unless told otherwise. Whoever/whatever CREATES the cluster needs
+#    roles/iam.serviceAccountUser ON THAT SPECIFIC SERVICE ACCOUNT — this is
+#    a per-service-account IAM binding, not a project-level role grant like
+#    step 2 above, which is why it's a separate gcloud subcommand
+#    (service-accounts add-iam-policy-binding, not projects
+#    add-iam-policy-binding). Confirmed necessary: cluster creation fails
+#    with "Error 400: The user does not have access to service account
+#    ...-compute@developer.gserviceaccount.com" without this.
+DEFAULT_COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+log "Granting ${SA_EMAIL} iam.serviceAccountUser on ${DEFAULT_COMPUTE_SA} (required for GKE Autopilot node provisioning)"
+gcloud iam service-accounts add-iam-policy-binding "$DEFAULT_COMPUTE_SA" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser" \
+  >/dev/null
+
+# 4. Workload Identity pool.
 if gcloud iam workload-identity-pools describe "$POOL_NAME" \
     --project="$PROJECT_ID" --location="global" >/dev/null 2>&1; then
   log "Workload identity pool ${POOL_NAME} already exists — skipping create"
@@ -143,7 +168,7 @@ else
     --display-name="GitHub Actions"
 fi
 
-# 4. OIDC provider on that pool, scoped to this specific GitHub repo via
+# 5. OIDC provider on that pool, scoped to this specific GitHub repo via
 #    --attribute-condition — without this, ANY repo in the GitHub org could
 #    mint tokens this provider accepts.
 if gcloud iam workload-identity-pools providers describe "$PROVIDER_NAME" \
@@ -160,7 +185,7 @@ else
     --attribute-condition="assertion.repository=='${GITHUB_REPO}'"
 fi
 
-# 5. Bind the pool (scoped to this repo) to the service account.
+# 6. Bind the pool (scoped to this repo) to the service account.
 log "Binding ${GITHUB_REPO} to ${SA_EMAIL} via workloadIdentityUser"
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
   --project="$PROJECT_ID" \
@@ -177,7 +202,7 @@ echo "  service_account: ${SA_EMAIL}"
 echo
 log "And ensure the workflow/job declares: permissions: { id-token: write, contents: read }"
 
-# 6. OPTIONAL, opt-in only: let your own gcloud identity impersonate this
+# 7. OPTIONAL, opt-in only: let your own gcloud identity impersonate this
 #    SA for local dev. Off by default. Idempotent (re-granting an
 #    already-held role is a no-op). The actual ADC login this enables is
 #    left as a manual final step below — it's an interactive consent

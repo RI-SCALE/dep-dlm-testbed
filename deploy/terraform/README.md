@@ -41,70 +41,48 @@ deploy/terraform/
 Each environment is its own root module with its own state — staging and
 production never share state or a GCP project.
 
-## Authentication — one identity for CI and local dev
+## Authentication
 
 Both GitHub Actions and local `terraform` runs authenticate as the same
-GCP service account (`dep-dlm-terraform-ci`), via two different
-mechanisms:
+GCP service account (`dep-dlm-terraform-ci`):
 
 - **CI**: [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
-  — GitHub Actions exchanges a short-lived OIDC token for GCP credentials.
-  No secret is stored anywhere.
+  — short-lived OIDC tokens, no stored secret.
 - **Local dev**: your own `gcloud` identity **impersonates** the same
-  service account. Also no persistent secret — this project's GCP org
-  enforces `constraints/iam.disableServiceAccountKeyCreation`, so a
-  downloaded service-account-key file isn't an option here even if you
-  wanted one; impersonation is both the only path and the better
-  practice regardless.
+  service account — also no persistent secret. (This org enforces
+  `constraints/iam.disableServiceAccountKeyCreation`, so a downloaded
+  key isn't an option even if you wanted one; impersonation is the
+  better practice regardless.)
 
-### One-time setup (run once, by a human with IAM admin rights)
+### One-time setup
+
+Run once, by a human with IAM admin rights on the target project:
 
 ```bash
+gcloud services enable compute.googleapis.com --project=<your-gcp-project-id>
+
 ./deploy/terraform/scripts/setup-workload-identity.sh \
   --project-id <your-gcp-project-id> \
   --github-repo <org>/<repo> \
   --grant-local-impersonation
 ```
 
-This creates the service account, grants it the roles the four modules
-need — plus project-level `roles/storage.admin`, so it can create and
-manage its own Terraform state bucket idempotently in CI rather than
-requiring a human to pre-create it (see Prerequisites below) — sets up
-the WIF pool/provider scoped to your GitHub repo (see the script's own
-comments for exactly what each step does and why it's idempotent), and
-— with `--grant-local-impersonation` — grants your current `gcloud`
-account `roles/iam.serviceAccountTokenCreator` on that service account.
+The script creates the service account, grants it every role
+`deploy/terraform`'s modules need, sets up the WIF pool/provider, and
+prints the CI values to paste into your GitHub Actions workflow. See the
+script's own comments for what each step does and why it's idempotent —
+safe to re-run any time (e.g. to add a second GitHub repo).
 
-The script prints the CI values to paste into your GitHub Actions
-workflow (`workload_identity_provider` / `service_account`), and, for
-local dev, the one command it can't run for you because it's an
-interactive consent step:
+With `--grant-local-impersonation`, it also prints one command you run
+yourself (interactive, one browser prompt — can't be scripted):
 
 ```bash
 gcloud auth application-default login \
   --impersonate-service-account=dep-dlm-terraform-ci@<project-id>.iam.gserviceaccount.com
 ```
 
-Run that once. After it, `terraform init`/`plan`/`apply` need no further
-interaction locally — ADC refreshes tokens transparently, and you're
-authenticating as the identical principal CI uses.
-
-**Known gotcha**: impersonation needs the **IAM Service Account
-Credentials API** enabled — a different API than the general `iam`
-one already listed under Prerequisites below, easy to miss:
-```bash
-gcloud services enable iamcredentials.googleapis.com --project=<project-id>
-```
-Without it, `terraform init` fails with `403: Permission
-'iam.serviceAccounts.getAccessToken' denied`, even though the IAM role
-binding itself is correct. If you still see that error after enabling
-this API, wait 1-2 minutes (IAM propagation lag is real and has bitten
-this exact setup more than once) and retry. Sanity-check independently
-of Terraform with:
-```bash
-gcloud auth print-access-token --impersonate-service-account=dep-dlm-terraform-ci@<project-id>.iam.gserviceaccount.com
-```
-If that prints a token, impersonation works and Terraform will too.
+After that, `terraform init`/`plan`/`apply` need no further interaction
+locally.
 
 ## Prerequisites
 
@@ -113,45 +91,22 @@ If that prints a token, impersonation works and Terraform will too.
   `install_terraform`).
 - Completed the one-time auth setup above.
 - APIs enabled on the target project:
-  `container.googleapis.com`, `secretmanager.googleapis.com`,
-  `sqladmin.googleapis.com`, `servicenetworking.googleapis.com`,
-  `compute.googleapis.com`, `iam.googleapis.com`,
-  `iamcredentials.googleapis.com` (the last one specifically for
-  impersonation — see gotcha above).
   ```bash
   gcloud services enable container.googleapis.com secretmanager.googleapis.com \
     sqladmin.googleapis.com servicenetworking.googleapis.com \
     compute.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
-    --project=<project_id>
+    cloudresourcemanager.googleapis.com --project=<project_id>
   ```
-- A GCS bucket for remote state. As of `prepare-backend` in
-  [`terraform-staging.yml`](../../.github/workflows/terraform-staging.yml),
-  CI creates this idempotently on every run — nothing to do here for CI.
-  For local-only use before CI has run once, create it yourself:
+- A GCS bucket for remote state. CI creates this idempotently on every
+  run (`prepare-backend` in `terraform-staging.yml`) — nothing to do
+  for CI. For local-only use before CI has run once:
   ```bash
   gcloud storage buckets create gs://<your-state-bucket> \
     --project=<project_id> --location=EU --uniform-bucket-level-access
   ```
-  No separate IAM grant needed on the bucket itself anymore —
-  `setup-workload-identity.sh` now grants the CI service account
-  project-level `roles/storage.admin` (see Authentication above), which
-  covers bucket creation and object access together. (Earlier revisions
-  of this doc had you grant `storage.objectAdmin` on the bucket by hand;
-  that manual step is superseded by this broader role.)
-
-**Known gotcha**: `google_service_networking_connection` (used for Cloud
-SQL's private IP peering, `modules/networking`) can fail mid-apply with:
-```
-Error waiting for Create Service Networking Connection: Error code 16,
-message: Request had invalid authentication credentials. Expected OAuth 2
-access token, login cookie or other valid authentication credential.
-```
-This is a known, transient flakiness in this specific resource's
-long-running-operation polling — not a real permission or config gap (if
-it were, you'd see a 403/`accessNotConfigured` like the Cloud Resource
-Manager API gap above, not this generic auth-token complaint). Simply
-re-running `terraform apply` resolves it in the large majority of cases,
-with no other changes needed.
+  **Bucket names are global across all of GCP**, not scoped to your
+  project — pick something unique, e.g. suffixed with your project ID
+  (see Troubleshooting).
 
 ## Usage — local
 
@@ -193,8 +148,12 @@ confirmation input (on top of the same GitHub Environment approval gate
 as `apply`). It always runs `terraform destroy` against the real
 resources first; deleting the state bucket itself is a separate,
 default-off checkbox on the same run — only use it when tearing the
-environment down for good, not for routine cleanup, since it leaves
-Terraform with no memory of this environment afterward.
+environment down for good, not for routine cleanup.
+
+If you'd rather delete the whole project instead of fighting stuck
+Google-side resource cleanup (see Troubleshooting), that's often faster
+for a disposable trial/test project — trial credits carry over to a new
+project under the same billing account.
 
 ## After `apply`
 
@@ -211,6 +170,18 @@ kubectl annotate serviceaccount external-secrets \
 Then populate the (currently empty) Secret Manager secrets with real
 values — out-of-band, per the same rule the sandbox already follows:
 sensitive values are never committed to this repo.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `setup-workload-identity.sh` fails with `NOT_FOUND: Unknown service account` on the default compute SA | Brand-new project — `compute.googleapis.com` hasn't provisioned the default compute SA yet | `gcloud services enable compute.googleapis.com --project=<id>`, wait ~1-2 min, retry |
+| `terraform init` fails with `403: Permission 'iam.serviceAccounts.getAccessToken' denied` | `iamcredentials.googleapis.com` not enabled (separate from the general `iam` API) | `gcloud services enable iamcredentials.googleapis.com --project=<id>`; if it persists after enabling, wait 1-2 min (IAM propagation lag) and retry. Sanity-check independently: `gcloud auth print-access-token --impersonate-service-account=<sa-email>` |
+| `apply` fails with `SERVICE_DISABLED` / `Cloud Resource Manager API has not been used in project ...` | `cloudresourcemanager.googleapis.com` not enabled — needed by `google_service_networking_connection` to resolve project metadata | `gcloud services enable cloudresourcemanager.googleapis.com --project=<id>` |
+| GKE cluster creation fails: `Error 400: The user does not have access to service account "...-compute@developer.gserviceaccount.com"` | CI/local identity lacks `iam.serviceAccountUser` on the project's default compute SA (which Autopilot uses for node VMs) | Already granted automatically by `setup-workload-identity.sh` — if you're hitting this, re-run the script (idempotent) |
+| `apply` fails creating `google_service_networking_connection`: `Error code 16 ... invalid authentication credentials` | Known, transient flakiness in this resource's long-running-operation polling — not a real permission gap | Just re-run `terraform apply`; resolves on retry the large majority of the time |
+| `destroy` fails deleting `google_service_networking_connection`: `Producer services ... are still using this connection` (`FLOW_SN_DC_RESOURCE_PREVENTING_DELETE_CONNECTION`) | Google-side reconciliation lag between Cloud SQL instance deletion completing and the servicenetworking backend releasing the peering — can take well over the usual few minutes | Confirm the SQL instance is really gone (`gcloud sql instances list`), then just wait and retry `tf-destroy`. For a disposable project, deleting the whole project (`gcloud projects delete <id>`) sidesteps this entirely and is often faster |
+| `gcloud storage buckets create` fails: `409: The requested bucket name is not available` | GCS bucket names are **globally unique across all of GCP**, not project-scoped — likely colliding with a bucket from a previous (possibly deleted-but-not-yet-released) project | Pick a bucket name that embeds your project ID, e.g. `dep-dlm-tfstate-staging-<project-id>` |
 
 ## What's genuinely not decided yet
 

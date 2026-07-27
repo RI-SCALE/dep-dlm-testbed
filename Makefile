@@ -41,12 +41,12 @@ OIDC_GRANT_TYPE       ?= password
 
 ## Terraform
 
-TF_ENV          ?= staging
-TF_DIR          := deploy/terraform/environments/$(TF_ENV)
-TF_STATE_BUCKET ?= dep-dlm-tfstate-$(TF_ENV)
-TF_STATE_PREFIX ?= $(TF_ENV)
 GCP_PROJECT_ID  ?=
 GCP_REGION      ?= europe-west3
+TF_ENV          ?= staging
+TF_DIR          := deploy/terraform/environments/$(TF_ENV)
+TF_STATE_BUCKET ?= dep-dlm-tfstate-$(TF_ENV)-$(GCP_PROJECT_ID)
+TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 
 # CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
