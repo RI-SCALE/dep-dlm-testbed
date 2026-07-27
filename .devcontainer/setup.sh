@@ -101,6 +101,38 @@ install_diagrams() {
     echo -e "${GREEN}diagrams: $(dot -V 2>&1)${NC}\n"
 }
 
+install_gcloud() {
+    echo -e "${BLUE}Installing Google Cloud CLI...${NC}"
+
+    if command -v gcloud > /dev/null 2>&1; then
+        echo -e "${GREEN}gcloud already installed: $(gcloud --version | head -1)${NC}\n"
+        return 0
+    fi
+
+    apt-get update -qq
+    apt-get install -y -qq ca-certificates gnupg curl
+
+    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+        > /etc/apt/sources.list.d/google-cloud-sdk.list
+
+    apt-get update -qq
+    # gke-gcloud-auth-plugin: needed for `kubectl` to auth against GKE clusters
+    # provisioned by infra/terraform (see modules/kubernetes) — kubectl auth
+    # against GKE moved off static tokens onto this plugin in newer clusters.
+    apt-get install -y -qq google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+
+    if ! command -v gcloud > /dev/null 2>&1; then
+        echo -e "${RED}gcloud install failed — check the apt output above${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}gcloud: $(gcloud --version | head -1)${NC}"
+    echo -e "${YELLOW}Run 'gcloud init' manually to authenticate — this is interactive (browser sign-in) and intentionally not automated here.${NC}\n"
+}
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -120,4 +152,5 @@ install_kind
 install_yq
 install_rucio_gfal
 install_diagrams
+install_gcloud
 print_summary
