@@ -1,0 +1,22 @@
+oauth:
+  enable-oidc: true
+  issuers:
+    - name: lsaai-dev
+      issuer: "https://login.aai.lifescience-ri.eu/oidc/"
+storm:
+  authz:
+    policies:
+      - sa: data
+        actions: [all]
+        effect: permit
+        description: "Grant full access to LS AAI tokens"
+        paths: ["/**"]
+        principals:
+          - type: jwt-issuer
+            params: { iss: "https://login.aai.lifescience-ri.eu/oidc/" }
+      - sa: data
+        actions: [all]
+        effect: deny
+        paths: ["/**"]
+        principals:
+          - type: anyone
