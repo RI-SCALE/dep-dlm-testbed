@@ -38,7 +38,7 @@ CSECRET="${OIDC_CLIENT_SECRET:-}"
 SCOPE="openid"
 # Defaults match this testbed's example RSE audiences (conftest.py's
 # _rse_resource() pattern) — override with --resources for a different set.
-RESOURCES="https://xrd3.example.org/ https://xrd4.example.org/ https://teapot1.example.org/ https://teapot2.example.org/"
+RESOURCES="https://fts.example.org/ https://xrd3.example.org/ https://xrd4.example.org/ https://teapot1.example.org/ https://teapot2.example.org/"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
