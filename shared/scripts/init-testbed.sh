@@ -22,7 +22,7 @@ declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 
 OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
-OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER}/protocol/openid-connect/token}"
+OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER%/}/protocol/openid-connect/token}"
 IDPSECRETS_PATH_IN_CONTAINER="${IDPSECRETS_PATH_IN_CONTAINER:-/opt/rucio/etc/idpsecrets.json}"
 
 # ─── Cross-runtime helpers ───────────────────────────────────────
@@ -83,7 +83,7 @@ _http_probe_local() {
 
 _grant_mode_for_profile() {
     case "$SCOPE_PROFILE" in
-        egi-dev) echo "client_credentials" ;;
+        egi-dev|ls-aai-dev) echo "client_credentials" ;;
         *)       echo "password" ;;
     esac
 }
@@ -145,7 +145,7 @@ wait_for_infrastructure() {
 
     for i in $(seq 1 30); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            "${OIDC_ISSUER}/.well-known/openid-configuration" \
+            "${OIDC_ISSUER%/}/.well-known/openid-configuration" \
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
         echo "  [$i] Keycloak HTTP $code — waiting..."; sleep 5
@@ -590,11 +590,18 @@ setup_fts_oidc_provider() {
     # requiring the SLASHED form. shared/patches/fts/tokenproviders.py
     # stores issuer exactly as given, so both calls are needed.
     if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
+    _fts_admin -X POST -H "Content-Type: application/json" \
+        -d "{\"name\":\"egi-checkin-dev\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+        https://localhost:8446/config/token_providers
+    _fts_admin -X POST -H "Content-Type: application/json" \
+        -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+        https://localhost:8446/config/token_providers
+    elif [ "$SCOPE_PROFILE" = "ls-aai-dev" ]; then
         _fts_admin -X POST -H "Content-Type: application/json" \
-            -d "{\"name\":\"egi-checkin-dev\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            -d "{\"name\":\"ls-aai-dev\",\"issuer\":\"https://login.aai.lifescience-ri.eu/oidc\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
             https://localhost:8446/config/token_providers
         _fts_admin -X POST -H "Content-Type: application/json" \
-            -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            -d "{\"name\":\"ls-aai-dev-slash\",\"issuer\":\"https://login.aai.lifescience-ri.eu/oidc/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
             https://localhost:8446/config/token_providers
     else
         _fts_admin -X POST -H "Content-Type: application/json" \
