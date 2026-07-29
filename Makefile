@@ -119,7 +119,7 @@ init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
 ## IdP token verification
 
 .PHONY: verify-idp-token
-verify-idp-token: ## Manually verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires CLIENT_SECRET.
+verify-idp-token: ## Verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires OIDC_CLIENT_SECRET.
 	@case "$(SCOPE_PROFILE)" in \
 	  egi-dev) \
 	    shared/scripts/verify-idp-token.sh \

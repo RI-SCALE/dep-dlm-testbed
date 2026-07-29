@@ -142,7 +142,7 @@ dep-dlm-testbed
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
-  SCOPE_PROFILE = ls-aai-dev (local | <profile>)
+  SCOPE_PROFILE = local (local | <profile>)
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
@@ -154,7 +154,7 @@ Setup
   init                 Initialize the testbed (accounts, RSEs, OIDC seed)
 
 IdP token verification
-  verify-idp-token     Manually verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires CLIENT_SECRET.
+  verify-idp-token     Verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires OIDC_CLIENT_SECRET.
 
 Lifecycle
   start                Start the stack
