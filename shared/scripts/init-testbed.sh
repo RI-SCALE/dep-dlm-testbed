@@ -590,12 +590,12 @@ setup_fts_oidc_provider() {
     # requiring the SLASHED form. shared/patches/fts/tokenproviders.py
     # stores issuer exactly as given, so both calls are needed.
     if [ "$SCOPE_PROFILE" = "egi-dev" ]; then
-    _fts_admin -X POST -H "Content-Type: application/json" \
-        -d "{\"name\":\"egi-checkin-dev\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
-        https://localhost:8446/config/token_providers
-    _fts_admin -X POST -H "Content-Type: application/json" \
-        -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
-        https://localhost:8446/config/token_providers
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"egi-checkin-dev\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
     elif [ "$SCOPE_PROFILE" = "ls-aai-dev" ]; then
         _fts_admin -X POST -H "Content-Type: application/json" \
             -d "{\"name\":\"ls-aai-dev\",\"issuer\":\"https://login.aai.lifescience-ri.eu/oidc\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \

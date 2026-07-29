@@ -71,6 +71,7 @@ class GrantCapabilities:
     audience_param: bool = True
     scope_map: dict = field(default_factory=dict)
     drop_scopes: frozenset = field(default_factory=frozenset)
+    fts_client_scope: Optional[str] = None
 
 
 DEFAULT_GRANT_CAPABILITIES: dict = {"resource_param": False, "audience_param": True}
@@ -139,6 +140,7 @@ def get_capabilities(issuer: str, grant: str) -> GrantCapabilities:
     # the grant-specific dict already overrides them.
     grant_caps.setdefault("scope_map", caps.get("scope_map", {}))
     grant_caps.setdefault("drop_scopes", caps.get("drop_scopes", []))
+    grant_caps.setdefault("fts_client_scope", caps.get("fts_client_scope"))
     return GrantCapabilities(**grant_caps)
 
 
@@ -1227,6 +1229,7 @@ def __exchange_token_oidc(
         args = {
             "subject_token": subject_token_object.token,
             "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
+            "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
             "scope": jwt_row_dict["authz_scope"],
             "grant_type": grant_type,
         }

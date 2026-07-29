@@ -3,6 +3,9 @@ oauth:
   issuers:
     - name: lsaai-dev
       issuer: "https://login.aai.lifescience-ri.eu/oidc/"
+      audiences:
+        - https://teapot1.example.org/
+        - https://teapot2.example.org/
 storm:
   authz:
     policies:

@@ -103,6 +103,35 @@ kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
 make test-rucio-transfers
 ```
 
+### LS AAI (scope profile: ls-aai-dev)
+
+Copy `envs/ls-aai-dev.env.example` to `envs/ls-aai-dev.env`, fill in your LS AAI
+`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
+
+```bash
+source envs/ls-aai-dev.env
+export TOKEN_MODE=unmanaged
+export DAEMON_MODE=direct
+export RUNTIME=k8s
+make start
+make init
+
+# Map a valid user identity within LS AAI to the seeded rucio account
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+  rucio-admin identity add --type OIDC \
+    --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" --account randomaccount --email marvin.gajek@cern.ch
+
+make test-rucio-transfers
+```
+
+> **Note:** the LS AAI test-phase environment requires the authenticating
+> user to be a member of the `Life Science Community - Test Environment`
+> VO before login succeeds — if `rucio whoami` (or a browser login against
+> `login.aai.lifescience-ri.eu`) returns an access-denied page listing
+> required organizational units, register at
+> `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
+> with the same identity first; propagation can take a few minutes.
+
 ## Make Targets
 
 ```bash

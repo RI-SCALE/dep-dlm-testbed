@@ -20,6 +20,7 @@ from stat import S_IRGRP, S_IRWXO, S_IRWXU, S_IXGRP
 import anyio
 import httpx
 import psutil
+import requests
 import uvicorn
 from alise import Alise
 from fastapi import FastAPI, HTTPException, Request
@@ -38,7 +39,18 @@ config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolat
 config.read("/etc/teapot/config.ini")
 
 TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
-JWKS_URL = f"{TRUSTED_ISS.rstrip('/')}/protocol/openid-connect/certs"
+try:
+    _discovery = requests.get(
+        f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration", timeout=10
+    ).json()
+    JWKS_URL = _discovery["jwks_uri"]
+except Exception:
+    logging.getLogger(__name__).critical(
+        "Failed to discover jwks_uri from %s/.well-known/openid-configuration",
+        TRUSTED_ISS.rstrip("/"),
+        exc_info=True,
+    )
+    raise
 TRUSTED_ISS = config["Teapot"]["trusted_OP"]
 _jwk_client = PyJWKClient(JWKS_URL)
 
@@ -342,11 +354,19 @@ async def _create_user_dirs(username, port, sub, iss, external_identities):
                 if key.startswith("idp_url_"):
                     suffix = key[len("idp_url_") :]
                     name_key = f"idp_name_{suffix}"
+                    audiences_key = f"idp_audiences_{suffix}"
                     if name_key in config[f"STORAGE_AREA_{i}"]:
                         idp_pairs.append(
                             {
                                 "name": config[f"STORAGE_AREA_{i}"][name_key],
                                 "url": config[f"STORAGE_AREA_{i}"][key],
+                                "audiences": [
+                                    a.strip()
+                                    for a in config[f"STORAGE_AREA_{i}"]
+                                    .get(audiences_key, "")
+                                    .split(",")
+                                    if a.strip()
+                                ],
                             }
                         )
                     else:

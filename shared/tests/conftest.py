@@ -66,7 +66,8 @@ DELETION_DAEMONS = (
 
 OIDC_ISSUER = os.environ.get("OIDC_ISSUER") or "https://keycloak:8443/realms/rucio"
 OIDC_TOKEN_URL = (
-    os.environ.get("OIDC_TOKEN_URL") or f"{OIDC_ISSUER}/protocol/openid-connect/token"
+    os.environ.get("OIDC_TOKEN_URL")
+    or f"{OIDC_ISSUER.rstrip('/')}/protocol/openid-connect/token"
 )
 OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID") or "rucio"
 OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET") or "rucio-secret"
