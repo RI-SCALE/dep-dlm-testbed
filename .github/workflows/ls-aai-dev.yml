@@ -19,6 +19,10 @@ jobs:
             runner: ubuntu-latest
             runtime: compose
             daemon_mode: direct
+          - arch: amd64
+            runner: ubuntu-latest
+            runtime: k8s
+            daemon_mode: direct
     name: ${{ matrix.arch }} | ${{ matrix.runtime }} | ${{ matrix.daemon_mode }} | ls-aai-dev
     uses: ./.github/workflows/_run-dep-dlm-testbed.yml
     with:

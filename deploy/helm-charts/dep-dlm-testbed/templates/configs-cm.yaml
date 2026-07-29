@@ -33,7 +33,7 @@ data:
   basename same as the default map, so a subchart can swap which ConfigMap
   it mounts (default vs profile) without changing subPath names.
 */}}
-{{- range $profile := list "egi-dev" }}
+{{- range $profile := list "egi-dev" "ls-aai-dev" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
