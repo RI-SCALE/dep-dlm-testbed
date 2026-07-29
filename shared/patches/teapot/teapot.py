@@ -41,7 +41,9 @@ config.read("/etc/teapot/config.ini")
 TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
 try:
     _discovery = requests.get(
-        f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration", timeout=10
+        f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration",
+        timeout=10,
+        verify="/etc/ssl/certs/ca-certificates.crt",
     ).json()
     JWKS_URL = _discovery["jwks_uri"]
 except Exception:
