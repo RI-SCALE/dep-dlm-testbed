@@ -52,11 +52,26 @@ jobs:
       DAEMON_MODE: ${{ inputs.daemon_mode }}
       SCOPE_PROFILE: ${{ inputs.scope_profile }}
       COMPOSE_FILE: deploy/compose/docker-compose.${{ matrix.mode }}.ci.yml
-      OIDC_ISSUER: ${{ inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' || '' }}
-      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'egi-dev' && secrets.OIDC_CLIENT_ID || '' }}
-      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'egi-dev' && secrets.OIDC_CLIENT_SECRET || '' }}
-      OIDC_GRANT_TYPE: ${{ inputs.scope_profile == 'egi-dev' && 'client_credentials' || 'password' }}
-      OIDC_STORAGE_SCOPE: ${{ inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
+      OIDC_ISSUER: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
+          inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/' ||
+          ''
+        }}
+      OIDC_TOKEN_URL: >-
+        ${{
+          inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/token' ||
+          ''
+        }}
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_ID || '' }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_SECRET || '' }}
+      OIDC_GRANT_TYPE: ${{ inputs.scope_profile != 'local' && 'client_credentials' || 'password' }}
+      OIDC_STORAGE_SCOPE: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
+          inputs.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
+          ''
+        }}
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
     steps:
@@ -88,6 +103,14 @@ jobs:
             -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
             -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
             shared/config/rucio/egi-dev/idpsecrets.json
+
+      - name: Render ls-aai-dev idpsecrets.json from secrets
+        if: inputs.scope_profile == 'ls-aai-dev'
+        run: |
+          sed -i \
+            -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
+            -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
+            shared/config/rucio/ls-aai-dev/idpsecrets.json
 
       - name: Start stack
         run: make start
@@ -148,6 +171,22 @@ jobs:
           kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
             rucio-admin identity add --type OIDC \
               --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --account randomaccount --email marvin.gajek@cern.ch
+
+      - name: Map LS AAI identity to seeded account (ls-aai-dev, compose)
+        if: inputs.scope_profile == 'ls-aai-dev' && inputs.runtime == 'compose'
+        run: |
+          docker exec -t compose-rucio-server-1 \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" \
+              --account randomaccount --email marvin.gajek@cern.ch
+
+      - name: Map LS AAI identity to seeded account (ls-aai-dev, k8s)
+        if: inputs.scope_profile == 'ls-aai-dev' && inputs.runtime == 'k8s'
+        run: |
+          kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" \
               --account randomaccount --email marvin.gajek@cern.ch
 
       - name: Wait for fts (compose)
