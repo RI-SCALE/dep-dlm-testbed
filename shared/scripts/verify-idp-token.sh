@@ -132,8 +132,39 @@ print('aud present:', 'aud' in claims)
 "
 fi
 
+# ── 4. refresh_token grant — does it work, and does aud/resource carry over? ─
 echo
-echo "=== 4. Authorization code flow — manual, can't be scripted ==="
+echo "=== 4. refresh_token grant (resource=${RESOURCE_1}) ==="
+CC_RESP=$(curl -s -u "${CID}:${CSECRET}" \
+  -d 'grant_type=client_credentials' \
+  -d "scope=${SCOPE} offline_access" \
+  -d "resource=${RESOURCE_1}" \
+  "$TOKEN_URL")
+REFRESH_TOKEN=$(echo "$CC_RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('refresh_token',''))")
+if [[ -z "$REFRESH_TOKEN" ]]; then
+  warn "No refresh_token returned — client may not have 'Issue refresh tokens' enabled, or offline_access scope was dropped/rejected: $CC_RESP"
+else
+  REFRESH_RESP=$(curl -s -u "${CID}:${CSECRET}" \
+    -d 'grant_type=refresh_token' \
+    -d "refresh_token=${REFRESH_TOKEN}" \
+    -d "resource=${RESOURCE_1}" \
+    "$TOKEN_URL")
+  TOKEN4=$(echo "$REFRESH_RESP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access_token',''))")
+  if [[ -z "$TOKEN4" ]]; then
+    warn "refresh_token grant FAILED: $REFRESH_RESP"
+  else
+    python3 -c "
+import base64, json
+p = '$TOKEN4'.split('.')[1]; p += '=' * (-len(p) % 4)
+claims = json.loads(base64.urlsafe_b64decode(p))
+print(json.dumps(claims, indent=2))
+print('aud reflects resource= after refresh:', 'aud' in claims and '$RESOURCE_1' in claims.get('aud', []) if isinstance(claims.get('aud'), list) else claims.get('aud') == '$RESOURCE_1')
+"
+  fi
+fi
+
+echo
+echo "=== 5. Authorization code flow — manual, can't be scripted ==="
 echo "Point RUCIO_CONFIG at the profile's oidc-client.cfg and run 'rucio whoami'"
 echo "once idpsecrets.json's placeholders are filled in — exercises the browser"
 echo "login and gives you a real user 'sub' for the profile's user-mapping.csv."
