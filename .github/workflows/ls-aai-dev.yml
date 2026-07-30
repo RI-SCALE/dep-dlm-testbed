@@ -30,7 +30,7 @@ jobs:
       runtime: ${{ matrix.runtime }}
       daemon_mode: ${{ matrix.daemon_mode }}
       scope_profile: ls-aai-dev
-      token_modes: '["unmanaged"]'
+      token_modes: '["managed","unmanaged"]'
     secrets:
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}

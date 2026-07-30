@@ -2183,6 +2183,8 @@ def determine_scope_for_rse(
                 mapped.append(m)
         extra = [s for s in extra_scopes if s not in capabilities.drop_scopes]
         combined = sorted(mapped + list(extra))
+        if "openid" not in combined:
+            combined = ["openid"] + combined
         return " ".join(combined) if combined else "openid"
 
     # default (wlcg): unchanged behaviour

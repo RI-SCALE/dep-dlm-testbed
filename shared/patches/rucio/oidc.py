@@ -1150,8 +1150,10 @@ def get_token_for_account_operation(
                     ):
                         return token_dictionary(token)
                 # from available tokens select preferentially the one which are being refreshed
-                if hasattr(token, "oidc_scope") and (
-                    "offline_access" in str(token["oidc_scope"])
+                if (
+                    hasattr(token, "oidc_scope")
+                    and "offline_access" in str(token.oidc_scope)
+                    and getattr(token, "refresh_token", None)
                 ):
                     subject_token = token
             # if not proceed with token exchange
