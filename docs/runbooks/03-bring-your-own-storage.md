@@ -67,13 +67,3 @@ Watch the submitter: a line like `OAuth2/OIDC available for transfer` followed b
 `Using a token to authenticate with FTS` confirms `_use_tokens` engaged (RSE is
 `oidc_support` + `davs`/`https`). A rule reaching `OK` confirms the storage
 accepted the write.
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Rule `NO_SOURCES`, "dropped by PathDistance" | Missing RSE distance | Add distance both directions (step 5) |
-| Transfer falls back to cert (no token) | RSE not `oidc_support=True` or scheme not `davs`/`https` | Set the attribute; `_use_tokens` requires both |
-| `Copy failed ... HTTP 500` during pull | Storage-side server error (not auth) | Check the endpoint's server logs; auth is fine if you see a 500, not 401/403 |
-| `401`/`403` on copy | Token lacks scope, or endpoint doesn't trust the issuer | Verify scopes in token + issuer registered on the endpoint |
-| Source 404 | Replica registered but bytes absent | Use a DID with a physically present replica |

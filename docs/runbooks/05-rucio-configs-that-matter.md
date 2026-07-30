@@ -96,14 +96,3 @@ rucio account limit list <account> <RSE>   # quota set
 # token carries capability scopes (client_credentials):
 #   decode the JWT 'scope' claim — expect read:/ write:/
 ```
-
-## Common failure → cause map
-
-| Failure | Likely cause |
-|---------|--------------|
-| `NO_SOURCES` / PathDistance drop | Missing RSE distance |
-| `insufficient quota` | No account limit on destination |
-| Transfer not using token | RSE missing `oidc_support` or wrong scheme |
-| `invalid_scope` on user login | Interactive IdP client lacks the scope |
-| FTS token 401 | Wrong/un-provisioned daemon client |
-| Copy `HTTP 500` | Storage-side server error (not Rucio/auth) |

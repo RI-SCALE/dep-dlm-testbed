@@ -2,9 +2,10 @@
 
 ## Purpose
 Point Rucio, FTS and your RSEs at an external OIDC issuer (e.g. EGI Check-In,
-Keycloak) instead of the bundled one. Covers where issuer, audience, client and
-**scopes** must land — including the distinction between the interactive user
-flow and the daemon (service) flow, the most common source of errors.
+LS AAI, Keycloak) instead of the bundled one. Covers where issuer, audience,
+client and **scopes** must land — including the distinction between the
+interactive user flow and the daemon (service) flow, the most common source
+of errors.
 
 ## Prerequisites
 - An OIDC issuer reachable from the cluster, with a discovery endpoint at
@@ -56,6 +57,18 @@ flow and the daemon (service) flow, the most common source of errors.
 > This doesn't survive a reseed — still update the repo file for anything
 > persistent.
 
+> **LS AAI credentials:** same non-self-service caveat applies — client
+> registration on `login.aai.lifescience-ri.eu` requires LS AAI support
+> involvement (contact `support@aai.lifescience-ri.eu` or Federation
+> Registry access if already granted). Real credentials go into the
+> `<valid client id>`/`<valid client secret>` placeholders in
+> `shared/config/rucio/ls-aai-dev/idpsecrets.json`. Reseed the same way as
+> EGI above, with `SCOPE_PROFILE=ls-aai-dev`. Both `TOKEN_MODE=unmanaged`
+> *and* `TOKEN_MODE=managed` are confirmed working end-to-end for ls-aai-dev
+> (see the token-strategy section below). In CI, this profile is seeded
+> from `secrets.LS_AAI_DEV_OIDC_CLIENT_ID`/`_SECRET` — see
+> `.github/workflows/ls-aai-dev.yml`, which runs both token modes.
+
 ## One client, two flows
 
 `idpsecrets.json` is keyed by issuer, not by grant type, so a single
@@ -69,17 +82,23 @@ registration enables both grant types and both scope sets:
 
 This is what egi-dev currently does (one client, both grants enabled). Splitting
 into two separate clients is a production-hardening option worth considering
-later — it buys audit clarity (a token's source is unambiguous), a smaller
-blast radius if a daemon's mounted secret leaks, and independent
-rotation/revocation — but isn't required for this to work, and collapses
-the most common failure mode from this setup (capability scopes present on
-one client but not the other) since there's only one scope set to get right.
+later — it buys audit clarity, a smaller blast radius if a daemon's mounted
+secret leaks, and independent rotation/revocation — but isn't required for
+this to work and collapses the most common failure mode from this setup
+(capability scopes present on one client but not the other) since there's
+only one scope set to get right.
 
-If you do split clients, and the IdP issues capability scopes for one grant
+If you do split clients and the IdP issues capability scopes for one grant
 type but not the other, you get asymmetric failures: TPC works but
 `rucio upload` fails with `invalid_scope` / "no authorization content
 returned". Fix by registering scopes on the correct client, not by changing
 `rucio.cfg`.
+
+> **LS AAI note:** its scope set is more restrictive than EGI's — there is
+> no WLCG-style path-scoped concept at all (`read:/`, `write:/` are
+> rejected outright, on any grant). This isn't an asymmetric-scopes problem
+> in the usual sense; it's handled at a different layer entirely — see
+> "Creating the client in LS AAI" below.
 
 ## Creating the client in EGI Check-In Dev
 
@@ -110,6 +129,72 @@ Federation Registry access to replicate it.
 > `client_credentials` mode; *would* be required for `token_strategy=exchange`
 > (see below).
 
+## Creating the client in LS AAI
+
+Also not self-service — requires LS AAI support (`support@aai.lifescience-ri.eu`)
+or Federation Registry access. What's been confirmed working for this
+project and how it differs from the EGI flow above:
+
+1. **Grant types**: enable `client_credentials` (required — this is what
+   the daemon/TPC path uses) and `authorization_code` if the interactive
+   flow is needed. **Also enable `token-exchange`** — `token_strategy=exchange`
+   (managed mode) is confirmed working end-to-end against LS AAI once the
+   FTS and Rucio-side fixes below are applied. Also enable **"Issue refresh
+   tokens for this client"** — confirmed required and present on the
+   working registration.
+2. **Register Resource Indicators (RFC 8707)** for every RSE/service this
+   client transfers to/from, e.g. `https://teapot1.example.org/`,
+   `https://teapot2.example.org/`, `https://xrd3.example.org/`,
+   `https://xrd4.example.org/`, `https://fts.example.org/`. Confirmed
+   present and required on the working registration — without a resource
+   registered, `resource=` requests for that value are rejected.
+3. **Scope set is fixed and restrictive.** Unlike EGI, LS AAI's client only
+   accepts a specific scope list: `openid`, `profile`, `email`,
+   `offline_access`, `eduperson_entitlement`. There is **no** WLCG-style
+   path-scoped concept — `read:/`, `write:/`-shaped scopes are rejected
+   outright on `client_credentials` and `token_exchange`. This is handled
+   entirely in `idpsecrets.json`, not by requesting different scopes at
+   registration time:
+   - `capabilities.scope_map` maps every storage scope
+     (`storage.read`/`storage.modify`/`storage.create`) to `""` — dropped
+     from the request, not remapped to an LS AAI equivalent.
+   - `capabilities.fts_client_scope` is set explicitly to `"openid"`,
+     since FTS's own client_credentials auth call has nothing meaningful to
+     derive from the (intentionally empty) `scope_map`.
+   - `capabilities.drop_scopes` is empty (`[]`) for LS AAI — confirmed via
+     `shared/scripts/verify-idp-token.sh`'s refresh-token-grant check that
+     LS AAI issues and honors `offline_access` cleanly on both
+     `client_credentials` and `token_exchange`.
+   - See `docs/patches.md`'s "Per-issuer OIDC capabilities" section for
+     the full mechanism and rationale.
+4. **`resource=` (RFC 8707) is honored on both `client_credentials` and
+   `token_exchange`** — unlike EGI, where it's only honored on the former.
+   Combined with the FTS-side fix described below, this is what makes
+   `token_strategy=exchange` viable against LS AAI, unlike EGI.
+5. **The test-phase environment requires VO membership.** The
+   authenticating identity must belong to
+   `Life Science Community - Test Environment` before login succeeds. If
+   you see an access-denied page listing required organizational units,
+   register at
+   `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
+   with the same identity first; propagation can take a few minutes.
+6. Copy `client_id`/`client_secret` into
+   `shared/config/rucio/ls-aai-dev/idpsecrets.json`.
+
+> **`user-mapping.csv` needs the client's own `client_credentials` sub,
+> too** — not just end-user subs. Teapot's automated test fixtures
+> (`conftest.py`'s `teapot_token`) authenticate *as the client itself*, not
+> a federated user, and will 401 with "local user for sub claim ... does
+> not exist" without a row for it in
+> `shared/config/teapot/ls-aai-dev/user-mapping.csv`. Decode a
+> `client_credentials` token from the client to get this `sub` (same
+> first-step as any new-IdP onboarding — see runbook 06, step 0).
+
+> **No per-RSE *client* registrations exist on ls-aai-dev today** — RSEs
+> are registered as **resource indicators** on the single testbed client
+> instead (see step 2 above), which is what makes `resource=` work without
+> per-RSE OAuth clients the way EGI's exchange path would need.
+
 ## CA trust: the server must trust the issuer
 
 Rucio's OIDC discovery honours `REQUESTS_CA_BUNDLE`, pointing at
@@ -134,11 +219,15 @@ mounted as `tls_ca_bundle.pem`.
 > path from OIDC discovery. Verify each with its own bundle (see
 > Verification).
 
+> **ls-aai-dev:** LS AAI's TLS chain is system-trusted in this testbed's
+> base images — confirmed with no CA-related failures across both token
+> modes. No combined bundle has been needed, unlike egi-dev.
+
 ## Configuration reference — where things land
 
 | Setting | File / location | Example |
 |---------|-----------------|---------|
-| Issuer (exact string!) | `idpsecrets.json` → `issuer`; top-level key | `https://aai-dev.egi.eu/auth/realms/egi` |
+| Issuer (exact string!) | `idpsecrets.json` → `issuer`; top-level key | EGI: `https://aai-dev.egi.eu/auth/realms/egi` — LS AAI: `https://login.aai.lifescience-ri.eu/oidc/` (**note trailing slash**, unlike EGI) |
 | Client id/secret | `idpsecrets.json` → `client_id`/`client_secret` | per-environment |
 | Redirect URIs | `idpsecrets.json` → `redirect_uris` (server only) | `.../auth/oidc_redirect`, `/oidc_code`, `/oidc_token` |
 | Audience | `idpsecrets.json` → `audience`; `rucio.cfg [oidc] expected_audience` | `rucio` |
@@ -148,13 +237,25 @@ mounted as `tls_ca_bundle.pem`.
 | Accepted scope (validation) | `rucio.cfg [oidc] expected_scope` | keep permissive |
 | Client host (drives redirect scheme) | `oidc-client.cfg [client] rucio_host`/`auth_host` | `http://localhost:8090` |
 | RSE token support | RSE attribute `oidc_support=True` + `davs`/`https` scheme | required for `_use_tokens` |
+| Per-issuer grant capabilities | `idpsecrets.json` → `capabilities` (`resource_param`, `scope_map`, `drop_scopes`, `fts_client_scope`) | LS AAI: `scope_map` maps storage scopes to `""`, `fts_client_scope: "openid"`, `drop_scopes: []` |
+| FTS resource-indicator profile | `fts3config` → `OidcResourceIndicatorProfile` | `egi` or `lsaai` — makes FTS's own internal token-exchange send `resource=` instead of `audience=`; see managed-mode note below |
 
 > **Issuer must match exactly.** Rucio does an exact-string lookup against the
 > `idpsecrets.json` key and the issuer advertised by discovery — match the
 > `.well-known` value byte-for-byte, including trailing-slash convention.
 > EGI Check-In Dev advertises **no** trailing slash; Keycloak realms usually
-> do. Mismatch → `Failed to discover token endpoint` or 500 on `/auth/oidc`.
-> `admin_issuer` must be the issuer URL, not an alias.
+> do; **LS AAI's `iss` claim does include a trailing slash**
+> (`https://login.aai.lifescience-ri.eu/oidc/`). Mismatch →
+> `Failed to discover token endpoint` or 500 on `/auth/oidc`. `admin_issuer`
+> must be the issuer URL, not an alias.
+>
+> This exact-match requirement applies everywhere the issuer string is
+> compared, not just `idpsecrets.json` — `rucio.cfg`'s `issuer`/
+> `admin_issuer`, Teapot's `trusted_OP`, and XRootD's `scitokens.conf`
+> issuer entry all need the same byte-for-byte value. See
+> `docs/patches.md`'s "OIDC issuer string consistency" section for the
+> distinction between *building* a URL (safe to strip a trailing slash
+> before appending a path) and *matching* a claim (must not be normalized).
 
 > **token_strategy server cfgs:** the daemon flow is selected by
 > `[oidc] token_strategy`; ship the matching server cfg —
@@ -165,56 +266,44 @@ mounted as `tls_ca_bundle.pem`.
 > `authorization_code`, `refresh_token` and `device` grants, but **not** on
 > `token-exchange`. On exchange, EGI only supports `audience=`, which must
 > match a **registered client_id** — no equivalent of "any URI". Since
-> per-RSE clients aren't registered, an exchanged token comes back with **no
-> `aud` claim at all**, which storage endpoints reject.
+> per-RSE clients aren't registered, an exchanged token comes back with
+> **no `aud` claim at all**, which storage endpoints reject.
 >
 > EGI has confirmed plans to extend Keycloak to honor `resource=` on
 > token-exchange too — no ETA. Until then, **use
 > `token_strategy=client_credentials`** (`server.client-credentials.cfg`,
 > i.e. `TOKEN_MODE=unmanaged`) for `SCOPE_PROFILE=egi-dev`. Confirmed in CI:
 > the cross-protocol transfer test fails under `TOKEN_MODE=managed` with
-> `{"error":"invalid_client","error_description":"Audience not found"}`, and
-> passes under `TOKEN_MODE=unmanaged`.
+> `{"error":"invalid_client","error_description":"Audience not found"}` and
+> passes under `TOKEN_MODE=unmanaged`. A repro script confirming the gap
+> (mint via `client_credentials`+`resource=`, exchange via RFC 8693,
+> observe the exchanged token has no `aud` claim).
+
+> **`token_strategy=exchange` IS viable against LS AAI** — both
+> `TOKEN_MODE=unmanaged` and `TOKEN_MODE=managed` are confirmed passing the
+> full XRootD/Teapot/cross-protocol suite end-to-end. Getting there
+> required three coordinated fixes:
+> - `rse.py`'s `determine_scope_for_rse()` — always include `openid` in the
+>   constructed scope (LS AAI issues no refresh token for a
+>   `client_credentials` request missing it).
+> - `oidc.py`'s `get_token_for_account_operation()` — only prefer a cached
+>   subject token for exchange if it actually has a `refresh_token`, not
+>   just a matching scope substring (prevents a scope-incomplete token
+>   from getting permanently reselected on retry).
+> - FTS's `TokenExchangeExecutor.cpp` — recognize `OidcResourceIndicatorProfile=="lsaai"`
+>   and extract the URI-shaped value from `token.audience` (a
+>   space-joined, unordered multi-value `aud` claim) rather than assuming
+>   it starts with `http(s)://`, then send only that value as `resource=`.
 >
-> Repro script confirming the gap (client id/secret redacted). Run inside
-> the `fts` pod — swap `kubectl -n dep-dlm-sandbox exec deploy/fts --` for
-> `docker exec compose-fts-1` on compose:
-> ```bash
-> #!/usr/bin/env bash
-> set -euo pipefail
-> CID="<client id>"; CSECRET="<client secret>"
-> ISSUER="https://aai-dev.egi.eu/auth/realms/egi"
-> TOKEN_URL="${ISSUER}/protocol/openid-connect/token"
+> Also LS AAI-specific: RFC 8693 token-exchange requests must include an
+> explicit `requested_token_type` parameter or LS AAI rejects them with
+> `"No requested_token_type parameter value provided"` — Keycloak/EGI
+> apparently default this. Already handled in `oidc.py`'s
+> `__exchange_token_oidc`.
 >
-> # Step 1: mint a subject token via client_credentials + resource=
-> SUBJECT_TOKEN=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -s -u "${CID}:${CSECRET}" \
->   -d 'grant_type=client_credentials' \
->   -d 'resource=https://fts.example.org/' \
->   -d 'scope=openid profile eduperson_entitlement offline_access read:/ write:/' \
->   "$TOKEN_URL" | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
->
-> # Step 2: exchange it (RFC 8693), targeting a different resource
-> EXCHANGE_RESPONSE=$(kubectl -n dep-dlm-sandbox exec deploy/fts -- curl -s -u "${CID}:${CSECRET}" \
->   -d 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
->   -d "subject_token=${SUBJECT_TOKEN}" \
->   -d 'subject_token_type=urn:ietf:params:oauth:token-type:access_token' \
->   -d 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
->   -d 'resource=https://xrd3.example.org/' \
->   -d 'scope=openid read:/ write:/' \
->   "$TOKEN_URL")
->
-> # Step 3: decode the exchanged token — aud will be absent
-> echo "$EXCHANGE_RESPONSE" | python3 -c "
-> import sys, json, base64
-> resp = json.load(sys.stdin)
-> t = resp['access_token']
-> p = t.split('.')[1]; p += '=' * (-len(p) % 4)
-> claims = json.loads(base64.urlsafe_b64decode(p))
-> print(json.dumps(claims, indent=2))
-> print('aud present:', 'aud' in claims)
-> "
-> ```
-> Expected: `aud present: False`.
+> **This does not change the EGI conclusion above** — EGI's blocker is a
+> genuine IdP-side gap unrelated to any of the three LS AAI bugs. Don't
+> assume an EGI fix from FTS/Rucio alone would unblock it.
 
 > **Daemon's idpsecrets:** daemons may mount OIDC config from a *different*
 > secret than the server. Update the one the daemon actually mounts, or it
@@ -225,7 +314,10 @@ mounted as `tls_ca_bundle.pem`.
 
 1. **Register the client on the IdP** with both `authorization_code` (+
    redirect URIs + user scopes) and `client_credentials` (+ capability
-   scopes `read:/ write:/`) enabled.
+   scopes `read:/ write:/`, or LS AAI's equivalent fixed scope set — see
+   "Creating the client in LS AAI" above) enabled. For LS AAI, also enable
+   `token-exchange` and register resource indicators if managed mode is
+   wanted.
 
 2. **Set issuer/audience/scopes** in `idpsecrets.json` and `rucio.cfg` per
    the table above; ensure CA trust.
@@ -235,12 +327,12 @@ mounted as `tls_ca_bundle.pem`.
    an account. Run **in-pod / in-container** — the dev shell's own client
    uses OIDC and would deadlock on the broken flow:
 
-   ```bash
+```bash
    kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
      rucio-admin identity add --type OIDC \
        --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
        --account randomaccount --email marvin.gajek@cern.ch
-   ```
+```
 
    (Compose: `docker exec -t compose-rucio-server-1 rucio-admin identity add ...`, same flags.)
 
@@ -248,19 +340,48 @@ mounted as `tls_ca_bundle.pem`.
    the account in the client cfg. Get the user's `sub`/email from their EGI
    Check-In personal-info page.
 
+   LS AAI equivalent — note the `@lifescience-ri.eu` suffix on the sub and
+   the trailing-slash issuer:
+
+```bash
+   kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+     rucio-admin identity add --type OIDC \
+       --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" \
+       --account randomaccount --email marvin.gajek@cern.ch
+```
+
+   (Compose: same, swapping `kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server --`
+   for `docker exec -t compose-rucio-server-1`.)
+
 4. **Confirm the storage endpoints trust the issuer** (XRootD
    `scitokens.conf` / Teapot config has the issuer registered).
+
+   For LS AAI specifically, also confirm the **Storm-WebDAV version behind
+   Teapot is ≥1.13.0**. LS AAI issues RFC 9068 `at+jwt`-typed access
+   tokens; Storm-WebDAV versions before 1.13.0 reject these with
+   `"the given typ value needs to be one of [JWT]"` regardless of otherwise
+   correct `application.yml` configuration. Check/set this via
+   `deploy/compose/Dockerfile.teapot`'s `STORM_VERSION` build arg.
+
+5. **If using `TOKEN_MODE=managed` against LS AAI**, confirm the FTS image
+   in use includes the `TokenExchangeExecutor` fixes noted above. An FTS
+   image built before those fixes will reproduce `"[TokenExchange] Failed
+   to get refresh token for source token: HTTP 400 : Server Error"` even
+   with fully correct Rucio-side config.
 
 ## Verification
 
 CI's `make test-rucio-transfers` / `make test-rucio-deletion` run the full
-XRootD/Teapot/cross-protocol suite end-to-end against egi-dev under
-`TOKEN_MODE=unmanaged` — that's the authoritative check. The commands below
-are for manual debugging when a CI failure needs isolating to a specific
-layer (CA trust vs. daemon credentials vs. TPC itself). Run inside the pod
-that needs checking — `rucio-server` or `fts` below, depending on what
-you're isolating. (Compose equivalent: swap `kubectl -n dep-dlm-sandbox exec
-deploy/<svc> --` for `docker exec compose-<svc>-1`.)
+XRootD/Teapot/cross-protocol suite end-to-end against egi-dev (under
+`TOKEN_MODE=unmanaged` only — see the EGI caveat above) and, via
+`.github/workflows/ls-aai-dev.yml`, against ls-aai-dev under **both**
+`TOKEN_MODE=unmanaged` and `TOKEN_MODE=managed` — that's the authoritative
+check for both profiles. The commands below are for manual debugging when a
+CI failure needs isolating to a specific layer. Run inside the pod that
+needs checking — `rucio-server` or `fts` below, depending on what you're
+isolating. (Compose equivalent: swap
+`kubectl -n dep-dlm-sandbox exec deploy/<svc> --` for
+`docker exec compose-<svc>-1`.)
 
 ```bash
 # CA trust — should print 200 against the bundle REQUESTS_CA_BUNDLE points at
@@ -284,61 +405,64 @@ print('scope:', json.loads(base64.urlsafe_b64decode(p)).get('scope'))
 "
 ```
 
+For LS AAI, the equivalent client_credentials sanity check needs the token
+endpoint resolved via discovery rather than a Keycloak-shaped path:
+
 ```bash
-# Manual TPC sanity check via client_credentials directly against the IdP.
-# Only works with token_strategy=client_credentials (TOKEN_MODE=unmanaged).
-# Under token_strategy=exchange this bypasses the daemon path entirely, so a
-# pass here does NOT confirm exchange-mode works — see the caveat above.
-kubectl -n dep-dlm-sandbox exec deploy/fts -- \
-  env OIDC_CLIENT_ID="$OIDC_CLIENT_ID" OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
-  bash -c '
-    TOKEN=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
-      -d grant_type=client_credentials \
-      -d "scope=read:/ write:/" \
-      -d "resource=https://teapot2.example.org/" \
-      https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token \
-      | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get(\"access_token\") or d)")
-    export BEARER_TOKEN="$TOKEN"
-    TS=$(date +%s)
-    SRC="davs://teapot1:8081/data/test/src-$TS.txt"
-    DST="davs://teapot2:8081/data/test/dst-$TS.txt"
-    echo tpc > /tmp/s.txt
-    gfal-copy -v file:///tmp/s.txt "$SRC"
-    gfal-copy -v "$SRC" "$DST" 2>&1 | grep -iE "ssl|handshake|certificate|verify|error|done|copying|exit"
-  '
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- python3 -c "
+import requests, json, base64
+cfg_all = json.load(open('/opt/rucio/etc/idpsecrets.json'))
+cfg = cfg_all['https://login.aai.lifescience-ri.eu/oidc/']
+discovery = requests.get(cfg['issuer'].rstrip('/') + '/.well-known/openid-configuration').json()
+r = requests.post(discovery['token_endpoint'],
+    auth=(cfg['client_id'], cfg['client_secret']),
+    data={'grant_type':'client_credentials','scope':'openid'})
+print(r.status_code)
+tok = r.json()['access_token']; p = tok.split('.')[1]; p += '=' * (-len(p) % 4)
+print(json.dumps(json.loads(base64.urlsafe_b64decode(p)), indent=2))
+"
+```
+
+Isolating a bad/malformed `OIDC_CLIENT_SECRET` — confirm length first:
+
+```bash
+echo -n "$OIDC_CLIENT_SECRET" | wc -c   # should print 36 for a standard UUID secret
+
+curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
+  -d 'grant_type=client_credentials' -d 'scope=openid' \
+  https://login.aai.lifescience-ri.eu/oidc/token
+```
+
+`shared/scripts/verify-idp-token.sh` runs `client_credentials`, `resource=`,
+`token-exchange`, and refresh-grant checks in one pass. Prefer it over
+manual curl commands for routine verification.
+
+```bash
+# For TOKEN_MODE=managed (LS AAI), check FTS's own internal token-exchange
+# directly — separate from anything Rucio does:
+kubectl -n dep-dlm-sandbox exec pod/ftsdb-0 -- \
+  mysql -ufts -pfts fts -e \
+  "SELECT token_id, audience FROM t_token ORDER BY token_id DESC LIMIT 10;"
 ```
 
 ```bash
-# User flow end to end (browser code flow). Port-forwards, /etc/hosts, and CA
-# trust dir setup are identical to the local profile — see runbook 01's
-# "Run it (login + upload)" if not done yet. Only egi-dev-specific change is
-# RUCIO_CONFIG. Skip the `keycloak` /etc/hosts entry from runbook 01 — the
-# issuer here is aai-dev.egi.eu, a real public host, not a local port-forward
-# target; rucio/teapot1/xrd3 entries are still needed. Everything else in
-# runbook 01 (XRootD upload, replication, driving the conveyor by hand)
-# carries over as-is — swap in the identity/config from this runbook.
+# User flow end to end (browser code flow). Port-forwards, /etc/hosts and CA
+# trust dir setup are identical to the local profile — see runbook 01.
 export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/egi-dev/oidc-client.cfg
 rucio whoami   # browser login via aai-dev.egi.eu, paste the code
 
-# whoami only proves auth; confirm authorization end-to-end with an upload
-# (requires the identity mapping from Step 3 above):
 echo "Hello from egi-dev" >> /tmp/hello-egi.txt
 rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-egi.txt
 ```
 
-## Troubleshooting
+For LS AAI, swap `RUCIO_CONFIG` to `ls-aai-dev/oidc-client.cfg` and remember
+the VO-membership prerequisite above (an identity not yet in
+`lifescience_test` sees an access-denied page at login, not an OIDC error):
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `CERTIFICATE_VERIFY_FAILED ... unable to get issuer certificate` on `/auth/oidc` | `tls_ca_bundle.pem` lacks the issuer chain | Use combined bundle; for egi-dev, `certs/tls_ca_bundle.pem` |
-| `Invalid parameter: redirect_uri` at IdP | `https://localhost` requested, registration not deployed, or path mismatch | Web clients allow `http://localhost` only; exact-match all paths; confirm IdP reconfig is **deployed**, not pending |
-| Redirect goes to the wrong host | `redirect_uris` / `rucio_host`/`auth_host` point elsewhere | Point both at your host; restart server so it re-reads `idpsecrets.json` |
-| `OIDC authentication failed` but token is valid | Identity not mapped to the account | Run `rucio-admin identity add` (Step 3); SUB/ISS exact, account-matched |
-| `invalid_scope` at authorize endpoint | Capability scopes missing on the client's interactive grant | Add `read:/ write:/` as client scopes |
-| "no authorization content returned" in browser | Downstream of the IdP `invalid_scope` above | Same fix — it's the IdP, not `rucio.cfg` |
-| `unauthorized_client: not enabled to retrieve service account` | Non-service client used for `client_credentials` | Use the service/daemon client, or enable service account |
-| `Failed to discover token endpoint` / 500 on `/auth/oidc` | Issuer string mismatch or `admin_issuer` is an alias | Match `.well-known` issuer exactly; set `admin_issuer` to the issuer URL |
-| TPC works but `rucio upload` fails | Scopes present on service grant but not interactive grant | Add scopes to the interactive grant |
-| 401 on FTS token request | Wrong client mounted by daemon | Patch the secret the daemon actually mounts |
-| Exchanged token has no `aud` claim, storage rejects it | `resource=` not honored on `token-exchange` grant (EGI-specific, confirmed) | Switch to `token_strategy=client_credentials` (`TOKEN_MODE=unmanaged`); see caveat above |
-| Cross-protocol transfer fails with `{"error":"invalid_client","error_description":"Audience not found"}` | `TOKEN_MODE=managed` (→ `token_strategy=exchange`) used against egi-dev | Reseed with `TOKEN_MODE=unmanaged` |
+```bash
+export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/ls-aai-dev/oidc-client.cfg
+rucio whoami
+
+echo "Hello from ls-aai-dev" >> /tmp/hello-lsaai.txt
+rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-lsaai.txt
+```
