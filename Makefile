@@ -192,7 +192,7 @@ endif
 .PHONY: logs
 logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) logs -f --tail=100 $(SERVICES)
+	$(COMPOSE) logs --tail=100 $(SERVICES)
 else
 	@echo "k8s: use 'kubectl -n $(K8S_NAMESPACE) logs deploy/<name> -f'"
 	@$(KUBECTL) get deploy -o name
