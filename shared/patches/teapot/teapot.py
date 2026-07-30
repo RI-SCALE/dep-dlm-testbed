@@ -3,6 +3,7 @@ import asyncio
 import configparser
 import csv
 import datetime
+import time
 import errno
 import json
 import logging
@@ -39,20 +40,40 @@ config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolat
 config.read("/etc/teapot/config.ini")
 
 TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
-try:
-    _discovery = requests.get(
-        f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration",
-        timeout=10,
-        verify="/etc/ssl/certs/ca-certificates.crt",
-    ).json()
-    JWKS_URL = _discovery["jwks_uri"]
-except Exception:
-    logging.getLogger(__name__).critical(
-        "Failed to discover jwks_uri from %s/.well-known/openid-configuration",
-        TRUSTED_ISS.rstrip("/"),
-        exc_info=True,
-    )
-    raise
+
+_DISCOVERY_RETRIES = 12
+_DISCOVERY_INTERVAL_SEC = 5
+
+_discovery = None
+for _attempt in range(1, _DISCOVERY_RETRIES + 1):
+    try:
+        _discovery = requests.get(
+            f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration",
+            timeout=10,
+            verify="/etc/ssl/certs/ca-certificates.crt",
+        ).json()
+        JWKS_URL = _discovery["jwks_uri"]
+        break
+    except Exception:
+        if _attempt == _DISCOVERY_RETRIES:
+            logging.getLogger(__name__).critical(
+                "Failed to discover jwks_uri from %s/.well-known/openid-configuration "
+                "after %d attempts",
+                TRUSTED_ISS.rstrip("/"),
+                _DISCOVERY_RETRIES,
+                exc_info=True,
+            )
+            raise
+        logging.getLogger(__name__).warning(
+            "jwks_uri discovery attempt %d/%d failed for %s, retrying in %ds",
+            _attempt,
+            _DISCOVERY_RETRIES,
+            TRUSTED_ISS.rstrip("/"),
+            _DISCOVERY_INTERVAL_SEC,
+            exc_info=True,
+        )
+        time.sleep(_DISCOVERY_INTERVAL_SEC)
+
 TRUSTED_ISS = config["Teapot"]["trusted_OP"]
 _jwk_client = PyJWKClient(JWKS_URL)
 
