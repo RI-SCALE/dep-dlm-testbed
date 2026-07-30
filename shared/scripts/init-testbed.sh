@@ -9,7 +9,6 @@ COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
 
 FTS_OIDC="https://fts:8446"
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
-OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}"
 
 SEED_ACCOUNTS=( root ddmlab )
 
@@ -87,6 +86,15 @@ _grant_mode_for_profile() {
         *)       echo "password" ;;
     esac
 }
+
+_expected_audience_for_profile() {
+    case "$SCOPE_PROFILE" in
+        egi-dev|ls-aai-dev) echo "https://fts.example.org/" ;;
+        *)                  echo "$FTS_OIDC" ;;
+    esac
+}
+
+OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$(_expected_audience_for_profile)}"
 
 _cap() {
     local path="$1" default="$2"
@@ -258,6 +266,8 @@ seed_subject_tokens() {
         "DELETE FROM tokens WHERE account='${acct}' AND identity LIKE 'SUB=%';"
     done
 
+    echo "  Using expected audience: $OIDC_EXPECTED_AUDIENCE"
+
     _exec rucio-server env \
         SEED_ACCOUNTS="$accounts_csv" \
         OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
@@ -265,7 +275,7 @@ seed_subject_tokens() {
         OIDC_GRANT_MODE="$grant_mode" \
         OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
         OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
-        OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}" \
+        OIDC_EXPECTED_AUDIENCE="$OIDC_EXPECTED_AUDIENCE" \
         python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
