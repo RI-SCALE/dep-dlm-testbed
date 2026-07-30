@@ -266,6 +266,7 @@ def request_token(
             url=OIDC_PROVIDER_ENDPOINT,
             auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
             data=data,
+            timeout=10,
         )
         response.raise_for_status()
         token = response.json()["access_token"]
@@ -384,7 +385,7 @@ def __load_oidc_configuration() -> bool:
     try:
         # oidc_discover_url = urljoin(issuer, '.well-known/openid-configuration')
         oidc_discover_url = issuer.rstrip("/") + "/.well-known/openid-configuration"
-        response = requests.get(oidc_discover_url)
+        response = requests.get(oidc_discover_url, timeout=10)
         response.raise_for_status()
         payload = response.json()
         OIDC_PROVIDER_ENDPOINT = payload["token_endpoint"]
