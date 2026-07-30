@@ -2,7 +2,7 @@
 
 Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`), with GitOps-based deployment (ArgoCD or Flux) across sandbox, staging and production environments.
 
-The testbed supports both managed and unmanaged token flows and integrates against external OIDC providers beyond the bundled Keycloak, validated end-to-end against EGI Check-In, with LS AAI / Perun integration in progress, as well as external storage backends including S3 (e.g. Copernicus Data Space). It can be further extended to validate data discovery, popularity and preparation services end-to-end.
+The testbed supports both managed and unmanaged token flows and integrates against external OIDC providers beyond the bundled Keycloak, validated end-to-end against EGI Check-In and LS AAI / Perun, as well as external storage backends including S3 (e.g. Copernicus Data Space). It can be further extended to validate data discovery, popularity and preparation services end-to-end.
 
 The testbed also applies minimal source patches to upstream components (e.g. Rucio, FTS3, gfal2, davix, Teapot) to validate features not yet upstream, making it a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches, their rationale and the surrounding architectural decisions are documented in [docs/patches.md](./docs/patches.md), [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/).
 
@@ -89,7 +89,7 @@ Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
 
 ```bash
 source envs/egi-dev.env
-export TOKEN_MODE=unmanaged
+export TOKEN_MODE=unmanaged #  managed mode isn't viable against egi-dev — EGI doesn't honor resource= on token-exchange; see runbook 02
 export DAEMON_MODE=direct
 export RUNTIME=k8s
 make start
@@ -110,7 +110,7 @@ Copy `envs/ls-aai-dev.env.example` to `envs/ls-aai-dev.env`, fill in your LS AAI
 
 ```bash
 source envs/ls-aai-dev.env
-export TOKEN_MODE=unmanaged
+export TOKEN_MODE=managed # or unmanaged
 export DAEMON_MODE=direct
 export RUNTIME=k8s
 make start
