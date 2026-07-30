@@ -385,24 +385,3 @@ If you ran the interactive experiment, also stop the forwards and remove the
 jobs
 kill %1 %2 %3 %4
 ```
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Daemons `CrashLoopBackOff` early | DB bootstrap / Vault seed not finished | Wait for `rucio-bootstrap-db` and `vault-seed` to `Completed`; daemons self-recover |
-| `make init` "already exists" | Stack already seeded; init is idempotent | Harmless — let it continue |
-| Rule `STUCK` / `NO_SOURCES` | No RSE distance, or no source replica | Add a distance; ensure the source DID has bytes |
-| Rule `STUCK` + `exchange returned no token aud=<rse>` | FTS token path not seeded | Re-run `make init TOKEN_MODE=managed`; check `ftsdb-0` `t_token_provider` |
-| OIDC `whoami` -> `500` | apache worker can't read CA (`0600 root`) -> discovery `PermissionError(13)` | Mount `rucio_ca.pem` `0644` per-item; `rollout restart deploy/rucio-server` |
-| OIDC login -> `Invalid parameter: redirect_uri` | `rucio` client `redirectUris` lacks the sent URI | Add `http://localhost:8090/auth/*` and re-import the realm |
-| OIDC login -> `invalid_scope` | Requested scope includes `profile` or a non-requestable scope | Use `openid offline_access storage.read:/ storage.modify:/ aud:rucio` (all requestable on the `rucio` client) |
-| OIDC URL is `https://` but forward is `http` | Server advertises `https` via `X-Forwarded-Proto` | Open the `http://` form of the printed URL |
-| OIDC redirect goes to `https://rucio/...` | `oidc.py` picks the redirect at random | Trim the idpsecrets issuer-URL key's `redirect_uris` to the `localhost:8080` forms only |
-| `rucio upload` -> `gfal2` import / build fails on jammy | libgfal2 2.20.3 lacks `bring_online_v2`; pip build can't compile | Use the conda-forge client (`install_rucio_gfal()`), not system pip |
-| Upload -> `Domain name resolution failed` / `connection reset` at the gfal PUT | Missing `/etc/hosts` entry for the storage host, or the port-forward doesn't match the RSE PFN port | Add `127.0.0.1 <host>`; forward the PFN's port (Teapot `8081`, XRootD `1094`) |
-| `rucio download` fails instantly, no useful error | No port-forward for the target RSE — download is a direct client pull, not server-side like a rule | Forward that RSE's service on its PFN port; if it's XRD3/XRD4 or TEAPOT1/TEAPOT2, stop the paired forward first (shared port) |
-| `gfal-ls` -> `issuer is not trusted` | `X509_CERT_DIR` points at a file, or no hash symlink | Make it a real dir; copy CA + `*.0`; `openssl rehash`; export `X509_CERT_DIR` |
-| `gfal-ls` -> `HTTP 401` | `gfal-ls` sends no token (expected) | Judge by `rucio upload`, which attaches the bearer token |
-| Upload -> `401` at `POST /replicas` | Account lacks `add_replicas` permission | `rucio-admin account add-attribute <acct> --key admin --value True` (run as admin) |
-| Upload -> `401` at the gfal2 PUT to storage (principal logged as `-`) | Interactive token has no `aud`; Storm-WebDAV's JWT decoder rejects it before authz | Request `aud:rucio` in `oidc_scope` (it's optional+requestable on the `rucio` client); any populated `aud` satisfies the decoder — no realm default-scope change needed |

@@ -71,6 +71,7 @@ class GrantCapabilities:
     audience_param: bool = True
     scope_map: dict = field(default_factory=dict)
     drop_scopes: frozenset = field(default_factory=frozenset)
+    fts_client_scope: Optional[str] = None
 
 
 DEFAULT_GRANT_CAPABILITIES: dict = {"resource_param": False, "audience_param": True}
@@ -139,6 +140,7 @@ def get_capabilities(issuer: str, grant: str) -> GrantCapabilities:
     # the grant-specific dict already overrides them.
     grant_caps.setdefault("scope_map", caps.get("scope_map", {}))
     grant_caps.setdefault("drop_scopes", caps.get("drop_scopes", []))
+    grant_caps.setdefault("fts_client_scope", caps.get("fts_client_scope"))
     return GrantCapabilities(**grant_caps)
 
 
@@ -264,6 +266,7 @@ def request_token(
             url=OIDC_PROVIDER_ENDPOINT,
             auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
             data=data,
+            timeout=10,
         )
         response.raise_for_status()
         token = response.json()["access_token"]
@@ -382,7 +385,7 @@ def __load_oidc_configuration() -> bool:
     try:
         # oidc_discover_url = urljoin(issuer, '.well-known/openid-configuration')
         oidc_discover_url = issuer.rstrip("/") + "/.well-known/openid-configuration"
-        response = requests.get(oidc_discover_url)
+        response = requests.get(oidc_discover_url, timeout=10)
         response.raise_for_status()
         payload = response.json()
         OIDC_PROVIDER_ENDPOINT = payload["token_endpoint"]
@@ -1147,8 +1150,10 @@ def get_token_for_account_operation(
                     ):
                         return token_dictionary(token)
                 # from available tokens select preferentially the one which are being refreshed
-                if hasattr(token, "oidc_scope") and (
-                    "offline_access" in str(token["oidc_scope"])
+                if (
+                    hasattr(token, "oidc_scope")
+                    and "offline_access" in str(token.oidc_scope)
+                    and getattr(token, "refresh_token", None)
                 ):
                     subject_token = token
             # if not proceed with token exchange
@@ -1227,6 +1232,7 @@ def __exchange_token_oidc(
         args = {
             "subject_token": subject_token_object.token,
             "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
+            "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
             "scope": jwt_row_dict["authz_scope"],
             "grant_type": grant_type,
         }

@@ -2176,17 +2176,16 @@ def determine_scope_for_rse(
     capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
 
     if capabilities.scope_map or capabilities.drop_scopes:
-        # Capability-mapped scopes (e.g. EGI's read:/ write:/) already encode
-        # the path; don't append the RSE prefix, and drop any scopes the
-        # profile marks unsupported (e.g. offline_access with no refresh
-        # token on client_credentials).
         mapped = []
         for s in scopes:
             m = capabilities.scope_map.get(s, s)
-            if m not in mapped:
+            if m and m not in mapped:
                 mapped.append(m)
         extra = [s for s in extra_scopes if s not in capabilities.drop_scopes]
-        return " ".join(sorted(mapped + list(extra)))
+        combined = sorted(mapped + list(extra))
+        if "openid" not in combined:
+            combined = ["openid"] + combined
+        return " ".join(combined) if combined else "openid"
 
     # default (wlcg): unchanged behaviour
     rse_protocols = get_rse_protocols(rse_id)

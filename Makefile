@@ -32,6 +32,7 @@ S3_SECRET_KEY ?=
 
 # ── OIDC provider (env-overridable; empty = use test defaults / Keycloak) ──
 OIDC_ISSUER           ?=
+OIDC_TOKEN_URL        ?=
 OIDC_CLIENT_ID        ?=
 OIDC_CLIENT_SECRET    ?=
 OIDC_STORAGE_SCOPE    ?=
@@ -45,7 +46,8 @@ OIDC_GRANT_TYPE       ?= password
 ifeq ($(SCOPE_PROFILE),local)
   TEST_OIDC_ENV :=
 else
-  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+    OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
     OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
     OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
 endif
@@ -95,7 +97,7 @@ help: ## Show this help (default target)
 	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev>] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
@@ -113,6 +115,24 @@ init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
+
+## IdP token verification
+
+.PHONY: verify-idp-token
+verify-idp-token: ## Verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires OIDC_CLIENT_SECRET.
+	@case "$(SCOPE_PROFILE)" in \
+	  egi-dev) \
+	    shared/scripts/verify-idp-token.sh \
+	      --issuer https://aai-dev.egi.eu/auth/realms/egi \
+	      --client-id 699e9e29-29e8-4220-8863-5306d8a7feb8 \
+	      --scope "openid profile eduperson_entitlement offline_access read:/ write:/" ;; \
+	  ls-aai-dev) \
+	    shared/scripts/verify-idp-token.sh \
+	      --issuer https://login.aai.lifescience-ri.eu/oidc/ \
+	      --client-id 4ff05c0b-1d83-42b7-a00a-8bd162df4165 \
+	      --scope "openid profile email offline_access eduperson_entitlement" ;; \
+	  *) echo "Unknown SCOPE_PROFILE=$(SCOPE_PROFILE), expected egi-dev or ls-aai-dev"; exit 1 ;; \
+	esac
 
 ## Lifecycle
 
@@ -172,7 +192,7 @@ endif
 .PHONY: logs
 logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) logs -f --tail=100 $(SERVICES)
+	$(COMPOSE) logs --tail=100 $(SERVICES)
 else
 	@echo "k8s: use 'kubectl -n $(K8S_NAMESPACE) logs deploy/<name> -f'"
 	@$(KUBECTL) get deploy -o name

@@ -1234,11 +1234,12 @@ class FTS3Transfertool(Transfertool):
             fts_hostname = urlparse(external_host).hostname
             if fts_hostname is not None:
                 capabilities = get_capabilities(ADMIN_ISSUER_ID, "client_credentials")
-                fts_scope = (
-                    " ".join(sorted(set(capabilities.scope_map.values())))
-                    if capabilities.scope_map
-                    else "fts"
-                )
+                if capabilities.fts_client_scope is not None:
+                    fts_scope = capabilities.fts_client_scope
+                elif capabilities.scope_map:
+                    fts_scope = " ".join(sorted(set(capabilities.scope_map.values())))
+                else:
+                    fts_scope = "fts"
                 token = request_token(audience=fts_hostname, scope=fts_scope)
                 if token is not None:
                     self.logger(

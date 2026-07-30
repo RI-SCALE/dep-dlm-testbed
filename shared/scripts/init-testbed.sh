@@ -9,7 +9,6 @@ COMPOSE_FILE="${COMPOSE_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
 
 FTS_OIDC="https://fts:8446"
 OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlcg"
-OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}"
 
 SEED_ACCOUNTS=( root ddmlab )
 
@@ -22,7 +21,7 @@ declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 
 OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
-OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER}/protocol/openid-connect/token}"
+OIDC_TOKEN_URL="${OIDC_TOKEN_URL:-${OIDC_ISSUER%/}/protocol/openid-connect/token}"
 IDPSECRETS_PATH_IN_CONTAINER="${IDPSECRETS_PATH_IN_CONTAINER:-/opt/rucio/etc/idpsecrets.json}"
 
 # ─── Cross-runtime helpers ───────────────────────────────────────
@@ -83,10 +82,19 @@ _http_probe_local() {
 
 _grant_mode_for_profile() {
     case "$SCOPE_PROFILE" in
-        egi-dev) echo "client_credentials" ;;
+        egi-dev|ls-aai-dev) echo "client_credentials" ;;
         *)       echo "password" ;;
     esac
 }
+
+_expected_audience_for_profile() {
+    case "$SCOPE_PROFILE" in
+        egi-dev|ls-aai-dev) echo "https://fts.example.org/" ;;
+        *)                  echo "$FTS_OIDC" ;;
+    esac
+}
+
+OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$(_expected_audience_for_profile)}"
 
 _cap() {
     local path="$1" default="$2"
@@ -145,7 +153,7 @@ wait_for_infrastructure() {
 
     for i in $(seq 1 30); do
         code=$(_exec rucio-server curl -s -o /dev/null -w '%{http_code}' \
-            "${OIDC_ISSUER}/.well-known/openid-configuration" \
+            "${OIDC_ISSUER%/}/.well-known/openid-configuration" \
             2>/dev/null) || true
         [[ "$code" == "200" ]] && { echo "  ✓ Keycloak ready"; break; }
         echo "  [$i] Keycloak HTTP $code — waiting..."; sleep 5
@@ -258,6 +266,8 @@ seed_subject_tokens() {
         "DELETE FROM tokens WHERE account='${acct}' AND identity LIKE 'SUB=%';"
     done
 
+    echo "  Using expected audience: $OIDC_EXPECTED_AUDIENCE"
+
     _exec rucio-server env \
         SEED_ACCOUNTS="$accounts_csv" \
         OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
@@ -265,7 +275,7 @@ seed_subject_tokens() {
         OIDC_GRANT_MODE="$grant_mode" \
         OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
         OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
-        OIDC_EXPECTED_AUDIENCE="${OIDC_EXPECTED_AUDIENCE:-$FTS_OIDC}" \
+        OIDC_EXPECTED_AUDIENCE="$OIDC_EXPECTED_AUDIENCE" \
         python3 -c "
 import urllib.request, urllib.parse, json, base64, sys, os
 from datetime import datetime
@@ -595,6 +605,13 @@ setup_fts_oidc_provider() {
             https://localhost:8446/config/token_providers
         _fts_admin -X POST -H "Content-Type: application/json" \
             -d "{\"name\":\"egi-checkin-dev-slash\",\"issuer\":\"https://aai-dev.egi.eu/auth/realms/egi/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
+    elif [ "$SCOPE_PROFILE" = "ls-aai-dev" ]; then
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"ls-aai-dev\",\"issuer\":\"https://login.aai.lifescience-ri.eu/oidc\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
+            https://localhost:8446/config/token_providers
+        _fts_admin -X POST -H "Content-Type: application/json" \
+            -d "{\"name\":\"ls-aai-dev-slash\",\"issuer\":\"https://login.aai.lifescience-ri.eu/oidc/\",\"client_id\":\"${OIDC_CLIENT_ID}\",\"client_secret\":\"${OIDC_CLIENT_SECRET}\"}" \
             https://localhost:8446/config/token_providers
     else
         _fts_admin -X POST -H "Content-Type: application/json" \

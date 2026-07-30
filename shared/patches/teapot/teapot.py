@@ -3,6 +3,7 @@ import asyncio
 import configparser
 import csv
 import datetime
+import time
 import errno
 import json
 import logging
@@ -20,6 +21,7 @@ from stat import S_IRGRP, S_IRWXO, S_IRWXU, S_IXGRP
 import anyio
 import httpx
 import psutil
+import requests
 import uvicorn
 from alise import Alise
 from fastapi import FastAPI, HTTPException, Request
@@ -38,7 +40,40 @@ config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolat
 config.read("/etc/teapot/config.ini")
 
 TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
-JWKS_URL = f"{TRUSTED_ISS.rstrip('/')}/protocol/openid-connect/certs"
+
+_DISCOVERY_RETRIES = 12
+_DISCOVERY_INTERVAL_SEC = 5
+
+_discovery = None
+for _attempt in range(1, _DISCOVERY_RETRIES + 1):
+    try:
+        _discovery = requests.get(
+            f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration",
+            timeout=10,
+            verify="/etc/ssl/certs/ca-certificates.crt",
+        ).json()
+        JWKS_URL = _discovery["jwks_uri"]
+        break
+    except Exception:
+        if _attempt == _DISCOVERY_RETRIES:
+            logging.getLogger(__name__).critical(
+                "Failed to discover jwks_uri from %s/.well-known/openid-configuration "
+                "after %d attempts",
+                TRUSTED_ISS.rstrip("/"),
+                _DISCOVERY_RETRIES,
+                exc_info=True,
+            )
+            raise
+        logging.getLogger(__name__).warning(
+            "jwks_uri discovery attempt %d/%d failed for %s, retrying in %ds",
+            _attempt,
+            _DISCOVERY_RETRIES,
+            TRUSTED_ISS.rstrip("/"),
+            _DISCOVERY_INTERVAL_SEC,
+            exc_info=True,
+        )
+        time.sleep(_DISCOVERY_INTERVAL_SEC)
+
 TRUSTED_ISS = config["Teapot"]["trusted_OP"]
 _jwk_client = PyJWKClient(JWKS_URL)
 
@@ -342,11 +377,19 @@ async def _create_user_dirs(username, port, sub, iss, external_identities):
                 if key.startswith("idp_url_"):
                     suffix = key[len("idp_url_") :]
                     name_key = f"idp_name_{suffix}"
+                    audiences_key = f"idp_audiences_{suffix}"
                     if name_key in config[f"STORAGE_AREA_{i}"]:
                         idp_pairs.append(
                             {
                                 "name": config[f"STORAGE_AREA_{i}"][name_key],
                                 "url": config[f"STORAGE_AREA_{i}"][key],
+                                "audiences": [
+                                    a.strip()
+                                    for a in config[f"STORAGE_AREA_{i}"]
+                                    .get(audiences_key, "")
+                                    .split(",")
+                                    if a.strip()
+                                ],
                             }
                         )
                     else:
