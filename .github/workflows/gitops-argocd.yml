@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         env: [sandbox]          # staging/production need external Vault/DB/IdP
-        scope_profile: [local, egi-dev]
+        scope_profile: [local, egi-dev, ls-aai-dev]
     env:
       GITOPS_ENV: ${{ matrix.env }}
       # Point Argo/Flux at THIS PR's repo+branch — see inline comment below,
@@ -38,11 +38,36 @@ jobs:
       # non-viable against EGI Check-In Dev (see BYO IdP runbook, "CA trust"
       # / token_strategy caveat). local keeps the default managed flow.
       TOKEN_MODE: ${{ matrix.scope_profile == 'egi-dev' && 'unmanaged' || 'managed' }}
-      OIDC_ISSUER: ${{ matrix.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' || '' }}
-      OIDC_CLIENT_ID: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_ID || '' }}
-      OIDC_CLIENT_SECRET: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_SECRET || '' }}
-      OIDC_GRANT_TYPE: ${{ matrix.scope_profile == 'egi-dev' && 'client_credentials' || '' }}
-      OIDC_STORAGE_SCOPE: ${{ matrix.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' || '' }}
+      OIDC_ISSUER: >-
+        ${{
+          matrix.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
+          matrix.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/' ||
+          ''
+        }}
+      OIDC_TOKEN_URL: >-
+        ${{
+          matrix.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/token' ||
+          ''
+        }}
+      OIDC_CLIENT_ID: >-
+        ${{
+          matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_ID ||
+          matrix.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID ||
+          ''
+        }}
+      OIDC_CLIENT_SECRET: >-
+        ${{
+          matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_OIDC_CLIENT_SECRET ||
+          matrix.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET ||
+          ''
+        }}
+      OIDC_GRANT_TYPE: ${{ matrix.scope_profile != 'local' && 'client_credentials' || '' }}
+      OIDC_STORAGE_SCOPE: >-
+        ${{
+          matrix.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
+          matrix.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
+          ''
+        }}
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
       RUNTIME: k8s
@@ -97,8 +122,8 @@ jobs:
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns get pods
 
-      - name: Patch Vault egi-dev OIDC credentials
-        if: matrix.scope_profile == 'egi-dev'
+      - name: Patch Vault egi-dev/ls-aai-dev OIDC credentials
+        if: matrix.scope_profile != 'local'
         run: |
           ns=dep-dlm-${{ matrix.env }}
           kubectl exec -n "$ns" vault-0 -- sh -c '
