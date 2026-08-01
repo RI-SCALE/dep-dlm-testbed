@@ -8,7 +8,7 @@ or ConfigMap-mounted (Kubernetes) over the original file.
 
 | File | Component | Essential change |
 |---|---|---|
-| `rucio/oidc.py` | Rucio | Adds an account-based RFC 8693 token-exchange subsystem not present upstream (`get_token_for_account_operation`, `__exchange_token_oidc`, `__get_admin_token_oidc`, `__get_admin_account_for_issuer`); fixes discovery-URL construction; adds `aud:<audience>` scope-append for `client_credentials`; per-issuer, per-grant-type `resource=`/`audience=` selection via `get_capabilities()` (see below), including an `fts_client_scope` override for FTS's own client_credentials scope; `requested_token_type` explicitly set on the token-exchange request (some IdPs, e.g. LS AAI, don't default it the way Keycloak/EGI do); `save_subject_token()` seeding helper; promotes silent failures to WARNING |
+| `rucio/oidc.py` | Rucio | Adds an account-based RFC 8693 token-exchange subsystem not present upstream (`get_token_for_account_operation`, `__exchange_token_oidc`, `__get_admin_token_oidc`, `__get_admin_account_for_issuer`); fixes discovery-URL construction; adds `aud:<audience>` scope-append for `client_credentials`; per-issuer, per-grant-type `resource=`/`audience=` selection via `get_capabilities()` (see below), now including `authorization_code` alongside `client_credentials`/`token_exchange`, with multi-value audiences sent as repeated RFC 8707 `resource=` params rather than one space-joined value (working around a `build_url()` list-serialization bug); an `fts_client_scope` override for FTS's own client_credentials scope; `requested_token_type` explicitly set on the token-exchange request (some IdPs, e.g. LS AAI, don't default it the way Keycloak/EGI do); resolves client/issuer once and reuses it for both capability lookup and client selection on the auth-code callback path (previously mismatched due to a truncated issuer URL); `save_subject_token()` seeding helper; promotes silent failures to WARNING |
 | `rucio/fts3.py` | Rucio | Passes `account` + per-RSE `audience` to `request_token` (upstream has neither); sets `unmanaged_tokens` from `oidc.token_strategy`; derives FTS's own client_credentials scope from `capabilities.fts_client_scope` when set, else `get_capabilities(...).scope_map` (falls back to `"fts"` when both are empty); skips minting source tokens for S3 sources |
 | `rucio/rse.py` | Rucio | `determine_audience_for_rse()`/`determine_scope_for_rse()` consult `get_capabilities()` for `resource_param`/`scope_map`/`drop_scopes` instead of a hardcoded EGI branch — upstream has only the WLCG hostname/prefix-join logic, unconditionally. `determine_scope_for_rse()` drops falsy mapped-scope entries (an issuer can map a scope to `""` to suppress it entirely, e.g. LS AAI has no storage-path scope concept) and falls back to `"openid"` rather than an empty string when mapping + extra scopes both end up empty |
 | `rucio/constants.py` | Rucio | `BASE_SCHEME_MAP` (renamed/restructured from upstream's smaller `SCHEME_MAP`): adds `srm`, `gsiftp`, `s3s` as top-level keys and `root`↔`https` cross-protocol compatibility (XRootD↔S3) |
@@ -34,6 +34,7 @@ or ConfigMap-mounted (Kubernetes) over the original file.
       "client_credentials":       { "resource_param": true,  "audience_param": false },
       "admin_client_credentials": { "resource_param": true,  "audience_param": false },
       "token_exchange":           { "resource_param": false, "audience_param": true  },
+      "authorization_code":       { "resource_param": true,  "audience_param": false },
       "scope_map":   { "storage.read": "read:/", "storage.modify": "write:/", "storage.create": "write:/" },
       "drop_scopes": ["offline_access"]
     }
@@ -44,6 +45,7 @@ or ConfigMap-mounted (Kubernetes) over the original file.
       "client_credentials":       { "resource_param": true, "audience_param": false },
       "admin_client_credentials": { "resource_param": true, "audience_param": false },
       "token_exchange":           { "resource_param": true, "audience_param": false },
+      "authorization_code":       { "resource_param": true, "audience_param": false },
       "fts_client_scope": "openid",
       "scope_map":   { "storage.read": "", "storage.modify": "", "storage.create": "" },
       "drop_scopes": ["offline_access"]
@@ -56,7 +58,8 @@ An issuer with no `capabilities` block (e.g. the local Keycloak realm) gets
 the WLCG default: `resource_param: false`, `audience_param: true`, no scope
 remapping. `resource_param`/`audience_param` and `scope_map`/`drop_scopes`
 are resolved **per grant type** (`client_credentials`,
-`admin_client_credentials`, `token_exchange`), not per issuer as a whole —
+`admin_client_credentials`, `token_exchange`, `authorization_code`), not per
+issuer as a whole —
 EGI Check-In needs this: `resource=` is honored on `client_credentials` but
 silently ignored on `token-exchange`, which a single issuer-wide flag cannot
 express. See [`docs/design/design-doc-001-oidc-capability-profiles.md`](design/design-doc-001-oidc-capability-profiles.md)
@@ -157,6 +160,15 @@ go upstream as-is" varies — noted per item.
   (`"No requested_token_type parameter value provided"`); Keycloak/EGI
   apparently default it. Setting it explicitly is strictly RFC-compliant
   and shouldn't change behavior for IdPs that already default it.
+- `oidc.py`'s authorization_code `resource=` handling — `build_url()`
+  (`rucio.common.utils`) stringifies a list-valued query param into one
+  bogus value instead of repeating the key; for a multi-value RFC 8707
+  `resource` indicator (needed when a single token must cover several
+  storage/FTS targets) this produces an IdP-rejected identifier. Worked
+  around locally by excluding `resource` from the `build_url()` call and
+  appending correctly-encoded repeated pairs afterward; the underlying
+  `build_url()` behavior is general and worth raising with Rucio upstream
+  independently of this workaround.
 - `tokenproviders.py`'s trailing-slash fix — internal FTS inconsistency
   (`t_token` FK needs the slashed form, submit-time lookup needs
   unslashed), not testbed-specific.
