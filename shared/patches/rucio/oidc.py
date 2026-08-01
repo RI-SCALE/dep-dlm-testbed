@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from math import floor
 from secrets import choice
 from typing import TYPE_CHECKING, Any, Final, Optional, Union
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 from dogpile.cache.api import NoValue
@@ -434,13 +434,98 @@ def __get_init_oidc_client(
         auth_args["scope"] = (
             token_object.oidc_scope if token_object else kwargs.get("scope", " ")
         )
-        if config_get_bool(
+
+        requested_audience = kwargs.get("audience") or (
+            token_object.audience if token_object else " "
+        )
+
+        # Resolve the client/issuer *once*, up front, and reuse it for both
+        # the capability lookup below and client selection further down.
+        # Previously these were resolved separately: capabilities used
+        # `kwargs.get("issuer")` directly, while client selection (in the
+        # token_object-less branch) resolved it via a substring match against
+        # idpsecrets.json. For the get_token_oidc() callback path, the
+        # `issuer` kwarg is `urlparse(...).scheme + "://" + netloc` on the
+        # *authorization endpoint* URL - which drops the issuer's path
+        # (e.g. the trailing `/oidc/`) - so an exact-match capabilities
+        # lookup on that truncated string silently missed and fell back to
+        # default (wrong) resource_param/audience_param values, even though
+        # the substring match used for client selection still found the
+        # right client. Do the substring-based client resolution first, then
+        # reuse its `client_secret["issuer"]` (the real registered key) for
+        # capabilities too.
+        client_secret = None
+        if not token_object:
+            secrets = {}
+            try:
+                with open(IDPSECRETS) as client_secret_file:
+                    secrets = json.load(client_secret_file)
+            except Exception as error:
+                raise CannotAuthenticate(
+                    "Rucio server is missing information from the idpsecrets.json file."
+                ) from error
+            if "issuer_id" in kwargs:
+                client_secret = secrets[kwargs.get("issuer_id", ADMIN_ISSUER_ID)]
+            elif "issuer" in kwargs:
+                client_secret = next(
+                    (
+                        secrets[i]
+                        for i in secrets
+                        if "issuer" in secrets[i]
+                        and kwargs.get("issuer") in secrets[i]["issuer"]
+                    ),
+                    None,
+                )
+
+        if token_object:
+            issuer_for_caps = token_object.identity.split(", ")[1].split("=")[1]
+        elif client_secret:
+            issuer_for_caps = client_secret["issuer"]
+        else:
+            issuer_for_caps = kwargs.get("issuer") or kwargs.get("issuer_id")
+        if not issuer_for_caps:
+            issuer_for_caps = ADMIN_ISSUER_ID
+
+        capabilities = get_capabilities(issuer_for_caps, "authorization_code")
+        # RFC 8707: `resource` indicators must be sent as repeated parameters
+        # (resource=A&resource=B&...), NOT as one space-joined value the way
+        # `scope`/`audience` are. LS AAI's own client registration confirmed
+        # all target URIs are individually allowed for this client on the
+        # authorization_code flow, but it 400s with invalid_target when it
+        # receives them merged into a single string - split on whitespace so
+        # a multi-value `oidc_audience` becomes a list, which the downstream
+        # request encoder serializes as repeated resource= params instead of
+        # one bogus concatenated identifier.
+        audience_values = requested_audience.split() if requested_audience else []
+        if (
+            capabilities.resource_param
+            and audience_values
+            and all(_is_uri_audience(v) for v in audience_values)
+        ):
+            auth_args["resource"] = (
+                audience_values if len(audience_values) > 1 else audience_values[0]
+            )
+        elif config_get_bool(
             "oidc", "supports_audience", raise_exception=False, default=True
         ):
-            # auth_args["audience"] = token_object.audience if token_object else kwargs.get('audience', " ")
-            auth_args["audience"] = kwargs.get("audience") or (
-                token_object.audience if token_object else " "
-            )
+            auth_args["audience"] = requested_audience
+
+        # Confirms whether a multi-value `oidc_audience` (space-separated) got split into a list
+        # for `resource` (repeated params, RFC 8707-correct) vs left as a
+        # single joined string under `audience` (space-separated is correct
+        # there).
+        logging.debug(
+            "oidc auth_code audience resolution: issuer=%s resource_param=%s "
+            "audience_param=%s requested_audience=%r split_count=%d "
+            "auth_args.resource=%r auth_args.audience=%r",
+            issuer_for_caps,
+            capabilities.resource_param,
+            capabilities.audience_param,
+            requested_audience,
+            len(str(requested_audience).split()),
+            auth_args.get("resource"),
+            auth_args.get("audience"),
+        )
 
         if token_object:
             issuer = token_object.identity.split(", ")[1].split("=")[1]
@@ -466,25 +551,10 @@ def __get_init_oidc_client(
                 resp[token_type] = token
                 oidc_client.grant[auth_args["state"]].tokens.append(Token(resp))
         else:
-            secrets, client_secret = {}, {}
-            try:
-                with open(IDPSECRETS) as client_secret_file:
-                    secrets = json.load(client_secret_file)
-            except Exception as error:
+            if client_secret is None:
                 raise CannotAuthenticate(
-                    "Rucio server is missing information from the idpsecrets.json file."
-                ) from error
-            if "issuer_id" in kwargs:
-                client_secret = secrets[kwargs.get("issuer_id", ADMIN_ISSUER_ID)]
-            elif "issuer" in kwargs:
-                client_secret = next(
-                    (
-                        secrets[i]
-                        for i in secrets
-                        if "issuer" in secrets[i]
-                        and kwargs.get("issuer") in secrets[i]["issuer"]
-                    ),
-                    None,
+                    "Could not resolve Rucio OIDC Client configuration for the "
+                    "given issuer."
                 )
             redirect_url = kwargs.get("redirect_uri", None)
             if not redirect_url:
@@ -503,7 +573,34 @@ def __get_init_oidc_client(
             auth_args["client_id"] = oidc_client.client_id
 
         if kwargs.get("first_init", False):
+            # FIX (root cause, confirmed via decoded auth_url logging below):
+            # build_url() (rucio.common.utils, not oic) str()s a list-valued
+            # param into one bogus value instead of repeating the query key -
+            # this is what actually produced the invalid_target error LS AAI
+            # returned, since resources are bound to the code at /authorize
+            # time (the token request itself never carries `resource`, per
+            # DEBUG-level oic tracing). Rather than change build_url()'s
+            # general serialization (it's a shared utility used elsewhere in
+            # Rucio, and this is the only caller that hands it a list),
+            # exclude `resource` from that call and append correctly-encoded
+            # repeated resource= pairs ourselves afterward.
+            resource_for_url = auth_args.pop("resource", None)
             auth_url = build_url(oidc_client.authorization_endpoint, params=auth_args)
+            if isinstance(resource_for_url, list):
+                sep = "&" if "?" in auth_url else "?"
+                auth_url = (
+                    auth_url
+                    + sep
+                    + urlencode({"resource": resource_for_url}, doseq=True)
+                )
+            elif resource_for_url:
+                sep = "&" if "?" in auth_url else "?"
+                auth_url = auth_url + sep + urlencode({"resource": resource_for_url})
+            logging.debug(
+                "oidc first_init auth_url built: resource_in_auth_args=%r auth_url=%s",
+                resource_for_url,
+                auth_url,
+            )
             return {"redirect": redirect_url, "auth_url": auth_url}
 
         oidc_client.construct_AuthorizationRequest(request_args=auth_args)
@@ -847,7 +944,13 @@ def get_token_oidc(
     except Exception:
         # TO-DO catch different exceptions - InvalidGrant etc. ...
         METRICS.counter(name="IdP_authorization.access_token.exception").inc()
-        logging.debug(traceback.format_exc())
+        # DEBUG->WARNING: get_token_oidc's own traceback was being logged at DEBUG
+        # and silently dropped under the deployment's current log level (only
+        # WARNING/ERROR lines reach httpd error_log, per the access/error logs
+        # captured 2026-07-31 11:43). Elevate + include exc_info so the actual
+        # cause of "Missing or faulty response" (oic's own ERROR-level log, which
+        # omits the token endpoint's response body) is recoverable here instead.
+        logging.warning("get_token_oidc: token exchange failed", exc_info=True)
         return None
         # raise CannotAuthenticate(traceback.format_exc())
 
