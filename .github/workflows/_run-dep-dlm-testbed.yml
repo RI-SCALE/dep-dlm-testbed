@@ -72,6 +72,12 @@ jobs:
           inputs.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
           ''
         }}
+      OIDC_IDENTITY_SUB: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu' ||
+          inputs.scope_profile == 'ls-aai-dev' && '28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu' ||
+          ''
+        }}
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
     steps:
@@ -96,21 +102,13 @@ jobs:
         if: inputs.runtime == 'k8s'
         uses: azure/setup-helm@v4
 
-      - name: Render egi-dev idpsecrets.json from secrets
-        if: inputs.scope_profile == 'egi-dev'
+      - name: Render idpsecrets.json from secrets
+        if: inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev'
         run: |
           sed -i \
             -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
             -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
-            shared/config/rucio/egi-dev/idpsecrets.json
-
-      - name: Render ls-aai-dev idpsecrets.json from secrets
-        if: inputs.scope_profile == 'ls-aai-dev'
-        run: |
-          sed -i \
-            -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
-            -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
-            shared/config/rucio/ls-aai-dev/idpsecrets.json
+            shared/config/rucio/${SCOPE_PROFILE}/idpsecrets.json
 
       - name: Start stack
         run: make start
@@ -157,36 +155,20 @@ jobs:
       - name: Initialize DEP DLM testbed
         run: make init
 
-      - name: Map EGI Check-In identity to seeded account (egi-dev, compose)
-        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'compose'
+      - name: Map identity to seeded account (compose)
+        if: (inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev') && inputs.runtime == 'compose'
         run: |
           docker exec -t compose-rucio-server-1 \
             rucio-admin identity add --type OIDC \
-              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
+              --id "SUB=${OIDC_IDENTITY_SUB}, ISS=${OIDC_ISSUER}" \
               --account randomaccount --email marvin.gajek@cern.ch
 
-      - name: Map EGI Check-In identity to seeded account (egi-dev, k8s)
-        if: inputs.scope_profile == 'egi-dev' && inputs.runtime == 'k8s'
+      - name: Map identity to seeded account (k8s)
+        if: (inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev') && inputs.runtime == 'k8s'
         run: |
           kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
             rucio-admin identity add --type OIDC \
-              --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" \
-              --account randomaccount --email marvin.gajek@cern.ch
-
-      - name: Map LS AAI identity to seeded account (ls-aai-dev, compose)
-        if: inputs.scope_profile == 'ls-aai-dev' && inputs.runtime == 'compose'
-        run: |
-          docker exec -t compose-rucio-server-1 \
-            rucio-admin identity add --type OIDC \
-              --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" \
-              --account randomaccount --email marvin.gajek@cern.ch
-
-      - name: Map LS AAI identity to seeded account (ls-aai-dev, k8s)
-        if: inputs.scope_profile == 'ls-aai-dev' && inputs.runtime == 'k8s'
-        run: |
-          kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
-            rucio-admin identity add --type OIDC \
-              --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" \
+              --id "SUB=${OIDC_IDENTITY_SUB}, ISS=${OIDC_ISSUER}" \
               --account randomaccount --email marvin.gajek@cern.ch
 
       - name: Wait for fts (compose)
