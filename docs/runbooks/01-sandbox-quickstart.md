@@ -99,17 +99,22 @@ python -c "import gfal2; print('ok')"   # ok
 
 ### Host name resolution
 
-Within the dev container, the following hostnames must be configured and
-must resolve to `127.0.0.1`. Add the required entries to `/etc/hosts`,
-e.g. `echo "127.0.0.1 xrd3" | sudo tee -a /etc/hosts`:
+Within the dev container, the following hostnames must resolve to
+`127.0.0.1`. Run this once per dev container instance (entries don't
+survive a rebuild):
 
-```text
-127.0.0.1 rucio
-127.0.0.1 keycloak
-127.0.0.1 teapot1
-127.0.0.1 teapot2
-127.0.0.1 xrd3
-127.0.0.1 xrd4
+```bash
+grep -qxF "127.0.0.1 rucio" /etc/hosts || echo "127.0.0.1 rucio" | sudo tee -a /etc/hosts
+grep -qxF "127.0.0.1 keycloak" /etc/hosts || echo "127.0.0.1 keycloak" | sudo tee -a /etc/hosts
+grep -qxF "127.0.0.1 teapot1" /etc/hosts || echo "127.0.0.1 teapot1" | sudo tee -a /etc/hosts
+grep -qxF "127.0.0.1 teapot2" /etc/hosts || echo "127.0.0.1 teapot2" | sudo tee -a /etc/hosts
+grep -qxF "127.0.0.1 xrd3" /etc/hosts || echo "127.0.0.1 xrd3" | sudo tee -a /etc/hosts
+grep -qxF "127.0.0.1 xrd4" /etc/hosts || echo "127.0.0.1 xrd4" | sudo tee -a /etc/hosts
+```
+
+Verify:
+```bash
+grep -E 'rucio|keycloak|teapot1|teapot2|xrd3|xrd4' /etc/hosts
 ```
 
 These entries are required because:
@@ -322,27 +327,6 @@ rucio rule list --did randomaccount:hello-xrd.txt   # XRD4 -> OK[1/0/0]
 > one-shot `--run-once` invocations rather than long-running deployments; in the
 > GitOps sandbox they run as the `rucio-daemons-conveyor-*` deployments above, so
 > `logs -f` works directly.
-
-### Gotchas
-- **Upload under a scope the account owns** (`--scope randomaccount`). Scope
-  `test` belongs to `root` → "Scope test not found".
-- **Use a fresh filename** per attempt. A re-upload of an existing DID fails with
-  `Data Identifier Already Exists` / checksum mismatch — not an error in the
-  pipeline.
-- **Match the storage port-forward to the RSE PFN port.** gfal2 connects to the
-  PFN's port, not your forward's left side: Teapot davs is `8081`, XRootD davs is
-  `1094`. A `Domain name resolution failed` or `connection reset` at the gfal PUT
-  usually means a missing `/etc/hosts` entry or a port mismatch — not auth.
-- **`rucio download` needs its own forward.** Unlike a rule, download is a
-  direct client pull — forward whichever RSE you're downloading from, even if
-  it's the destination of a rule rather than your original upload source.
-- **A `401 AccessDenied` on `POST /replicas` is *authorization*, not auth** —
-  the client misreads it and re-launches the browser login. The real fix is the
-  `admin=True` attribute, not re-authenticating.
-- **Config changes must reach the running pods.** idpsecrets/realm are
-  Vault-seeded via external-secrets; editing repo files alone doesn't update
-  pods. Re-seed Vault + restart, or apply live via `kcadm`. Keycloak only
-  imports a realm on first start — a plain restart won't re-import.
 
 ### Delete a replica (rule lifetime → judge-cleaner → reaper)
 
