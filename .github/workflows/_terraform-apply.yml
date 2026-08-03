@@ -30,37 +30,9 @@ jobs:
       - name: make tf-fmt
         run: make tf-fmt
 
-  prepare-backend:
-    name: prepare state bucket
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      # Idempotent by construction (see the Makefile target itself) —
-      # only ever CREATES, never deletes; see the destroy workflow for
-      # that, deliberately isolated into its own manually-triggered path.
-      - name: make tf-prepare-backend
-        run: make tf-prepare-backend
-
   plan:
     name: plan
-    needs: [fmt-check, prepare-backend]
+    needs: fmt-check
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -71,6 +43,10 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
     steps:
       - uses: actions/checkout@v6
 
@@ -113,6 +89,10 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
     steps:
       - uses: actions/checkout@v6
 

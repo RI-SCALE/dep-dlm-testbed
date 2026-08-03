@@ -15,10 +15,6 @@ on:
         description: "Value the human typed in the calling workflow's confirmation input — must exactly equal environment_name"
         required: true
         type: string
-      delete_state_bucket:
-        description: "Also delete the GCS state bucket after destroy"
-        required: true
-        type: boolean
 
 env:
   TF_IN_AUTOMATION: "true"
@@ -37,6 +33,10 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
     steps:
       - name: Verify confirmation input
         run: |
@@ -65,13 +65,14 @@ jobs:
       # Real resources go first, always — the bucket is state, not
       # infrastructure. Deleting it before this would leave every GCP
       # resource orphaned with no Terraform record of them.
+      #
+      # State-bucket deletion is NOT a step in this workflow — that bucket
+      # is tracked in deploy/terraform/bootstrap's state, not
+      # environments/<env>'s. Deleting it via raw gcloud from here would
+      # drift bootstrap's own state the same way the old in-environments/<env>
+      # networking did (see deploy/terraform/README.md's Teardown section).
+      # If you're tearing an environment down for good, that's a
+      # bootstrap-level, human-run operation (`gcloud projects delete`),
+      # not something this CI workflow performs.
       - name: make tf-destroy
         run: make tf-destroy AUTO_APPROVE=1
-
-      # Only reached if tf-destroy above succeeded AND the input was
-      # explicitly opted into — deletes the state history itself, so
-      # this environment can no longer be managed by Terraform at all
-      # afterward without starting over from a fresh tf-init.
-      - name: make tf-destroy-state-bucket
-        if: inputs.delete_state_bucket == true
-        run: make tf-destroy-state-bucket

@@ -1,9 +1,14 @@
 name: Terraform destroy (staging)
 
-# Manual-only, on purpose — this is the one place bucket/state DELETION
-# lives, deliberately kept out of terraform-staging.yml so a normal
-# push/PR can never trigger it. Requires typing the environment name
-# exactly, on top of GitHub's own environment approval gate.
+# Manual-only, on purpose — this is the one place in environments/<env>'s
+# CI where destructive resource deletion lives, kept out of
+# terraform-staging.yml so a normal push/PR can never trigger it.
+# Requires typing the environment name exactly, on top of GitHub's own
+# environment approval gate.
+#
+# Does NOT delete the state bucket — that's bootstrap-level state now,
+# not environments/<env>'s; see deploy/terraform/README.md's Teardown
+# section for the (human-run) `gcloud projects delete` path.
 
 on:
   workflow_dispatch:
@@ -11,10 +16,6 @@ on:
       confirm:
         description: 'Type "staging" to confirm you want to destroy the staging environment'
         required: true
-      delete_state_bucket:
-        description: 'Also delete the GCS state bucket after destroy? (Terraform loses all memory of this environment — only do this when tearing down for good, not for routine cleanup)'
-        type: boolean
-        default: false
 
 jobs:
   destroy:
@@ -23,4 +24,3 @@ jobs:
       tf_env: staging
       environment_name: staging
       confirm: ${{ inputs.confirm }}
-      delete_state_bucket: ${{ inputs.delete_state_bucket }}

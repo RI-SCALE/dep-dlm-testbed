@@ -1,13 +1,14 @@
 name: Terraform destroy (production)
 
-# Manual-only, on purpose — this is the one place bucket/state DELETION
-# lives for production. Requires typing the environment name exactly, on
-# top of GitHub's own environment approval gate. Kept as a fully separate
-# file from terraform-destroy-staging.yml (not a parameterized single
-# workflow) specifically so the confirmation string, trigger surface, and
+# Manual-only, on purpose. Kept as a fully separate file from
+# terraform-destroy-staging.yml (not a parameterized single workflow)
+# specifically so the confirmation string, trigger surface, and
 # environment gate for production can never be accidentally pointed at
-# staging or vice versa — see the "CI: agnostic vs. separate" discussion
-# this repo settled on.
+# staging or vice versa.
+#
+# Does NOT delete the state bucket — that's bootstrap-level state now,
+# not environments/<env>'s; see deploy/terraform/README.md's Teardown
+# section for the (human-run) `gcloud projects delete` path.
 
 on:
   workflow_dispatch:
@@ -15,10 +16,6 @@ on:
       confirm:
         description: 'Type "production" to confirm you want to destroy the production environment'
         required: true
-      delete_state_bucket:
-        description: 'Also delete the GCS state bucket after destroy? (Terraform loses all memory of this environment — only do this when tearing down for good, not for routine cleanup)'
-        type: boolean
-        default: false
 
 jobs:
   destroy:
@@ -27,4 +24,3 @@ jobs:
       tf_env: production
       environment_name: production
       confirm: ${{ inputs.confirm }}
-      delete_state_bucket: ${{ inputs.delete_state_bucket }}
