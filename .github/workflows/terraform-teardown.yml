@@ -44,8 +44,8 @@ jobs:
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/165399374844/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
-          service_account: dep-dlm-terraform-ci@project-724bc3b5-635b-4922-bb7.iam.gserviceaccount.com
+          workload_identity_provider: projects/912754690083/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: dep-dlm-terraform-ci@dep-dlm-staging-67260c4e.iam.gserviceaccount.com
 
       - uses: hashicorp/setup-terraform@v3
         with:

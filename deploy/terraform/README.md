@@ -2,15 +2,16 @@
 
 Terraform IaC for DEP DLM testbed staging/production infrastructure on
 GCP. See [`docs/adrs/adr-003-staging-cloud-provider.md`](../../docs/adrs/adr-003-staging-cloud-provider.md)
-for why GCP, and [`docs/diagrams/staging-gcp.py`](../../docs/diagrams/staging-gcp.py)
+for why GCP and [`docs/diagrams/staging-gcp.py`](../../docs/diagrams/staging-gcp.py)
 (→ `generated/staging-gcp.png`) for the deployment view this provisions.
 
 ## What this does and doesn't provision
 
-**Provisions**: VPC/subnet, GKE Autopilot cluster + Workload Identity
-binding, Secret Manager secret containers (empty — values provisioned
-out-of-band), Cloud SQL for PostgreSQL (private IP, `rucio` + `fts`
-databases).
+**Provisions**: the `dep-dlm-staging`/`dep-dlm-production` GCP Projects
+themselves (see Bootstrap below), VPC/subnet, GKE Autopilot cluster +
+Workload Identity binding, Secret Manager secret containers (empty —
+values provisioned out-of-band), Cloud SQL for PostgreSQL (private IP,
+`rucio` + `fts` databases).
 
 **Does NOT provision**: Rucio, FTS, External Secrets Operator, or any
 other workload inside the cluster. Those remain GitOps-managed (Argo CD
@@ -25,26 +26,89 @@ entirely — partner-operated, not provisioned by this repo.
 
 ```
 deploy/terraform/
+├── bootstrap/          # separate root module — creates the GCP Projects
+│                        # themselves, one apply, run rarely. See "Bootstrap" below.
 ├── environments/
-│   ├── staging/       # root module — apply this for staging
-│   └── production/     # placeholder, NOT YET VALIDATED — see its main.tf
+│   ├── staging/         # root module — apply this for staging
+│   └── production/      # placeholder, NOT YET VALIDATED — see its main.tf
 ├── modules/
-│   ├── networking/     # VPC, subnet, private services access
-│   ├── kubernetes/     # GKE Autopilot + Workload Identity
-│   ├── secrets/        # Secret Manager containers + ESO IAM binding
-│   └── database/       # Cloud SQL for PostgreSQL, private IP
+│   ├── networking/      # VPC, subnet, private services access
+│   ├── kubernetes/      # GKE Autopilot + Workload Identity
+│   ├── secrets/         # Secret Manager containers + ESO IAM binding
+│   └── database/        # Cloud SQL for PostgreSQL, private IP
 ├── scripts/
-│   └── setup-workload-identity.sh   # one-time GCP auth bootstrap — see below
+│   ├── seed-bootstrap-state.sh       # one-time: seed bootstrap/'s own state bucket
 └── README.md
 ```
 
 Each environment is its own root module with its own state — staging and
-production never share state or a GCP project.
+production never share state or a GCP project. `bootstrap/` is a third,
+separate root module again, with its own state — it operates one level
+above `environments/<env>`, creating the projects they run inside of.
 
-## Authentication
+## Bootstrap
 
-Both GitHub Actions and local `terraform` runs authenticate as the same
-GCP service account (`dep-dlm-terraform-ci`):
+`environments/<env>` doesn't create its own GCP Project — it expects one
+to already exist and takes `project_id` as an input. `deploy/terraform/bootstrap/`
+is what creates it: the `dep-dlm-staging`/`dep-dlm-production` Projects
+themselves, billing linkage, baseline API enablement, each environment's
+`dep-dlm-terraform-ci` service account, its Workload Identity Federation
+binding and its Terraform state bucket. Run this once per environment
+(or when rotating the trusted GitHub repo), by a human holding org-level
+project-creation and billing rights — not part of the routine
+`environments/<env>` apply loop CI runs through.
+
+**The one genuinely manual step** (everything else below is real
+Terraform): `bootstrap/` can't provision the bucket that holds its own
+state on its first-ever run, so that one bucket is hand-created first:
+
+```bash
+./deploy/terraform/scripts/seed-bootstrap-state.sh \
+  --project-id <any existing project you have, with billing already linked>
+```
+
+This only needs to happen once, ever, for the lifetime of the org's use
+of this repo (see the script's own comments). It does **not** need — and
+at this point cannot use — one of the `dep-dlm-<env>` projects, since
+`bootstrap/` hasn't created those yet.
+
+Then apply `bootstrap/` itself, authenticated as your own `gcloud`
+identity (org-level rights, no service account needed for this rare,
+human-run apply):
+
+```bash
+cd deploy/terraform/bootstrap
+cp terraform.tfvars.example terraform.tfvars   # org_id/folder_id, billing_account_id, github_repo
+terraform init \
+  -backend-config="bucket=<bucket printed by seed-bootstrap-state.sh>" \
+  -backend-config="prefix=bootstrap"
+terraform plan
+terraform apply -auto-approve
+```
+
+Feed its outputs into `environments/<env>` and into each environment's
+GitHub Actions workflow:
+
+```bash
+terraform output -json project_ids               # -> environments/<env>/terraform.tfvars' project_id
+terraform output -json state_buckets              # -> environments/<env>'s terraform init -backend-config=bucket=...
+terraform output -json terraform_ci_emails        # -> google-github-actions/auth's service_account:
+terraform output -json workload_identity_providers # -> google-github-actions/auth's workload_identity_provider:
+```
+
+**Blast radius**: the identity that applies `bootstrap/` holds real
+organization-level power (`roles/resourcemanager.projectCreator` on the
+org/folder, `roles/billing.user` on the billing account) — meaningfully
+more than `dep-dlm-terraform-ci` ever holds, which is scoped to one
+project each. Treat who can run `bootstrap/` applies as a much smaller,
+more tightly held set of people than who can run `environments/<env>`
+applies.
+
+## Authentication (environments)
+
+Both GitHub Actions and local `terraform` runs against `environments/<env>`
+authenticate as that environment's `dep-dlm-terraform-ci` service account
+(created by `bootstrap/`, see above):
 
 - **CI**: [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation)
   — short-lived OIDC tokens, no stored secret.
@@ -54,86 +118,59 @@ GCP service account (`dep-dlm-terraform-ci`):
   key isn't an option even if you wanted one; impersonation is the
   better practice regardless.)
 
-### One-time setup
-
-Run once, by a human with IAM admin rights on the target project:
-
-```bash
-gcloud services enable compute.googleapis.com --project=<your-gcp-project-id>
-
-./deploy/terraform/scripts/setup-workload-identity.sh \
-  --project-id <your-gcp-project-id> \
-  --github-repo <org>/<repo> \
-  --grant-local-impersonation
-```
-
-The script creates the service account, grants it every role
-`deploy/terraform`'s modules need, sets up the WIF pool/provider, and
-prints the CI values to paste into your GitHub Actions workflow. See the
-script's own comments for what each step does and why it's idempotent —
-safe to re-run any time (e.g. to add a second GitHub repo).
-
-With `--grant-local-impersonation`, it also prints one command you run
-yourself (interactive, one browser prompt — can't be scripted):
+Once `bootstrap/` has run for an environment, grant yourself local
+impersonation of its `dep-dlm-terraform-ci`:
 
 ```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  $(terraform -chdir=deploy/terraform/bootstrap output -json terraform_ci_emails | jq -r '.staging') \
+  --member="user:$(gcloud config get-value account)" \
+  --role="roles/iam.serviceAccountTokenCreator" --project="$(terraform -chdir=deploy/terraform/bootstrap output -json project_ids | jq -r '.staging')"
+
 gcloud auth application-default login \
-  --impersonate-service-account=dep-dlm-terraform-ci@<project-id>.iam.gserviceaccount.com
+  --impersonate-service-account=$(terraform -chdir=deploy/terraform/bootstrap output -json terraform_ci_emails | jq -r '.staging')
 ```
 
-After that, `terraform init`/`plan`/`apply` need no further interaction
-locally.
+After that, `terraform init`/`plan`/`apply` in `environments/<env>` need
+no further interaction locally.
 
 ## Prerequisites
 
 - `gcloud` and `terraform` CLIs — installed automatically in this repo's
   devcontainer (`.devcontainer/setup.sh`'s `install_gcloud`/
   `install_terraform`).
-- Completed the one-time auth setup above.
-- APIs enabled on the target project:
-  ```bash
-  gcloud services enable container.googleapis.com secretmanager.googleapis.com \
-    sqladmin.googleapis.com servicenetworking.googleapis.com \
-    compute.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
-    cloudresourcemanager.googleapis.com --project=<project_id>
-  ```
-- A GCS bucket for remote state. CI creates this idempotently on every
-  run (`prepare-backend` in `terraform-staging.yml`) — nothing to do
-  for CI. For local-only use before CI has run once:
-  ```bash
-  gcloud storage buckets create gs://<your-state-bucket> \
-    --project=<project_id> --location=EU --uniform-bucket-level-access
-  ```
-  **Bucket names are global across all of GCP**, not scoped to your
-  project — pick something unique, e.g. suffixed with your project ID
-  (see Troubleshooting).
+- `bootstrap/` has been applied for the environment you're targeting (see
+  "Bootstrap" above) — this covers API enablement and state-bucket
+  creation, so there's nothing further to do by hand for either.
+- Completed the local-impersonation grant above.
 
 ## Usage — local
 
 ```bash
 cd deploy/terraform/environments/staging
-cp terraform.tfvars.example terraform.tfvars   # fill in project_id at minimum
+cp terraform.tfvars.example terraform.tfvars   # project_id from bootstrap's project_ids output
 terraform init \
-  -backend-config="bucket=<your-state-bucket>" \
+  -backend-config="bucket=$(terraform -chdir=../../bootstrap output -json state_buckets | jq -r '.staging')" \
   -backend-config="prefix=staging"
 terraform plan
-terraform apply
+terraform apply -auto-approve
 ```
 
 `backend.tf` is a partial config on purpose — bucket/prefix are supplied
 via `-backend-config` at init time rather than hardcoded, so the exact
 same `terraform init` command works locally and in CI without editing a
-tracked file.
+tracked file and so it doesn't have to hardcode a bucket name that
+`bootstrap/` generates dynamically (project-suffixed, since project IDs
+themselves get a random suffix — see `bootstrap/main.tf`).
 
 ## Usage — CI
 
 See [`.github/workflows/terraform-staging.yml`](../../.github/workflows/terraform-staging.yml):
-`fmt-check` → `prepare-backend` (idempotent state bucket creation) →
-`plan` (on PRs and pushes) → `apply` (only on push to `main`, gated
-behind a GitHub Environment you can add required reviewers to). Fully
-non-interactive via WIF — no secrets configured, only three repo
-**variables** (not secrets): `TF_STATE_BUCKET`, `GCP_PROJECT_ID`,
-`GCP_REGION`.
+`fmt-check` → `plan` (on PRs and pushes) → `apply` (only on push to
+`main`, gated behind a GitHub Environment you can add required reviewers
+to). Fully non-interactive via WIF — no secrets configured, only three
+repo **variables** (not secrets): `TF_STATE_BUCKET`, `GCP_PROJECT_ID`,
+`GCP_REGION`, all sourced from `bootstrap/`'s outputs once, at setup time.
 
 ## Teardown
 
@@ -153,7 +190,9 @@ environment down for good, not for routine cleanup.
 If you'd rather delete the whole project instead of fighting stuck
 Google-side resource cleanup (see Troubleshooting), that's often faster
 for a disposable trial/test project — trial credits carry over to a new
-project under the same billing account.
+project under the same billing account. Note this is a `bootstrap/`-level
+operation (`terraform destroy` inside `bootstrap/`, or `gcloud projects
+delete`), not something `environments/<env>`'s own destroy touches.
 
 ## After `apply`
 
@@ -171,22 +210,10 @@ Then populate the (currently empty) Secret Manager secrets with real
 values — out-of-band, per the same rule the sandbox already follows:
 sensitive values are never committed to this repo.
 
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `setup-workload-identity.sh` fails with `NOT_FOUND: Unknown service account` on the default compute SA | Brand-new project — `compute.googleapis.com` hasn't provisioned the default compute SA yet | `gcloud services enable compute.googleapis.com --project=<id>`, wait ~1-2 min, retry |
-| `terraform init` fails with `403: Permission 'iam.serviceAccounts.getAccessToken' denied` | `iamcredentials.googleapis.com` not enabled (separate from the general `iam` API) | `gcloud services enable iamcredentials.googleapis.com --project=<id>`; if it persists after enabling, wait 1-2 min (IAM propagation lag) and retry. Sanity-check independently: `gcloud auth print-access-token --impersonate-service-account=<sa-email>` |
-| `apply` fails with `SERVICE_DISABLED` / `Cloud Resource Manager API has not been used in project ...` | `cloudresourcemanager.googleapis.com` not enabled — needed by `google_service_networking_connection` to resolve project metadata | `gcloud services enable cloudresourcemanager.googleapis.com --project=<id>` |
-| GKE cluster creation fails: `Error 400: The user does not have access to service account "...-compute@developer.gserviceaccount.com"` | CI/local identity lacks `iam.serviceAccountUser` on the project's default compute SA (which Autopilot uses for node VMs) | Already granted automatically by `setup-workload-identity.sh` — if you're hitting this, re-run the script (idempotent) |
-| `apply` fails creating `google_service_networking_connection`: `Error code 16 ... invalid authentication credentials` | Known, transient flakiness in this resource's long-running-operation polling — not a real permission gap | Just re-run `terraform apply`; resolves on retry the large majority of the time |
-| `destroy` fails deleting `google_service_networking_connection`: `Producer services ... are still using this connection` (`FLOW_SN_DC_RESOURCE_PREVENTING_DELETE_CONNECTION`) | Google-side reconciliation lag between Cloud SQL instance deletion completing and the servicenetworking backend releasing the peering — can take well over the usual few minutes | Confirm the SQL instance is really gone (`gcloud sql instances list`), then just wait and retry `tf-destroy`. For a disposable project, deleting the whole project (`gcloud projects delete <id>`) sidesteps this entirely and is often faster |
-| `gcloud storage buckets create` fails: `409: The requested bucket name is not available` | GCS bucket names are **globally unique across all of GCP**, not project-scoped — likely colliding with a bucket from a previous (possibly deleted-but-not-yet-released) project | Pick a bucket name that embeds your project ID, e.g. `dep-dlm-tfstate-staging-<project-id>` |
-
 ## What's genuinely not decided yet
 
 See ADR-003's Open Points — region selection, procurement/credit
-confirmation, and data-protection sign-off are all still open. This
+confirmation and data-protection sign-off are all still open. This
 scaffold is safe to `plan` against for review purposes but treat
 `apply` as blocked on those confirmations for anything beyond your own
 throwaway testing.

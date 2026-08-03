@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in — terraform.tfvars itself should
+# stay out of git (see deploy/terraform/.gitignore).
+
+# org_id: `gcloud organizations list` — the ID column.
+org_id = "1234567890"          # or use folder_id instead, not both
+
+# billing_account_id: `gcloud billing accounts list` — the ACCOUNT_ID
+# column (already dash-formatted, paste as-is).
+billing_account_id  = "XXXXXX-XXXXXX-XXXXXX"
+
+github_repo = "ri-scale/dep-dlm-testbed"
+
+# environments defaults to [staging (deletion_policy=DELETE), production
+# (deletion_policy=PREVENT)] — override here only if you need a third
+# environment or different per-env deletion_policy values.
