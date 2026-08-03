@@ -12,7 +12,11 @@ terraform {
   }
 }
 
-provider "google" {}
+provider "google" {
+  # Deliberately no default project — this module operates at org/folder
+  # scope, not inside any single project. Every resource below sets
+  # `project` explicitly instead.
+}
 
 locals {
   environments = { for e in var.environments : e.name => e }
@@ -26,7 +30,7 @@ locals {
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
-    "sts.googleapis.com",
+    "sts.googleapis.com", # Workload Identity Federation token exchange
   ]
 }
 
@@ -35,6 +39,9 @@ locals {
 resource "random_id" "suffix" {
   for_each    = local.environments
   byte_length = 4
+  # Project IDs are globally unique across ALL of GCP, not just this org —
+  # append a short random suffix rather than requiring whoever runs this
+  # to hand-pick a collision-free ID.
 }
 
 resource "google_project" "env" {
@@ -60,7 +67,19 @@ resource "google_project_service" "apis" {
   service = each.value.api
 
   disable_dependent_services = false
-  disable_on_destroy         = false # never turn off APIs on `terraform destroy` — see top-level README's Teardown section on why bucket/API deletion stay out of the routine path
+  disable_on_destroy         = false # never turn off APIs on `terraform destroy`
+}
+
+# --- Networking (VPC, subnet, private services access) -------------------
+module "networking" {
+  source   = "../modules/networking"
+  for_each = local.environments
+
+  project_id  = google_project.env[each.key].project_id
+  region      = each.value.region
+  name_prefix = "dep-dlm-${each.key}"
+
+  depends_on = [google_project_service.apis]
 }
 
 # --- Per-environment Terraform CI service account -----------------------
@@ -85,11 +104,7 @@ resource "google_project_iam_member" "terraform_ci_roles" {
   member  = "serviceAccount:${google_service_account.terraform_ci[each.value.env].email}"
 }
 
-# GKE Autopilot node VMs run under the project's default compute SA — the
-# CI identity needs iam.serviceAccountUser ON THAT SPECIFIC SA, a
-# per-service-account binding distinct from the project-level roles above
-# (mirrors setup-workload-identity.sh's own comment on why this is a
-# separate gcloud subcommand there, and a separate resource type here).
+# GKE Autopilot node VMs run under the project's default compute SA
 resource "google_service_account_iam_member" "terraform_ci_compute_sa_user" {
   for_each = local.environments
 
@@ -123,8 +138,6 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
   }
-  # Scoped to this specific repo — without this, any repo in the GitHub
-  # org could mint tokens this provider accepts.
   attribute_condition = "assertion.repository=='${var.github_repo}'"
 
   oidc {
@@ -141,12 +154,6 @@ resource "google_service_account_iam_member" "github_wif_binding" {
 }
 
 # --- Per-environment remote-state bucket ---------------------------------
-# The bucket environments/<env>'s OWN backend.tf points at. Distinct from
-# THIS module's bootstrap-state bucket (hand-seeded once, see backend.tf) —
-# this one is real Terraform-managed infrastructure like everything else
-# above, so environments/<env> never has to self-provision the bucket it's
-# about to store its own state in (previously a manual `gcloud storage
-# buckets create` step in the top-level README's Prerequisites).
 resource "google_storage_bucket" "tf_state" {
   for_each = local.environments
 
@@ -154,7 +161,7 @@ resource "google_storage_bucket" "tf_state" {
   name                        = "dep-dlm-tfstate-${each.key}-${google_project.env[each.key].project_id}"
   location                    = var.state_bucket_location
   uniform_bucket_level_access = true
-  force_destroy               = false # state history should survive a careless destroy of other resources
+  force_destroy               = false
 
   versioning {
     enabled = true

@@ -1,33 +1,4 @@
 #!/usr/bin/env bash
-# ============================================================================
-# seed-bootstrap-state.sh — one-time creation of the GCS bucket that holds
-# deploy/terraform/bootstrap's OWN Terraform state.
-# ============================================================================
-# This is the one genuinely manual infrastructure step in the whole IaC
-# stack (see deploy/terraform/bootstrap/backend.tf and README.md). Run this
-# exactly once, ever — by a human with billing/project access on whatever
-# project you're using to host it. That project can be any existing
-# project with billing already linked; it does NOT need to be, and at this
-# point cannot be, one of the dep-dlm-staging/dep-dlm-production projects,
-# since bootstrap hasn't created those yet.
-#
-# After this, deploy/terraform/bootstrap is applied normally
-# (terraform init -backend-config="bucket=<this bucket>" ...), and IT
-# creates the dep-dlm-staging/dep-dlm-production projects, their own state
-# buckets, their CI service accounts, and their WIF bindings — nothing
-# past this point is a manual gcloud step.
-#
-# Idempotent: safe to re-run (skips bucket creation if it already exists).
-#
-# Usage:
-#   ./deploy/terraform/scripts/seed-bootstrap-state.sh \
-#     --project-id <existing-project-with-billing> \
-#     [--bucket-name dep-dlm-tfstate-bootstrap-<suffix>] [--location EU]
-#
-# Env overrides (flags take precedence):
-#   PROJECT_ID   required (no default)
-#   BUCKET_NAME  (default: dep-dlm-tfstate-bootstrap-<project-id>)
-#   LOCATION     (default: EU)
 set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-}"
@@ -46,10 +17,6 @@ done
 
 [[ -n "$PROJECT_ID" ]] || { echo "ERROR: --project-id (or \$PROJECT_ID) is required" >&2; exit 1; }
 
-# Bucket names are global across ALL of GCP, not project-scoped — same
-# gotcha the top-level README's Troubleshooting table already documents
-# for the per-environment state buckets. Default to a project-suffixed
-# name so a first run doesn't collide with someone else's bucket.
 BUCKET_NAME="${BUCKET_NAME:-dep-dlm-tfstate-bootstrap-${PROJECT_ID}}"
 
 if gcloud storage buckets describe "gs://${BUCKET_NAME}" --project="$PROJECT_ID" >/dev/null 2>&1; then

@@ -1,11 +1,3 @@
-# modules/networking
-#
-# VPC + subnet for the GKE Autopilot cluster, plus a private services
-# access peering so Cloud SQL can be reached over private IP rather than
-# a public endpoint. See docs/adrs/adr-003-staging-cloud-provider.md for
-# why GCP was chosen; this module has no logic specific to any one
-# environment — environments/<env>/main.tf supplies the naming/CIDR.
-
 resource "google_compute_network" "this" {
   name                    = "${var.name_prefix}-vpc"
   project                 = var.project_id

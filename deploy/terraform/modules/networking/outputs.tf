@@ -29,6 +29,6 @@ output "services_range_name" {
 }
 
 output "private_vpc_connection" {
-  description = "The private services access peering connection (Cloud SQL depends on this)"
+  description = "The private services access peering connection. Not consumed cross-state any longer (see modules/database's variables.tf) but kept as an output — still useful for anyone inspecting bootstrap's own state/plan output directly."
   value       = google_service_networking_connection.private_service_connection
 }

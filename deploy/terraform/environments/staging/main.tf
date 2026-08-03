@@ -1,14 +1,3 @@
-# environments/staging
-#
-# Root module for the staging environment. Wires networking -> kubernetes
-# -> secrets -> database per docs/diagrams/staging-gcp.py and
-# docs/adrs/adr-003-staging-cloud-provider.md.
-#
-# This module intentionally does NOT deploy Rucio/FTS/ESO themselves —
-# that remains GitOps-managed (Argo CD/Flux), out of Terraform's scope,
-# matching the ADR's stated boundary: Terraform provisions the resource
-# group's infrastructure, GitOps converges the workload layer inside it.
-
 terraform {
   required_version = ">= 1.7"
 
@@ -33,25 +22,17 @@ locals {
   name_prefix = "dep-dlm-${var.environment}"
 }
 
-module "networking" {
-  source = "../../modules/networking"
-
-  project_id  = var.project_id
-  region      = var.region
-  name_prefix = local.name_prefix
-}
-
 module "kubernetes" {
   source = "../../modules/kubernetes"
 
   project_id           = var.project_id
-  region                = var.region
-  name_prefix           = local.name_prefix
-  network_id            = module.networking.network_id
-  subnet_id             = module.networking.subnet_id
-  pods_range_name       = module.networking.pods_range_name
-  services_range_name   = module.networking.services_range_name
-  deletion_protection   = var.deletion_protection
+  region               = var.region
+  name_prefix          = local.name_prefix
+  network_id           = var.network_id
+  subnet_id            = var.subnet_id
+  pods_range_name      = var.pods_range_name
+  services_range_name  = var.services_range_name
+  deletion_protection  = var.deletion_protection
 }
 
 module "secrets" {
@@ -68,8 +49,7 @@ module "database" {
   project_id              = var.project_id
   region                  = var.region
   name_prefix             = local.name_prefix
-  network_id              = module.networking.network_id
-  private_vpc_connection  = module.networking.private_vpc_connection
+  network_id              = var.network_id
   deletion_protection     = var.deletion_protection
   availability_type       = "ZONAL" # staging: cost over HA, per ADR-003's low-overhead driver
 }

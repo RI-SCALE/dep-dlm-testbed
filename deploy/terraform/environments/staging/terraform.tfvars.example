@@ -1,8 +1,21 @@
-# Copy to terraform.tfvars and fill in — terraform.tfvars itself should
-# stay out of git (see infra/terraform/.gitignore).
+# Copy to terraform.tfvars and update vars
+#
+# ALL five values below come from deploy/terraform/bootstrap's outputs,
+# after bootstrap has been applied:
+#   terraform -chdir=deploy/terraform/bootstrap output -json project_ids
+#   terraform -chdir=deploy/terraform/bootstrap output -json regions
+#   terraform -chdir=deploy/terraform/bootstrap output -json network_ids
+#   terraform -chdir=deploy/terraform/bootstrap output -json subnet_ids
+#   terraform -chdir=deploy/terraform/bootstrap output -json pods_range_names
+#   terraform -chdir=deploy/terraform/bootstrap output -json services_range_names
+# (pick the "staging" key from each)
 
-project_id = "your-gcp-project-id"
-region     = "europe-west3" # revisit per ADR-003's region-selection open point
+project_id           = "dep-dlm-staging-<suffix>"
+region               = "europe-west3"
+network_id           = "projects/dep-dlm-staging-<suffix>/global/networks/dep-dlm-staging-vpc"
+subnet_id            = "projects/dep-dlm-staging-<suffix>/regions/europe-west3/subnetworks/dep-dlm-staging-subnet"
+pods_range_name      = "dep-dlm-staging-pods"
+services_range_name  = "dep-dlm-staging-services"
 
 environment          = "staging"
 deletion_protection  = false

@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and update vars
+#
+# ALL five values below come from deploy/terraform/bootstrap's outputs —
+# pick the "production" key from each (see environments/staging/
+# terraform.tfvars.example for the full list of output commands).
+
+project_id           = "dep-dlm-production-<suffix>"
+region               = "europe-west3"
+network_id           = "projects/dep-dlm-production-<suffix>/global/networks/dep-dlm-production-vpc"
+subnet_id            = "projects/dep-dlm-production-<suffix>/regions/europe-west3/subnetworks/dep-dlm-production-subnet"
+pods_range_name      = "dep-dlm-production-pods"
+services_range_name  = "dep-dlm-production-services"
+
+environment          = "production"
+deletion_protection  = false # NOT YET VALIDATED placeholder — should default true once this environment is real, see main.tf's header

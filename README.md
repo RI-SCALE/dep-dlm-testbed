@@ -143,12 +143,7 @@ dep-dlm-testbed
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
   SCOPE_PROFILE = local (local | <profile>)
-
-  Terraform:
-    GCP_PROJECT_ID = dep-dlm-staging-67260c4e
-    GCP_REGION = europe-west3
     TF_ENV = staging
-    TF_STATE_BUCKET = dep-dlm-tfstate-staging-dep-dlm-staging-67260c4e
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
@@ -191,13 +186,11 @@ Tests
 
 Terraform
   tf-fmt               Check Terraform formatting across deploy/terraform
-  tf-prepare-backend   Idempotently create/grant access to TF_ENV's GCS state bucket (requires GCP_PROJECT_ID)
-  tf-init              Init Terraform for TF_ENV (default staging) against its GCS state bucket
+  tf-init              Init Terraform for TF_ENV against its GCSstate bucket (bucket auto-resolved from bootstrap output unless TF_STATE_BUCKET is already set)
   tf-validate          Validate the TF_ENV config (run tf-init first)
   tf-plan              Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
   tf-apply             Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
-  tf-destroy           Destroy TF_ENV's infrastructure. AUTO_APPROVE=1 for CI, interactive otherwise.
-  tf-destroy-state-bucket Empty and delete TF_ENV's GCS state bucket — irreversible, run tf-destroy first
+  tf-destroy           Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI, interactive otherwise.
   tf-output            Show Terraform outputs for TF_ENV
   tf-kubeconfig        Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
 

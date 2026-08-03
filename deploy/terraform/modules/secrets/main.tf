@@ -1,13 +1,6 @@
-# modules/secrets
-#
 # Secret Manager entries for the values External Secrets Operator syncs
 # into the cluster — the same set the sandbox's Vault seed job populates
-# today (see shared/scripts/seed-vault.sh in the testbed repo). Secret
-# *values* are deliberately NOT set here — this module creates empty
-# secret containers and grants ESO's service account access to them;
-# actual values are provisioned out-of-band (e.g. `gcloud secrets
-# versions add`, or a separate, ungitignored process), matching the
-# testbed's existing rule that sensitive values never live in the repo.
+# today (see shared/scripts/seed-vault.sh in the testbed repo).
 
 resource "google_secret_manager_secret" "this" {
   for_each  = toset(var.secret_names)

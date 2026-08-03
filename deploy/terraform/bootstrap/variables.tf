@@ -16,10 +16,9 @@ variable "billing_account_id" {
     project is linked to. This is the one value in this whole module that
     traces back to a genuine manual commercial precondition — Cloud
     Billing account creation/enrollment isn't something google_project can
-    bootstrap for itself, the same way an Azure EA/MCA enrollment isn't
-    something azurerm_subscription can bootstrap for itself. Whoever
-    applies this module needs roles/billing.user on this specific billing
-    account (checked by the provider on every plan/apply, not just once).
+    bootstrap for itself. Whoever applies this module needs roles/billing.user
+    on this specific billing account (checked by the provider on every
+    plan/apply, not just once).
   EOT
   type        = string
 }
@@ -36,11 +35,24 @@ variable "state_bucket_location" {
 }
 
 variable "terraform_ci_roles" {
-  description = "Project-level roles granted to each environment's dep-dlm-terraform-ci service account. Mirrors setup-workload-identity.sh's ROLES default — kept in sync manually since that script remains available as a manual fallback (see scripts/setup-workload-identity.sh's updated header)."
+  description = <<-EOT
+    Project-level roles granted to each environment's dep-dlm-terraform-ci
+    service account. Uses roles/compute.networkUser rather than
+    roles/compute.networkAdmin — a deliberate tightening made possible by
+    moving VPC/subnet/peering creation into THIS module (bootstrap runs as
+    a human's own org-level identity, not this service account).
+    environments/<env>'s CI identity now only ever ATTACHES resources
+    (GKE cluster, Cloud SQL) to an already-existing network; it never
+    creates/modifies/deletes network resources itself, so it no longer
+    needs networkAdmin's broader create/delete rights — networkUser (attach
+    to an existing network) is the correct minimum. Revert to networkAdmin
+    only if environments/<env> ever needs to manage networking directly
+    again.
+  EOT
   type        = list(string)
   default = [
     "roles/container.admin",
-    "roles/compute.networkAdmin",
+    "roles/compute.networkUser",
     "roles/cloudsql.admin",
     "roles/secretmanager.admin",
     "roles/iam.serviceAccountAdmin",
@@ -51,18 +63,19 @@ variable "terraform_ci_roles" {
 
 variable "environments" {
   description = <<-EOT
-    Environments to bootstrap a GCP Project for. `deletion_policy` maps
-    straight to google_project's own field: "DELETE" is fine for a
-    disposable/trial staging project, "PREVENT" (the safer default) stops
-    `terraform destroy` from silently deleting a project outright — use
-    the existing per-resource `deletion_protection` variables inside
-    environments/<env> for tearing down the resources INSIDE a project
-    instead, which is the normal teardown path (see the top-level
-    README's Teardown section).
+    Environments to bootstrap a GCP Project (and now VPC/subnet/networking)
+    for. `deletion_policy` maps straight to google_project's own field:
+    "DELETE" is fine for a disposable/trial staging project, "PREVENT"
+    (the safer default) stops `terraform destroy` from silently deleting a
+    project outright. `region` is now the SINGLE source of truth for that
+    environment's networking AND its GKE cluster's region — environments/
+    <env> receives it as a required input rather than independently
+    defaulting it, to remove the drift risk of two places disagreeing.
   EOT
   type = list(object({
     name            = string
     deletion_policy = optional(string, "PREVENT")
+    region          = optional(string, "europe-west3") # Frankfurt; revisit per ADR-003 Open Points
   }))
   default = [
     { name = "staging", deletion_policy = "DELETE" },

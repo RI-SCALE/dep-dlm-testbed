@@ -40,14 +40,16 @@ OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 
 # Terraform
-
-GCP_PROJECT_ID  ?=
-GCP_REGION      ?= europe-west3
+#
+# GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, and the networking values
+# (network_id/subnet_id/pods_range_name/services_range_name) are
+# DELIBERATELY NOT declared here with defaults — they're resolved at
+# recipe-time by deploy/terraform/scripts/resolve-tf-env.sh
 TF_ENV          ?= staging
 TF_DIR          := deploy/terraform/environments/$(TF_ENV)
-TF_STATE_BUCKET ?= dep-dlm-tfstate-$(TF_ENV)-$(GCP_PROJECT_ID)
 TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
+TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
 # CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
 # defaults to interactive confirmation, same as running terraform directly.
@@ -114,12 +116,7 @@ help: ## Show this help (default target)
 	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
 	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
-	@echo ''
-	@echo '  Terraform:'
-	@echo '    GCP_PROJECT_ID = $(GCP_PROJECT_ID)'
-	@echo '    GCP_REGION = $(GCP_REGION)'
 	@echo '    TF_ENV = $(TF_ENV)'
-	@echo '    TF_STATE_BUCKET = $(TF_STATE_BUCKET)'
 	@echo ''
 	@echo 'Usage:'
 	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]'
@@ -324,24 +321,11 @@ probe-teapot: ## Teapot WebDAV probe with OIDC tokens
 tf-fmt: ## Check Terraform formatting across deploy/terraform
 	terraform fmt -check -recursive -no-color deploy/terraform
 
-.PHONY: tf-prepare-backend
-tf-prepare-backend: ## Idempotently create/grant access to TF_ENV's GCS state bucket (requires GCP_PROJECT_ID)
-	@[ -n "$(GCP_PROJECT_ID)" ] || { echo "GCP_PROJECT_ID is required"; exit 1; }
-	if gcloud storage buckets describe "gs://$(TF_STATE_BUCKET)" --project="$(GCP_PROJECT_ID)" >/dev/null 2>&1; then \
-	  echo "Bucket gs://$(TF_STATE_BUCKET) already exists — skipping create"; \
-	else \
-	  echo "Creating gs://$(TF_STATE_BUCKET)"; \
-	  gcloud storage buckets create "gs://$(TF_STATE_BUCKET)" \
-	    --project="$(GCP_PROJECT_ID)" --location=EU --uniform-bucket-level-access; \
-	fi
-	gcloud storage buckets add-iam-policy-binding "gs://$(TF_STATE_BUCKET)" \
-	  --member="serviceAccount:dep-dlm-terraform-ci@$(GCP_PROJECT_ID).iam.gserviceaccount.com" \
-	  --role="roles/storage.objectAdmin"
-
 .PHONY: tf-init
-tf-init: ## Init Terraform for TF_ENV (default staging) against its GCS state bucket
+tf-init: ## Init Terraform for TF_ENV against its GCS state bucket (bucket auto-resolved from bootstrap output unless TF_STATE_BUCKET is already set)
+	@$(TF_RESOLVE_ENV); \
 	$(TERRAFORM) init \
-	  -backend-config="bucket=$(TF_STATE_BUCKET)" \
+	  -backend-config="bucket=$$TF_STATE_BUCKET" \
 	  -backend-config="prefix=$(TF_STATE_PREFIX)"
 
 .PHONY: tf-validate
@@ -350,7 +334,13 @@ tf-validate: ## Validate the TF_ENV config (run tf-init first)
 
 .PHONY: tf-plan
 tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
-	TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+	@$(TF_RESOLVE_ENV); \
+	TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	TF_VAR_region="$$GCP_REGION" \
+	TF_VAR_network_id="$$TF_NETWORK_ID" \
+	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
 .PHONY: tf-apply
@@ -358,20 +348,26 @@ tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans i
 	@if [ -f $(TF_DIR)/tfplan ]; then \
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
 	else \
-	  TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+	  $(TF_RESOLVE_ENV); \
+	  TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	  TF_VAR_region="$$GCP_REGION" \
+	  TF_VAR_network_id="$$TF_NETWORK_ID" \
+	  TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	  TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	  TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG); \
 	fi
 
 .PHONY: tf-destroy
-tf-destroy: ## Destroy TF_ENV's infrastructure. AUTO_APPROVE=1 for CI, interactive otherwise.
-	TF_VAR_project_id=$(GCP_PROJECT_ID) TF_VAR_region=$(GCP_REGION) \
+tf-destroy: ## Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI, interactive otherwise.
+	@$(TF_RESOLVE_ENV); \
+	TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	TF_VAR_region="$$GCP_REGION" \
+	TF_VAR_network_id="$$TF_NETWORK_ID" \
+	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
-
-.PHONY: tf-destroy-state-bucket
-tf-destroy-state-bucket: ## Empty and delete TF_ENV's GCS state bucket — irreversible, run tf-destroy first
-	@echo "Emptying and deleting gs://$(TF_STATE_BUCKET) — this cannot be undone."
-	gcloud storage rm --recursive "gs://$(TF_STATE_BUCKET)/**" 2>/dev/null || echo "(bucket already empty)"
-	gcloud storage buckets delete "gs://$(TF_STATE_BUCKET)"
 
 .PHONY: tf-output
 tf-output: ## Show Terraform outputs for TF_ENV
@@ -379,8 +375,9 @@ tf-output: ## Show Terraform outputs for TF_ENV
 
 .PHONY: tf-kubeconfig
 tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
+	@$(TF_RESOLVE_ENV); \
 	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
-	  --region=$(GCP_REGION) --project=$(GCP_PROJECT_ID)
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"
 
 ## Cleanup
 

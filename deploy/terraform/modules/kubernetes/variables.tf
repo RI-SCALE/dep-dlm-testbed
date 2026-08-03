@@ -14,22 +14,22 @@ variable "name_prefix" {
 }
 
 variable "network_id" {
-  description = "VPC network ID from modules/networking"
+  description = "VPC network ID (from deploy/terraform/bootstrap's networking, as of this revision)"
   type        = string
 }
 
 variable "subnet_id" {
-  description = "Subnet ID from modules/networking"
+  description = "Subnet ID (from deploy/terraform/bootstrap's networking, as of this revision)"
   type        = string
 }
 
 variable "pods_range_name" {
-  description = "Secondary IP range name for pods, from modules/networking"
+  description = "Secondary IP range name for pods (from deploy/terraform/bootstrap's networking, as of this revision)"
   type        = string
 }
 
 variable "services_range_name" {
-  description = "Secondary IP range name for services, from modules/networking"
+  description = "Secondary IP range name for services (from deploy/terraform/bootstrap's networking, as of this revision)"
   type        = string
 }
 

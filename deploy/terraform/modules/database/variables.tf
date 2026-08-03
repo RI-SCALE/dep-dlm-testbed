@@ -14,13 +14,8 @@ variable "name_prefix" {
 }
 
 variable "network_id" {
-  description = "VPC network ID from modules/networking, for private IP"
+  description = "VPC network ID (from deploy/terraform/bootstrap's networking, as of this revision), for private IP"
   type        = string
-}
-
-variable "private_vpc_connection" {
-  description = "The private services access connection from modules/networking — passed through purely to create an explicit dependency"
-  type        = any
 }
 
 variable "postgres_version" {
