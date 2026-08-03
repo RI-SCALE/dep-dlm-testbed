@@ -148,8 +148,8 @@ jobs:
           done
           kubectl -n $ns get pods
 
-      - name: Patch Vault egi-dev OIDC credentials
-        if: matrix.scope_profile == 'egi-dev'
+      - name: Patch Vault egi-dev/ls-aai-dev OIDC credentials
+        if: matrix.scope_profile != 'local'
         run: |
           ns=dep-dlm-${{ matrix.env }}
           kubectl exec -n "$ns" vault-0 -- sh -c '

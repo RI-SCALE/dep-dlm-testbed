@@ -423,10 +423,10 @@ print(json.dumps(json.loads(base64.urlsafe_b64decode(p)), indent=2))
 "
 ```
 
-Isolating a bad/malformed `OIDC_CLIENT_SECRET` — confirm length first:
+Isolating a bad/malformed `OIDC_CLIENT_ID` — confirm length first:
 
 ```bash
-echo -n "$OIDC_CLIENT_SECRET" | wc -c   # should print 36 for a standard UUID secret
+echo -n "$OIDC_CLIENT_ID" | wc -c   # should print 36 for a standard UUID
 
 curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
   -d 'grant_type=client_credentials' -d 'scope=openid' \

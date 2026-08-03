@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# generate-certs.sh — generate all runtime certificates
-
 set -euo pipefail
 
 # ── Global Config ───────────────────────────────────────────────────────────

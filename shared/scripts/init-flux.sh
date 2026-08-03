@@ -1,83 +1,4 @@
 #!/usr/bin/env bash
-# ============================================================================
-# init-flux.sh — install Flux and bootstrap the DEP DLM stack (env-aware)
-# ============================================================================
-# Installs the Flux controllers, applies the GitRepository source, then
-# applies the FULL environment entrypoint in one shot and lets Flux's own
-# dependsOn graph sequence eso → core → secrets → components — NOT a
-# hand-staged sequence of separate applies.
-#
-# CHANGED from an earlier version of this script, which manually applied
-# "core" (vault + postgresql) before "eso", on the assumption that vault
-# needing to exist before ExternalSecrets meant core had no dependencies of
-# its own. Wrong: CI proved flux/entrypoints/sandbox.yaml's own
-# "dep-dlm-sandbox-core" Kustomization declares `dependsOn: [dep-dlm-sandbox-
-# eso]` — applying core alone, before eso exists, fails immediately with
-# "dependency ... not found", because Flux's kustomize-controller can't even
-# start reconciling a Kustomization whose dependsOn target doesn't exist yet.
-#
-# Unlike Argo's ApplicationSet-generated Applications (confirmed to have NO
-# cross-Application ordering at all — sync-wave annotations are inert there),
-# Flux Kustomizations DO natively enforce dependsOn correctly. So the fix
-# isn't to guess a different manual order — it's to stop guessing and apply
-# everything at once, then just wait on the ONE Kustomization that's the
-# real precondition for seeding (core, since that's what creates the Vault
-# pod), trusting Flux to have already sequenced eso before it internally.
-#
-# Sequence:
-#   1. Apply GitRepository.
-#   2. Apply the ENTIRE entrypoint (eso + core + secrets + components, in
-#      whatever shape flux/entrypoints/<env>.yaml declares) in one apply.
-#      Flux's dependsOn graph handles internal sequencing; secrets and
-#      components will sit unready until core/seeding catch up, same as the
-#      Argo path's components sit unhealthy until their Applications' turn.
-#   3. Wait for CORE_KS (the "core" Kustomization) to be Ready — this is
-#      the real gate for seeding, and per its own dependsOn it implies eso
-#      is already Ready too, so we don't need to wait on eso separately.
-#   4. seed-vault.sh.
-#   5. run-bootstrap-db.sh — NOT gated behind waiting for the components
-#      Kustomization to be Ready first. That Kustomization bundles
-#      rucio-daemons, which crash-loops on a missing "heartbeats" table
-#      until bootstrap creates it — waiting on its Ready condition first
-#      would be a hard deadlock, confirmed on the Argo path's equivalent
-#      per-Application health wait. run-bootstrap-db.sh has its own correct,
-#      non-circular precondition (Service/ruciodb exists, then an in-Job
-#      DB-reachability retry loop).
-#
-# Idempotent: safe to re-run. Honours an existing Flux install.
-#
-# Usage:
-#   shared/scripts/init-flux.sh [--env sandbox|staging|production]
-#                               [--repo-url URL] [--revision REF]
-#                               [--flow managed|unmanaged]
-#                               [--scope-profile local|<profile>]
-#                               [--no-wait] [--no-seed]
-#
-# Env overrides:
-#   FLUX_NAMESPACE   (default: flux-system)
-#   GITOPS_ENV       (default: sandbox)
-#   REPO_URL         git repo Flux pulls from (default: from gitrepository.yaml)
-#   REVISION         git branch Flux tracks   (default: from gitrepository.yaml)
-#   FLOW             FTS token mode for vault seeding (default: managed)
-#   SCOPE_PROFILE    OIDC scope profile for vault seeding (default: local)
-#
-# --no-seed skips the core-Kustomization wait, seed-vault.sh, and
-# run-bootstrap-db.sh — use for staging/production, which don't run vault
-# this way (see environments/<env>/secrets/README.md). The entrypoint is
-# still applied in full either way.
-#
-# ASSUMPTION FLAGGED: this script assumes the "core" Kustomization is named
-# "dep-dlm-<env>-core" (→ flux/core/<env>/) — CI confirmed this name is
-# correct. It no longer needs to know the eso/secrets/components
-# Kustomization names at all, since they're applied as part of the same
-# single `kubectl apply -f "$ENTRYPOINT"` — only CORE_KS is still name-
-# sensitive, because it's the one Kustomization we wait on individually.
-#
-# Examples:
-#   shared/scripts/init-flux.sh --env sandbox \
-#     --repo-url https://github.com/ri-scale/dep-dlm-testbed.git \
-#     --revision feat/gitops-deployment-blueprint \
-#     --flow managed --scope-profile egi-dev
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -93,6 +14,7 @@ REPO_URL="${REPO_URL:-}"
 REVISION="${REVISION:-}"
 FLOW="${FLOW:-managed}"
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
+CORE_WAIT_TIMEOUT="${CORE_WAIT_TIMEOUT:-600s}"
 WAIT=1
 SEED=1
 
@@ -103,6 +25,7 @@ while [[ $# -gt 0 ]]; do
     --revision)       REVISION="$2"; shift 2 ;;
     --flow)           FLOW="$2"; shift 2 ;;
     --scope-profile)  SCOPE_PROFILE="$2"; shift 2 ;;
+    --timeout)        CORE_WAIT_TIMEOUT="$2"; shift 2 ;;
     --no-wait)        WAIT=0; shift ;;
     --no-seed)        SEED=0; shift ;;
     -h|--help)        grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -164,20 +87,15 @@ log "Applying GitRepository source"
 kubectl apply -f "$APPLY_GITREPO"
 [[ "$APPLY_GITREPO" != "$GITREPO" ]] && rm -f "$APPLY_GITREPO"
 
-# --- 4. Apply the FULL entrypoint in one shot — let Flux's own dependsOn
-# graph (eso -> core -> secrets -> components, or whatever it actually
-# declares) sequence reconciliation. See header for why this replaced a
-# hand-staged apply order that turned out to be backwards.
+# --- 4. Apply the FULL entrypoint in one shot
 log "Applying ${GITOPS_ENV} entrypoint (eso + core + secrets + components)"
 kubectl apply -f "$ENTRYPOINT"
 
-# --- 5. Wait for the core Kustomization — the real gate for seeding. Its
-# own dependsOn on eso means Flux won't mark it Ready until eso is Ready
-# too, so we don't need a separate wait for eso.
+# --- 5. Wait for the core Kustomization — the real gate for seeding
 if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
-  log "Waiting for Kustomization/${CORE_KS} to be Ready (up to 5m)"
-  kubectl -n "$FLUX_NAMESPACE" wait --for=condition=Ready "kustomization/${CORE_KS}" --timeout=300s \
-    || warn "${CORE_KS} not Ready within timeout — seeding will likely fail; check 'flux get kustomization ${CORE_KS}' and 'flux get kustomization dep-dlm-${GITOPS_ENV}-eso'"
+  log "Waiting for Kustomization/${CORE_KS} to be Ready (up to ${CORE_WAIT_TIMEOUT})"
+  kubectl -n "$FLUX_NAMESPACE" wait --for=condition=Ready "kustomization/${CORE_KS}" --timeout="$CORE_WAIT_TIMEOUT" \
+    || die "${CORE_KS} not Ready within ${CORE_WAIT_TIMEOUT} — check 'flux get kustomization ${CORE_KS}' and 'flux get kustomization dep-dlm-${GITOPS_ENV}-eso'. Re-run with --timeout to allow more time, or re-run this script once Flux catches up (it's idempotent) — Flux keeps reconciling in the background even after this wait gives up."
 fi
 
 # --- 6. Seed Vault (sandbox only) — Vault is reachable (step 5).
@@ -187,14 +105,13 @@ if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
     --repo-url "${REPO_URL:-https://github.com/ri-scale/dep-dlm-testbed.git}" \
     --revision "${REVISION:-main}" \
     --flow "$FLOW" \
-    --scope-profile "$SCOPE_PROFILE"
+    --scope-profile "$SCOPE_PROFILE" \
+    --vault-timeout "$CORE_WAIT_TIMEOUT"
 elif [[ "$SEED" -eq 0 ]]; then
   log "Skipping Vault seeding (--no-seed)"
 fi
 
 # --- 7. Bootstrap the rucio DB schema (sandbox only) ------------------------
-# NOT gated behind waiting for the components Kustomization to be Ready —
-# see header for why (rucio-daemons circular dependency on the schema).
 if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
   "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
 fi

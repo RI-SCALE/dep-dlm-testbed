@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# ============================================================================
-# common.sh — shared helpers for init-argocd.sh / init-flux.sh / seed-vault.sh
-# ============================================================================
-# Sourced, not executed. Every function here was previously duplicated
-# (verbatim or near-verbatim) across init-argocd.sh and init-flux.sh.
-#
-# Usage:
-#   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-#   # shellcheck source=common.sh disable=SC1091
-#   source "${SCRIPT_DIR}/common.sh"
-
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
