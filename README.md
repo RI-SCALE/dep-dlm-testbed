@@ -148,7 +148,7 @@ Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
 
 
-Terraform
+Help
   help                 Show this help (default target)
 
 Setup

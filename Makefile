@@ -39,7 +39,7 @@ OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 
-## Terraform
+# Terraform
 
 GCP_PROJECT_ID  ?=
 GCP_REGION      ?= europe-west3
@@ -101,7 +101,7 @@ else
 EXEC_RUCIO := docker exec compose-rucio-client-1
 endif
 
-# Help
+## Help
 
 .PHONY: help
 help: ## Show this help (default target)
