@@ -1,0 +1,26 @@
+name: Terraform destroy (staging)
+
+# Manual-only, on purpose — this is the one place bucket/state DELETION
+# lives, deliberately kept out of terraform-staging.yml so a normal
+# push/PR can never trigger it. Requires typing the environment name
+# exactly, on top of GitHub's own environment approval gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "staging" to confirm you want to destroy the staging environment'
+        required: true
+      delete_state_bucket:
+        description: 'Also delete the GCS state bucket after destroy? (Terraform loses all memory of this environment — only do this when tearing down for good, not for routine cleanup)'
+        type: boolean
+        default: false
+
+jobs:
+  destroy:
+    uses: ./.github/workflows/_terraform-destroy.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      confirm: ${{ inputs.confirm }}
+      delete_state_bucket: ${{ inputs.delete_state_bucket }}

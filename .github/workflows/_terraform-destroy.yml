@@ -1,0 +1,77 @@
+name: _terraform-destroy
+
+on:
+  workflow_call:
+    inputs:
+      tf_env:
+        description: "Environment directory name under deploy/terraform/environments/ (e.g. staging, production)"
+        required: true
+        type: string
+      environment_name:
+        description: "GitHub Environment to resolve vars from and gate destroy behind (usually the same as tf_env)"
+        required: true
+        type: string
+      confirm:
+        description: "Value the human typed in the calling workflow's confirmation input — must exactly equal environment_name"
+        required: true
+        type: string
+      delete_state_bucket:
+        description: "Also delete the GCS state bucket after destroy"
+        required: true
+        type: boolean
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_ENV: ${{ inputs.tf_env }}
+
+jobs:
+  destroy:
+    name: destroy
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }} # same GitHub Environment as apply — same reviewers, same gate
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - name: Verify confirmation input
+        run: |
+          if [ "${{ inputs.confirm }}" != "${{ inputs.environment_name }}" ]; then
+            echo "Confirmation input '${{ inputs.confirm }}' did not match '${{ inputs.environment_name }}' — aborting." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: make tf-init
+        run: make tf-init
+
+      # Real resources go first, always — the bucket is state, not
+      # infrastructure. Deleting it before this would leave every GCP
+      # resource orphaned with no Terraform record of them.
+      - name: make tf-destroy
+        run: make tf-destroy AUTO_APPROVE=1
+
+      # Only reached if tf-destroy above succeeded AND the input was
+      # explicitly opted into — deletes the state history itself, so
+      # this environment can no longer be managed by Terraform at all
+      # afterward without starting over from a fresh tf-init.
+      - name: make tf-destroy-state-bucket
+        if: inputs.delete_state_bucket == true
+        run: make tf-destroy-state-bucket

@@ -1,25 +1,21 @@
-name: Terraform (staging)
+name: _terraform-apply
 
 on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'deploy/terraform/**'
-      - '.github/workflows/terraform-staging.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'deploy/terraform/**'
-      - '.github/workflows/terraform-staging.yml'
+  workflow_call:
+    inputs:
+      tf_env:
+        description: "Environment directory name under deploy/terraform/environments/ (e.g. staging, production)"
+        required: true
+        type: string
+      environment_name:
+        description: "GitHub Environment to resolve vars from and gate apply behind (usually the same as tf_env)"
+        required: true
+        type: string
 
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TF_ENV: staging
-  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  GCP_REGION: ${{ vars.GCP_REGION }}
-  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_ENV: ${{ inputs.tf_env }}
 
 jobs:
   fmt-check:
@@ -37,24 +33,28 @@ jobs:
   prepare-backend:
     name: prepare state bucket
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
       contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - uses: actions/checkout@v6
 
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/912754690083/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
-          service_account: dep-dlm-terraform-ci@dep-dlm-staging-67260c4e.iam.gserviceaccount.com
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
       # Idempotent by construction (see the Makefile target itself) —
-      # only ever CREATES, never deletes; see terraform-teardown.yml for
-      # that, deliberately isolated into its own manually-triggered
-      # workflow and its own make target (tf-destroy-state-bucket).
+      # only ever CREATES, never deletes; see the destroy workflow for
+      # that, deliberately isolated into its own manually-triggered path.
       - name: make tf-prepare-backend
         run: make tf-prepare-backend
 
@@ -62,18 +62,23 @@ jobs:
     name: plan
     needs: [fmt-check, prepare-backend]
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write   # required for WIF OIDC token exchange
       contents: read
       pull-requests: write # to comment the plan on PRs
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - uses: actions/checkout@v6
 
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/912754690083/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
-          service_account: dep-dlm-terraform-ci@dep-dlm-staging-67260c4e.iam.gserviceaccount.com
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -91,27 +96,31 @@ jobs:
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-staging
-          path: deploy/terraform/environments/staging/tfplan
+          name: tfplan-${{ inputs.tf_env }}
+          path: deploy/terraform/environments/${{ inputs.tf_env }}/tfplan
           retention-days: 5
 
   apply:
     name: apply
     needs: plan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: staging # GitHub Environment — add required reviewers here for a manual approval gate
+    environment: ${{ inputs.environment_name }} # GitHub Environment — add required reviewers here for a manual approval gate
     permissions:
       id-token: write
       contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
     steps:
       - uses: actions/checkout@v6
 
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/912754690083/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
-          service_account: dep-dlm-terraform-ci@dep-dlm-staging-67260c4e.iam.gserviceaccount.com
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -123,8 +132,8 @@ jobs:
       - name: Download plan artifact
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-staging
-          path: deploy/terraform/environments/staging
+          name: tfplan-${{ inputs.tf_env }}
+          path: deploy/terraform/environments/${{ inputs.tf_env }}
 
       # tf-apply uses the downloaded tfplan artifact automatically if
       # present (see the Makefile target) — guarantees apply does

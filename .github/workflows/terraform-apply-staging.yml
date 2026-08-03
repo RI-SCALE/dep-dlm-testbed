@@ -1,0 +1,23 @@
+name: Terraform apply (staging)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+      - '.github/workflows/_terraform-apply.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+      - '.github/workflows/_terraform-apply.yml'
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      tf_env: staging
+      environment_name: staging
