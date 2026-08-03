@@ -137,12 +137,18 @@ make test-rucio-transfers
 ```bash
 dep-dlm-testbed
 
-  RUNTIME    = compose    (compose | k8s)
+  RUNTIME    = k8s    (compose | k8s)
   TOKEN_MODE = managed (managed | unmanaged)
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
   SCOPE_PROFILE = local (local | <profile>)
+
+  Terraform:
+    GCP_PROJECT_ID = dep-dlm-staging-67260c4e
+    GCP_REGION = europe-west3
+    TF_ENV = staging
+    TF_STATE_BUCKET = dep-dlm-tfstate-staging-dep-dlm-staging-67260c4e
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
@@ -168,7 +174,7 @@ Lifecycle
   logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
 
 GitOps
-  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
+  argocd-install       Install ArgoCD + bootstrap the chosen env(GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
   argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
   flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
   flux-uninstall       Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
