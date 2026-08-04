@@ -7,7 +7,7 @@ org_id = "1234567890" # or use folder_id instead, not both
 # column (already dash-formatted, paste as-is).
 billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
 
-github_repo = "ri-scale/dep-dlm-testbed"
+github_repo = "RI-SCALE/dep-dlm-testbed"
 
 # environments defaults to [staging (deletion_policy=DELETE, region=
 # europe-west3), production (deletion_policy=PREVENT, region=europe-west3)]
