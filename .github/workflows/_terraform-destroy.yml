@@ -24,6 +24,7 @@ env:
 jobs:
   destroy:
     name: destroy
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }} # same GitHub Environment as apply — same reviewers, same gate
     permissions:

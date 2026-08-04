@@ -79,7 +79,7 @@ jobs:
   apply:
     name: apply
     needs: plan
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }} # GitHub Environment — add required reviewers here for a manual approval gate
     permissions:
