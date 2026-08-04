@@ -116,7 +116,7 @@ help: ## Show this help (default target)
 	@echo '  GITOPS_ENV = $(GITOPS_ENV) (sandbox | staging | production)'
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
 	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
-	@echo '    TF_ENV = $(TF_ENV)'
+	@echo '  TF_ENV = $(TF_ENV)'
 	@echo ''
 	@echo 'Usage:'
 	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]'
@@ -331,6 +331,18 @@ tf-init: ## Init Terraform for TF_ENV against its GCS state bucket (bucket auto-
 .PHONY: tf-validate
 tf-validate: ## Validate the TF_ENV config (run tf-init first)
 	$(TERRAFORM) validate -no-color
+
+.PHONY: tf-docs
+tf-docs: ## Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
+	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }
+	@for dir in bootstrap environments/staging environments/production \
+	            modules/networking modules/kubernetes modules/database modules/secrets; do \
+	  echo "Injecting docs into deploy/terraform/$$dir/README.md"; \
+	  terraform-docs markdown table --sort-by required \
+	    --output-file README.md --output-mode inject \
+	    "deploy/terraform/$$dir"; \
+	done
+	@echo "Terraform reference docs injected into each module/root's own README.md"
 
 .PHONY: tf-plan
 tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan

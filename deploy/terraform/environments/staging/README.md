@@ -1,0 +1,49 @@
+<!-- BEGIN_TF_DOCS -->
+## Requirements
+
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.7 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
+
+## Providers
+
+No providers.
+
+## Modules
+
+| Name | Source | Version |
+| ---- | ------ | ------- |
+| <a name="module_database"></a> [database](#module\_database) | ../../modules/database | n/a |
+| <a name="module_kubernetes"></a> [kubernetes](#module\_kubernetes) | ../../modules/kubernetes | n/a |
+| <a name="module_secrets"></a> [secrets](#module\_secrets) | ../../modules/secrets | n/a |
+
+## Resources
+
+No resources.
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | VPC network ID from deploy/terraform/bootstrap output network\_ids.staging | `string` | n/a | yes |
+| <a name="input_pods_range_name"></a> [pods\_range\_name](#input\_pods\_range\_name) | Secondary IP range name for GKE pods, from deploy/terraform/bootstrap output pods\_range\_names.staging | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID for the staging environment (from deploy/terraform/bootstrap output project\_ids.staging) | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | GCP region — must match deploy/terraform/bootstrap output regions.staging exactly (that's now the single source of truth for this environment's region, since networking and the GKE cluster must agree). No default, deliberately — an independent default here was a latent drift risk against bootstrap's own default. | `string` | n/a | yes |
+| <a name="input_services_range_name"></a> [services\_range\_name](#input\_services\_range\_name) | Secondary IP range name for GKE services, from deploy/terraform/bootstrap output services\_range\_names.staging | `string` | n/a | yes |
+| <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | GKE subnet ID from deploy/terraform/bootstrap output subnet\_ids.staging | `string` | n/a | yes |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Keep false for staging so environments can be torn down freely; override per the low-maintenance, ephemeral-environment driver in ADR-003 | `bool` | `false` | no |
+| <a name="input_environment"></a> [environment](#input\_environment) | Environment name, used to derive resource name prefixes | `string` | `"staging"` | no |
+
+## Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | n/a |
+| <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | n/a |
+| <a name="output_database_connection_name"></a> [database\_connection\_name](#output\_database\_connection\_name) | n/a |
+| <a name="output_database_private_ip"></a> [database\_private\_ip](#output\_database\_private\_ip) | n/a |
+| <a name="output_eso_service_account_email"></a> [eso\_service\_account\_email](#output\_eso\_service\_account\_email) | Annotate the ESO k8s ServiceAccount with iam.gke.io/gcp-service-account=<this> to complete the Workload Identity binding |
+| <a name="output_secret_ids"></a> [secret\_ids](#output\_secret\_ids) | n/a |
+<!-- END_TF_DOCS -->
