@@ -17,6 +17,10 @@ on:
         description: 'Type "staging" to confirm you want to destroy the staging environment'
         required: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   destroy:
     uses: ./.github/workflows/_terraform-destroy.yml

@@ -15,6 +15,11 @@ on:
       - '.github/workflows/terraform-staging.yml'
       - '.github/workflows/_terraform-apply.yml'
 
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
 jobs:
   terraform:
     uses: ./.github/workflows/_terraform-apply.yml
