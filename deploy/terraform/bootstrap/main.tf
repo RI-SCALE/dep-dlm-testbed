@@ -109,8 +109,8 @@ resource "google_service_account_iam_member" "terraform_ci_compute_sa_user" {
   for_each = local.environments
 
   service_account_id = "projects/${google_project.env[each.key].project_id}/serviceAccounts/${google_project.env[each.key].number}-compute@developer.gserviceaccount.com"
-  role                = "roles/iam.serviceAccountUser"
-  member              = "serviceAccount:${google_service_account.terraform_ci[each.key].email}"
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.terraform_ci[each.key].email}"
 
   depends_on = [google_project_service.apis]
 }
@@ -149,8 +149,8 @@ resource "google_service_account_iam_member" "github_wif_binding" {
   for_each = local.environments
 
   service_account_id = google_service_account.terraform_ci[each.key].name
-  role                = "roles/iam.workloadIdentityUser"
-  member              = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github[each.key].name}/attribute.repository/${var.github_repo}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github[each.key].name}/attribute.repository/${var.github_repo}"
 }
 
 # --- Per-environment remote-state bucket ---------------------------------

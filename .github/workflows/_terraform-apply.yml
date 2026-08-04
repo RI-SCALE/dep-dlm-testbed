@@ -27,8 +27,8 @@ jobs:
         with:
           terraform_version: "1.9.8" # pin explicitly rather than "latest" for reproducible CI runs
 
-      - name: make tf-fmt
-        run: make tf-fmt
+      - name: make tf-fmt-check
+        run: make tf-fmt-check
 
   plan:
     name: plan

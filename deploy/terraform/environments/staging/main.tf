@@ -25,31 +25,31 @@ locals {
 module "kubernetes" {
   source = "../../modules/kubernetes"
 
-  project_id           = var.project_id
-  region               = var.region
-  name_prefix          = local.name_prefix
-  network_id           = var.network_id
-  subnet_id            = var.subnet_id
-  pods_range_name      = var.pods_range_name
-  services_range_name  = var.services_range_name
-  deletion_protection  = var.deletion_protection
+  project_id          = var.project_id
+  region              = var.region
+  name_prefix         = local.name_prefix
+  network_id          = var.network_id
+  subnet_id           = var.subnet_id
+  pods_range_name     = var.pods_range_name
+  services_range_name = var.services_range_name
+  deletion_protection = var.deletion_protection
 }
 
 module "secrets" {
   source = "../../modules/secrets"
 
   project_id                = var.project_id
-  name_prefix                = local.name_prefix
-  eso_service_account_email  = module.kubernetes.eso_service_account_email
+  name_prefix               = local.name_prefix
+  eso_service_account_email = module.kubernetes.eso_service_account_email
 }
 
 module "database" {
   source = "../../modules/database"
 
-  project_id              = var.project_id
-  region                  = var.region
-  name_prefix             = local.name_prefix
-  network_id              = var.network_id
-  deletion_protection     = var.deletion_protection
-  availability_type       = "ZONAL" # staging: cost over HA, per ADR-003's low-overhead driver
+  project_id          = var.project_id
+  region              = var.region
+  name_prefix         = local.name_prefix
+  network_id          = var.network_id
+  deletion_protection = var.deletion_protection
+  availability_type   = "ZONAL" # staging: cost over HA, per ADR-003's low-overhead driver
 }

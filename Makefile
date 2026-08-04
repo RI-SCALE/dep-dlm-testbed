@@ -317,8 +317,10 @@ probe-teapot: ## Teapot WebDAV probe with OIDC tokens
 
 ## Terraform
 
-.PHONY: tf-fmt
-tf-fmt: ## Check Terraform formatting across deploy/terraform
+tf-fmt: ## Auto-format Terraform files under deploy/terraform
+	terraform fmt -recursive -no-color deploy/terraform
+
+tf-fmt-check: ## Check Terraform formatting under deploy/terraform
 	terraform fmt -check -recursive -no-color deploy/terraform
 
 .PHONY: tf-init
