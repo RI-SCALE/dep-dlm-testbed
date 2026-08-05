@@ -43,8 +43,8 @@ module "secrets" {
   eso_service_account_email = module.kubernetes.eso_service_account_email
 }
 
-module "database" {
-  source = "../../modules/database"
+module "rucio_database" {
+  source = "../../modules/database-postgres"
 
   project_id          = var.project_id
   region              = var.region
@@ -52,4 +52,15 @@ module "database" {
   network_id          = var.network_id
   deletion_protection = var.deletion_protection
   availability_type   = "REGIONAL" # production: HA over cost, unlike staging
+}
+
+module "fts_database" {
+  source = "../../modules/database-mysql"
+
+  project_id          = var.project_id
+  region              = var.region
+  name_prefix         = local.name_prefix
+  network_id          = var.network_id
+  deletion_protection = var.deletion_protection
+  availability_type   = "REGIONAL"
 }

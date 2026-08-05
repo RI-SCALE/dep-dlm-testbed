@@ -338,7 +338,8 @@ tf-validate: ## Validate the TF_ENV config (run tf-init first)
 tf-docs: ## Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
 	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }
 	@for dir in bootstrap environments/staging environments/production \
-	            modules/networking modules/kubernetes modules/database modules/secrets; do \
+	            modules/networking modules/kubernetes modules/database-postgres \
+				modules/database-mysql modules/secrets; do \
 	  echo "Injecting docs into deploy/terraform/$$dir/README.md"; \
 	  terraform-docs markdown table --sort-by required \
 	    --output-file README.md --output-mode inject \

@@ -13,17 +13,8 @@ output "connection_name" {
   value       = google_sql_database_instance.this.connection_name
 }
 
-output "rucio_db_name" {
-  value = google_sql_database.rucio.name
-}
-
 output "fts_db_name" {
   value = google_sql_database.fts.name
-}
-
-output "rucio_db_password" {
-  value     = random_password.rucio_db.result
-  sensitive = true
 }
 
 output "fts_db_password" {

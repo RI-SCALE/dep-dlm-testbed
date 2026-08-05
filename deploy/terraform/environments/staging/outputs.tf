@@ -15,10 +15,18 @@ output "secret_ids" {
   value = module.secrets.secret_ids
 }
 
-output "database_connection_name" {
-  value = module.database.connection_name
+output "rucio_database_connection_name" {
+  value = module.rucio_database.connection_name
 }
 
-output "database_private_ip" {
-  value = module.database.private_ip_address
+output "rucio_database_private_ip" {
+  value = module.rucio_database.private_ip_address
+}
+
+output "fts_database_connection_name" {
+  value = module.fts_database.connection_name
+}
+
+output "fts_database_private_ip" {
+  value = module.fts_database.private_ip_address
 }

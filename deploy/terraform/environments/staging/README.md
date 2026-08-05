@@ -15,8 +15,9 @@ No providers.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_database"></a> [database](#module\_database) | ../../modules/database | n/a |
+| <a name="module_fts_database"></a> [fts\_database](#module\_fts\_database) | ../../modules/database-mysql | n/a |
 | <a name="module_kubernetes"></a> [kubernetes](#module\_kubernetes) | ../../modules/kubernetes | n/a |
+| <a name="module_rucio_database"></a> [rucio\_database](#module\_rucio\_database) | ../../modules/database-postgres | n/a |
 | <a name="module_secrets"></a> [secrets](#module\_secrets) | ../../modules/secrets | n/a |
 
 ## Resources
@@ -42,8 +43,10 @@ No resources.
 | ---- | ----------- |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | n/a |
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | n/a |
-| <a name="output_database_connection_name"></a> [database\_connection\_name](#output\_database\_connection\_name) | n/a |
-| <a name="output_database_private_ip"></a> [database\_private\_ip](#output\_database\_private\_ip) | n/a |
 | <a name="output_eso_service_account_email"></a> [eso\_service\_account\_email](#output\_eso\_service\_account\_email) | Annotate the ESO k8s ServiceAccount with iam.gke.io/gcp-service-account=<this> to complete the Workload Identity binding |
+| <a name="output_fts_database_connection_name"></a> [fts\_database\_connection\_name](#output\_fts\_database\_connection\_name) | n/a |
+| <a name="output_fts_database_private_ip"></a> [fts\_database\_private\_ip](#output\_fts\_database\_private\_ip) | n/a |
+| <a name="output_rucio_database_connection_name"></a> [rucio\_database\_connection\_name](#output\_rucio\_database\_connection\_name) | n/a |
+| <a name="output_rucio_database_private_ip"></a> [rucio\_database\_private\_ip](#output\_rucio\_database\_private\_ip) | n/a |
 | <a name="output_secret_ids"></a> [secret\_ids](#output\_secret\_ids) | n/a |
 <!-- END_TF_DOCS -->

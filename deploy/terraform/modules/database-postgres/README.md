@@ -18,12 +18,9 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
-| [google_sql_database.fts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database.rucio](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database_instance.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance) | resource |
-| [google_sql_user.fts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
 | [google_sql_user.rucio](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
-| [random_password.fts_db](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 | [random_password.rucio_db](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 
 ## Inputs
@@ -45,8 +42,6 @@ No modules.
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_connection_name"></a> [connection\_name](#output\_connection\_name) | Cloud SQL connection name (project:region:instance), useful for the Cloud SQL Auth Proxy if ever needed |
-| <a name="output_fts_db_name"></a> [fts\_db\_name](#output\_fts\_db\_name) | n/a |
-| <a name="output_fts_db_password"></a> [fts\_db\_password](#output\_fts\_db\_password) | n/a |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | Name of the Cloud SQL instance |
 | <a name="output_private_ip_address"></a> [private\_ip\_address](#output\_private\_ip\_address) | Private IP address of the Cloud SQL instance |
 | <a name="output_rucio_db_name"></a> [rucio\_db\_name](#output\_rucio\_db\_name) | n/a |
