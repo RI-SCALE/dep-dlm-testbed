@@ -35,14 +35,6 @@ module "kubernetes" {
   deletion_protection = var.deletion_protection
 }
 
-module "secrets" {
-  source = "../../modules/secrets"
-
-  project_id                = var.project_id
-  name_prefix               = local.name_prefix
-  eso_service_account_email = module.kubernetes.eso_service_account_email
-}
-
 module "rucio_database" {
   source = "../../modules/database-postgres"
 
@@ -63,4 +55,30 @@ module "fts_database" {
   network_id          = var.network_id
   deletion_protection = var.deletion_protection
   availability_type   = "ZONAL"
+}
+
+# Declared after rucio_database/fts_database — not load-bearing for
+# Terraform's own dependency graph (that's built from the module.*
+# references below regardless of block order in this file), but reads
+# more naturally now that secrets genuinely depends on both databases'
+# outputs, not just kubernetes'.
+module "secrets" {
+  source = "../../modules/secrets"
+
+  project_id                = var.project_id
+  name_prefix               = local.name_prefix
+  eso_service_account_email = module.kubernetes.eso_service_account_email
+
+  rucio_db_host     = module.rucio_database.private_ip_address
+  rucio_db_password = module.rucio_database.rucio_db_password
+  fts_db_host       = module.fts_database.private_ip_address
+  fts_db_password   = module.fts_database.fts_db_password
+
+  bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
+  oidc_issuer            = var.oidc_issuer
+  oidc_client_id         = var.oidc_client_id
+  oidc_client_secret     = var.oidc_client_secret
+  token_mode             = var.token_mode
+  # rucio_host, site_name, fts3rest_log_level left at modules/secrets'
+  # own defaults — override here only if staging needs to diverge.
 }

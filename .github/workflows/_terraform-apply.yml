@@ -11,11 +11,23 @@ on:
         description: "GitHub Environment to resolve vars from and gate apply behind (usually the same as tf_env)"
         required: true
         type: string
+      scope_profile:
+        description: "local | egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile (see verify-idp-token). Only OIDC_CLIENT_SECRET needs to travel as a real secret."
+        required: false
+        type: string
+        default: egi-dev
+    secrets:
+      OIDC_CLIENT_ID:
+        required: true
+      OIDC_CLIENT_SECRET:
+        required: true
 
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
+  SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
   fmt-check:
@@ -60,6 +72,9 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
+      - name: Generate certificates
+        run: make certs
+
       - name: make tf-init
         run: make tf-init
 
@@ -79,7 +94,12 @@ jobs:
   apply:
     name: apply
     needs: plan
-    if: github.event_name == 'workflow_dispatch'
+    # push re-added deliberately: staging's caller (terraform-staging.yml)
+    # is the only one with an `on: push:` trigger at all — production's
+    # caller only has workflow_dispatch, so this never fires push-triggered
+    # applies against production regardless of this condition living here
+    # in the shared workflow.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }} # GitHub Environment — add required reviewers here for a manual approval gate
     permissions:
@@ -106,6 +126,15 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate certificates
+        run: make certs
+
       - name: make tf-init
         run: make tf-init
 
@@ -121,3 +150,14 @@ jobs:
       # `terraform plan` would produce if state drifted in between.
       - name: make tf-apply
         run: make tf-apply AUTO_APPROVE=1
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: Install smoke test dependencies
+        run: |
+          pip install --break-system-packages \
+            pytest google-cloud-secret-manager
+
+      - name: make tf-smoke-test
+        run: make tf-smoke-test

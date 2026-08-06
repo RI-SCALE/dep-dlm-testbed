@@ -81,6 +81,61 @@ else
   export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
 endif
 
+# Derive OIDC_ISSUER/OIDC_CLIENT_ID from SCOPE_PROFILE for known profiles —
+# mirrors verify-idp-token's own case statement below, so CI/Terraform
+# only ever needs to carry the one value with no public, derivable
+# default: OIDC_CLIENT_SECRET. An explicit OIDC_ISSUER/OIDC_CLIENT_ID
+# (already set via env or command line) always wins — this only fills in
+# what's still empty.
+ifeq ($(OIDC_ISSUER),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_ISSUER := https://aai-dev.egi.eu/auth/realms/egi
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_ISSUER := https://login.aai.lifescience-ri.eu/oidc/
+  endif
+endif
+ifeq ($(OIDC_CLIENT_ID),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_CLIENT_ID := 699e9e29-29e8-4220-8863-5306d8a7feb8
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_CLIENT_ID := 4ff05c0b-1d83-42b7-a00a-8bd162df4165
+  endif
+endif
+
+# egi-dev's managed FTS token mode was found non-viable (see session
+# notes) — until the e2e tests get extended to check this properly
+# (separate branch/PR), default TOKEN_MODE to unmanaged specifically for
+# egi-dev so `make tf-apply SCOPE_PROFILE=egi-dev` alone doesn't silently
+# render a broken fts3config. origin==file means "still at the top-of-file
+# default, nobody overrode it" (origin==undefined would never match here,
+# since `TOKEN_MODE ?= managed` above already gave it origin "file") —
+# explicit TOKEN_MODE=... (command line or environment) always still wins.
+ifeq ($(origin TOKEN_MODE),file)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    TOKEN_MODE := unmanaged
+  endif
+endif
+
+# modules/secrets requires OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET.
+# OIDC_ISSUER/OIDC_CLIENT_ID are usually already filled in by the
+# SCOPE_PROFILE derivation above — this only fires for an unknown
+# SCOPE_PROFILE with no explicit override. OIDC_CLIENT_SECRET has no
+# derivable default (it's the one genuinely secret value) and always
+# needs this check. Fails loudly here rather than letting an empty
+# string silently pass through as TF_VAR_oidc_issuer="" — that would
+# make `terraform plan` "succeed" with broken rendered content instead
+# of failing clearly.
+define tf_require_oidc
+	@[ -n "$(OIDC_ISSUER)" ] && [ -n "$(OIDC_CLIENT_ID)" ] || \
+	  { echo "ERROR: OIDC_ISSUER/OIDC_CLIENT_ID couldn't be derived from SCOPE_PROFILE='$(SCOPE_PROFILE)'."; \
+	    echo "  make $@ SCOPE_PROFILE=egi-dev|ls-aai-dev OIDC_CLIENT_SECRET=..."; \
+	    echo "  or set OIDC_ISSUER/OIDC_CLIENT_ID explicitly for a profile not in the Makefile yet."; \
+	    exit 1; }
+	@[ -n "$(OIDC_CLIENT_SECRET)" ] || \
+	  { echo "ERROR: OIDC_CLIENT_SECRET must be set explicitly — no safe default exists."; \
+	    exit 1; }
+endef
+
 # Validation
 
 ifeq ($(filter $(TOKEN_MODE),managed unmanaged),)
@@ -349,6 +404,7 @@ tf-docs: ## Generate/update per-module Terraform reference docs (injected into e
 
 .PHONY: tf-plan
 tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
+	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
 	TF_VAR_project_id="$$GCP_PROJECT_ID" \
 	TF_VAR_region="$$GCP_REGION" \
@@ -356,10 +412,16 @@ tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
 	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
 .PHONY: tf-apply
 tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
+	$(call tf_require_oidc)
 	@if [ -f $(TF_DIR)/tfplan ]; then \
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
 	else \
@@ -370,11 +432,17 @@ tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans i
 	  TF_VAR_subnet_id="$$TF_SUBNET_ID" \
 	  TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	  TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	  TF_VAR_bootstrap_userpass_pwd="secret" \
+	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	  TF_VAR_token_mode="$(TOKEN_MODE)" \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG); \
 	fi
 
 .PHONY: tf-destroy
 tf-destroy: ## Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI, interactive otherwise.
+	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
 	TF_VAR_project_id="$$GCP_PROJECT_ID" \
 	TF_VAR_region="$$GCP_REGION" \
@@ -382,6 +450,11 @@ tf-destroy: ## Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager �
 	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 
 .PHONY: tf-output
@@ -393,6 +466,10 @@ tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + g
 	@$(TF_RESOLVE_ENV); \
 	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
 	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"
+
+.PHONY: tf-smoke-test
+tf-smoke-test: ## Run post-deploy smoke tests (secrets/DB/kubeconfig) against TF_ENV — run tf-kubeconfig first
+	TF_ENV=$(TF_ENV) pytest deploy/terraform/tests/test_deployed_infra.py -v
 
 ## Cleanup
 

@@ -28,3 +28,7 @@ jobs:
       tf_env: staging
       environment_name: staging
       confirm: ${{ inputs.confirm }}
+      scope_profile: egi-dev
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

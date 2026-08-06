@@ -22,10 +22,20 @@ output "rucio_database_private_ip" {
   value = module.rucio_database.private_ip_address
 }
 
+output "rucio_db_password" {
+  value     = module.rucio_database.rucio_db_password
+  sensitive = true
+}
+
 output "fts_database_connection_name" {
   value = module.fts_database.connection_name
 }
 
 output "fts_database_private_ip" {
   value = module.fts_database.private_ip_address
+}
+
+output "fts_db_password" {
+  value     = module.fts_database.fts_db_password
+  sensitive = true
 }

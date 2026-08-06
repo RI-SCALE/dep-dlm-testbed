@@ -20,3 +20,7 @@ jobs:
     with:
       tf_env: production
       environment_name: production
+      scope_profile: egi-dev
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
