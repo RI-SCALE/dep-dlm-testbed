@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars
+
+# org_id: `gcloud organizations list` — the ID column.
+org_id = "1234567890" # or use folder_id instead, not both
+
+# billing_account_id: `gcloud billing accounts list` — the ACCOUNT_ID
+# column (already dash-formatted, paste as-is).
+billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
+
+github_repo = "RI-SCALE/dep-dlm-testbed"
+
+# environments defaults to [staging (deletion_policy=DELETE, region=
+# europe-west3), production (deletion_policy=PREVENT, region=europe-west3)]
+# — override here only if you need a third environment, a different
+# region, or a different per-env deletion_policy. `region` is now the
+# single source of truth for that environment's networking AND its GKE
+# cluster's region — see variables.tf.

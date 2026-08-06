@@ -1,0 +1,33 @@
+name: Terraform apply (staging)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+      - '.github/workflows/_terraform-apply.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/terraform/**'
+      - '.github/workflows/terraform-staging.yml'
+      - '.github/workflows/_terraform-apply.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  pull-requests: write
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      scope_profile: egi-dev
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

@@ -1,0 +1,33 @@
+name: Terraform destroy (production)
+
+# Manual-only, on purpose. Kept as a fully separate file from
+# terraform-destroy-staging.yml specifically so the confirmation string,
+# trigger surface, and environment gate for production can never be
+# accidentally pointed at staging or vice versa.
+#
+# Does NOT delete the state bucket — that's bootstrap-level state now,
+# not environments/<env>'s; see deploy/terraform/README.md's Teardown
+# section for the (human-run) `gcloud projects delete` path.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "production" to confirm you want to destroy the production environment'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    uses: ./.github/workflows/_terraform-destroy.yml
+    with:
+      tf_env: production
+      environment_name: production
+      confirm: ${{ inputs.confirm }}
+      scope_profile: egi-dev
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

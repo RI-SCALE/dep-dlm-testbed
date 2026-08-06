@@ -1,0 +1,25 @@
+# Local .terraform directories
+**/.terraform/*
+
+# State files — remote state (GCS backend) is the source of truth;
+# nothing state-shaped should ever be committed
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Real variable files — only *.tfvars.example is checked in
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# CLI config files
+.terraformrc
+terraform.rc
+
+# Plan output files, if ever saved locally
+*.tfplan
+tfplan

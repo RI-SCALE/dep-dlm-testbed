@@ -1,0 +1,27 @@
+name: Terraform apply (production)
+
+# workflow_dispatch ONLY, deliberately — unlike staging, production never
+# runs plan/apply automatically off a push or PR. Every apply against
+# production is a deliberate, manually-triggered action, still gated
+# behind the "production" GitHub Environment's own reviewer requirements
+# on top of that.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  actions: write
+  pull-requests: write
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/_terraform-apply.yml
+    with:
+      tf_env: production
+      environment_name: production
+      scope_profile: egi-dev
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

@@ -143,10 +143,13 @@ dep-dlm-testbed
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
   SCOPE_PROFILE = local (local | <profile>)
+  TF_ENV = staging
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
 
+
+Help
   help                 Show this help (default target)
 
 Setup
@@ -167,7 +170,7 @@ Lifecycle
 
 GitOps
   argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
-  argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
+  argocd-uninstall     Uninstall ArgoCD applications and ArgoCDresources
   flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
   flux-uninstall       Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
 
@@ -180,6 +183,19 @@ Tests
   test-copernicus-transfers Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
+
+Terraform
+  tf-fmt               Auto-format Terraform files under deploy/terraform
+  tf-fmt-check         Check Terraform formatting under deploy/terraform
+  tf-init              Init Terraform for TF_ENV against its GCS state bucket (bucket auto-resolved from bootstrap output unless TF_STATE_BUCKET is already set)
+  tf-validate          Validate the TF_ENV config (run tf-init first)
+  tf-docs              Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
+  tf-plan              Plan Terraform changes for TF_ENV, savedto $(TF_DIR)/tfplan
+  tf-apply             Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
+  tf-destroy           Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI, interactive otherwise.
+  tf-output            Show Terraform outputs for TF_ENV
+  tf-kubeconfig        Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
+  tf-smoke-test        Run post-deploy smoke tests (secrets/DB/kubeconfig) against TF_ENV — run tf-kubeconfig first
 
 Cleanup
   clean                Remove generated certs and compose volumes (keeps CA)
