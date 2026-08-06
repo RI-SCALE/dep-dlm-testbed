@@ -150,6 +150,8 @@ jobs:
           terraform_version: "1.9.8"
 
       - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
 
       - uses: actions/setup-python@v5
         with:
