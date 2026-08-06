@@ -94,12 +94,6 @@ jobs:
   apply:
     name: apply
     needs: plan
-    # push re-added deliberately: staging's caller (terraform-staging.yml)
-    # is the only one with an `on: push:` trigger at all — production's
-    # caller only has workflow_dispatch, so this never fires push-triggered
-    # applies against production regardless of this condition living here
-    # in the shared workflow.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }} # GitHub Environment — add required reviewers here for a manual approval gate
     permissions:
