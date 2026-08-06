@@ -53,6 +53,7 @@ variable "terraform_ci_roles" {
   default = [
     "roles/container.admin",
     "roles/compute.networkUser",
+    "roles/compute.viewer",
     "roles/cloudsql.admin",
     "roles/secretmanager.admin",
     "roles/iam.serviceAccountAdmin",
