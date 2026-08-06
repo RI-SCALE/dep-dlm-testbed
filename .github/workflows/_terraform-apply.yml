@@ -59,6 +59,9 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+    outputs:
+      certs_artifact_id: ${{ steps.upload-certs.outputs.artifact-id }}
+      tfplan_artifact_id: ${{ steps.upload-tfplan.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
 
@@ -72,8 +75,28 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
+      # Generated ONCE, here, and shared with apply via artifact below —
+      # NOT re-run in the apply job. generate-certs.sh produces fresh,
+      # non-deterministic random key material every invocation; plan and
+      # apply are separate jobs on separate runners, so calling `make
+      # certs` independently in each produces DIFFERENT bytes, which
+      # breaks apply ("Provider produced inconsistent final plan") since
+      # certs.tf's file() calls re-evaluate at apply time. Same certs,
+      # byte-for-byte, in both jobs is the fix.
+      #
+      # retention-days: 1 (the platform minimum) is a backstop only —
+      # the "cleanup" job below deletes this explicitly, on success or
+      # failure, since it contains real private key material.
       - name: Generate certificates
         run: make certs
+
+      - name: Upload certs artifact
+        id: upload-certs
+        uses: actions/upload-artifact@v4
+        with:
+          name: certs-${{ inputs.tf_env }}
+          path: certs/
+          retention-days: 1
 
       - name: make tf-init
         run: make tf-init
@@ -84,12 +107,18 @@ jobs:
       - name: make tf-plan
         run: make tf-plan
 
+      # retention-days: 1 here too, same reasoning — a saved plan file's
+      # sensitive values are NOT redacted internally (sensitive = true
+      # only hides them from console output), so this holds real
+      # secrets (DB passwords, OIDC_CLIENT_SECRET) until "cleanup"
+      # deletes it explicitly.
       - name: Upload plan artifact
+        id: upload-tfplan
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ inputs.tf_env }}
           path: deploy/terraform/environments/${{ inputs.tf_env }}/tfplan
-          retention-days: 5
+          retention-days: 1
 
   apply:
     name: apply
@@ -126,8 +155,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate certificates
-        run: make certs
+      # Downloaded, not regenerated — must be byte-identical to what
+      # `plan` used, see that job's comment.
+      - name: Download certs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: certs-${{ inputs.tf_env }}
+          path: certs/
 
       - name: make tf-init
         run: make tf-init
@@ -155,3 +189,27 @@ jobs:
 
       - name: make tf-smoke-test
         run: make tf-smoke-test
+
+  cleanup:
+    name: delete sensitive artifacts
+    needs: [plan, apply]
+    if: always() # run whether plan/apply succeeded, failed, or apply was skipped
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # required to delete artifacts via the REST API
+    steps:
+      - name: Delete certs artifact
+        if: needs.plan.outputs.certs_artifact_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X DELETE \
+            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.certs_artifact_id }}"
+
+      - name: Delete plan artifact
+        if: needs.plan.outputs.tfplan_artifact_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X DELETE \
+            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.tfplan_artifact_id }}"
