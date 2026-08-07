@@ -23,6 +23,7 @@ and works identically whether this is run locally or in CI.
 import json
 import os
 import subprocess
+import time
 
 import pytest
 from google.cloud import secretmanager
@@ -60,6 +61,9 @@ def secret_client():
 
 
 # --- secrets -----------------------------------------------------------
+# Deliberately NOT retried — a missing key or empty value is a real,
+# deterministic bug, not transient flakiness. Retrying would just delay
+# reporting it.
 
 
 @pytest.mark.parametrize("secret_name", EXPECTED_KEYS.keys())
@@ -83,9 +87,17 @@ def test_rucio_cfg_points_at_rucio_database(tf_outputs, secret_client):
 
 
 # --- database connectivity (via kubectl, see module docstring) -----------
+# Retried, unlike the checks above. These depend on external factors that
+# have nothing to do with deployment correctness: Docker Hub's anonymous
+# pull rate limiting on postgres:16/mysql:8 (a known, common source of
+# exactly this kind of intermittent CI failure) and rare scheduling
+# hiccups beyond what the wait timeout already covers.
+
+DB_CHECK_RETRIES = 1  # 1 retry = 2 total attempts, kept small deliberately —
+DB_CHECK_BACKOFF_S = 15  # this isn't meant to paper over a real, persistent failure
 
 
-def _run_db_check_pod(pod_name, image, *cmd_args):
+def _run_db_check_pod_once(pod_name, image, *cmd_args):
     # Clear any stale pod from a previous run whose cleanup didn't
     # complete — `kubectl run` fails outright if the name already exists.
     subprocess.run(
@@ -115,7 +127,7 @@ def _run_db_check_pod(pod_name, image, *cmd_args):
                 "wait",
                 "--for=jsonpath={.status.phase}=Succeeded",
                 f"pod/{pod_name}",
-                "--timeout=60s",
+                "--timeout=150s",
             ],
             capture_output=True,
             text=True,
@@ -132,6 +144,18 @@ def _run_db_check_pod(pod_name, image, *cmd_args):
             ["kubectl", "delete", "pod", pod_name, "--ignore-not-found"],
             capture_output=True,
         )
+
+
+def _run_db_check_pod(pod_name, image, *cmd_args):
+    last_error = None
+    for attempt in range(1, DB_CHECK_RETRIES + 2):
+        try:
+            return _run_db_check_pod_once(pod_name, image, *cmd_args)
+        except AssertionError as e:
+            last_error = e
+            if attempt <= DB_CHECK_RETRIES:
+                time.sleep(DB_CHECK_BACKOFF_S)
+    raise last_error
 
 
 def test_rucio_database_connection(tf_outputs):
