@@ -389,6 +389,14 @@ tf-init: ## Init Terraform for TF_ENV against its GCS state bucket (bucket auto-
 tf-validate: ## Validate the TF_ENV config (run tf-init first)
 	$(TERRAFORM) validate -no-color
 
+.PHONY: tf-lint
+tf-lint: ## Lint every Terraform ROOT module with tflint
+	@command -v tflint >/dev/null 2>&1 || { echo "tflint not found — check .devcontainer/devcontainer.json's terraform Feature has tflint pinned, not 'none', then rebuild the container"; exit 1; }
+	@for dir in deploy/terraform/bootstrap deploy/terraform/environments/staging deploy/terraform/environments/production; do \
+	  echo "Linting $$dir"; \
+	  ( cd "$$dir" && tflint --init >/dev/null 2>&1; tflint --config="$(CURDIR)/.tflint.hcl" ) || exit 1; \
+	done
+
 .PHONY: tf-docs
 tf-docs: ## Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
 	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }

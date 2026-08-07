@@ -42,8 +42,13 @@ repos:
     hooks:
       - id: tf-fmt-check
         name: terraform fmt (check only)
-        description: Same check as CI's `make tf-fmt-check` — wraps the target directly so pre-commit and CI can never drift apart.
         entry: make tf-fmt-check
+        language: system
+        files: \.tf$
+        pass_filenames: false
+      - id: tf-lint
+        name: terraform lint
+        entry: make tf-lint
         language: system
         files: \.tf$
         pass_filenames: false

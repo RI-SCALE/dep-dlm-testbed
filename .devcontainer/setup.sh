@@ -133,58 +133,6 @@ install_gcloud() {
     echo -e "${YELLOW}Run 'gcloud init' manually to authenticate — this is interactive (browser sign-in) and intentionally not automated here.${NC}\n"
 }
 
-install_terraform() {
-    echo -e "${BLUE}Installing Terraform...${NC}"
-
-    if command -v terraform > /dev/null 2>&1; then
-        echo -e "${GREEN}terraform already installed: $(terraform version | head -1)${NC}\n"
-        return 0
-    fi
-
-    apt-get update -qq
-    apt-get install -y -qq wget gnupg lsb-release
-
-    wget -qO - https://apt.releases.hashicorp.com/gpg \
-        | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
-        > /etc/apt/sources.list.d/hashicorp.list
-
-    apt-get update -qq
-    apt-get install -y -qq terraform
-
-    if ! command -v terraform > /dev/null 2>&1; then
-        echo -e "${RED}terraform install failed — check the apt output above${NC}"
-        return 1
-    fi
-
-    echo -e "${GREEN}terraform: $(terraform version | head -1)${NC}\n"
-}
-
-install_terraform_docs() {
-    echo -e "${BLUE}Installing terraform-docs...${NC}"
-
-    if command -v terraform-docs > /dev/null 2>&1; then
-        echo -e "${GREEN}terraform-docs already installed: $(terraform-docs --version)${NC}\n"
-        return 0
-    fi
-
-    local TFDOCS_VERSION="v0.24.0"
-    curl -Lo ./terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname)-amd64.tar.gz
-    mv terraform-docs.tar.gz /tmp/terraform-docs.tar.gz
-    tar -xzf /tmp/terraform-docs.tar.gz -C /tmp terraform-docs
-    chmod +x /tmp/terraform-docs
-    mv /tmp/terraform-docs /usr/local/bin/terraform-docs
-    rm -f /tmp/terraform-docs.tar.gz
-
-    if ! command -v terraform-docs > /dev/null 2>&1; then
-        echo -e "${RED}terraform-docs install failed — check the curl/tar output above${NC}"
-        return 1
-    fi
-
-    echo -e "${GREEN}terraform-docs: $(terraform-docs --version)${NC}\n"
-}
-
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -205,6 +153,4 @@ install_yq
 install_rucio_gfal
 install_diagrams
 install_gcloud
-install_terraform
-install_terraform_docs
 print_summary

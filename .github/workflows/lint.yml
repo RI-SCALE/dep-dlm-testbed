@@ -18,6 +18,9 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.15.8"
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: "v0.64.0"
       - name: Install pre-commit
         run: pip install pre-commit
       - name: Run pre-commit hooks

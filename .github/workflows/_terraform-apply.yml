@@ -30,21 +30,8 @@ env:
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  fmt-check:
-    name: fmt check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: make tf-fmt-check
-        run: make tf-fmt-check
-
   plan:
     name: plan
-    needs: fmt-check
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
