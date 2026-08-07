@@ -37,7 +37,7 @@ variable "availability_type" {
 }
 
 variable "point_in_time_recovery" {
-  description = "Enable PITR (requires ZONAL or REGIONAL with binary logging support)"
+  description = "Enable binary logging for MySQL point-in-time recovery, when availability_type = ZONAL. Ignored when availability_type = REGIONAL — binary logging is forced on there regardless, since GCP requires it for MySQL HA and rejects instance creation without it."
   type        = bool
   default     = false
 }
