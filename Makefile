@@ -161,7 +161,7 @@ endif
 ## Help
 
 .PHONY: help
-help: ## Show this help (default target)
+help: ## Show this help
 	@echo ''
 	@echo 'dep-dlm-testbed'
 	@echo ''
@@ -183,11 +183,11 @@ help: ## Show this help (default target)
 ## Setup
 
 .PHONY: certs
-certs: ## Generate certificates (CA, host certs)
+certs: ## Generate CA and host certificates
 	./shared/scripts/generate-certs.sh
 
 .PHONY: init
-init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
+init: ## Init testbed accounts, RSEs, OIDC seed
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
@@ -196,7 +196,7 @@ init: ## Initialize the testbed (accounts, RSEs, OIDC seed)
 ## IdP token verification
 
 .PHONY: verify-idp-token
-verify-idp-token: ## Verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires OIDC_CLIENT_SECRET.
+verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
 	@case "$(SCOPE_PROFILE)" in \
 	  egi-dev) \
 	    shared/scripts/verify-idp-token.sh \
@@ -228,7 +228,7 @@ else
 endif
 
 .PHONY: stop
-stop: ## Stop the stack and remove volumes / PVCs
+stop: ## Stop the stack, remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) down -v
 else
@@ -241,7 +241,7 @@ endif
 restart: stop start ## Tear down and start again
 
 .PHONY: rebuild
-rebuild: ## Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
+rebuild: ## Rebuild services (SERVICES="fts teapot")
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build  $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
@@ -250,7 +250,7 @@ else
 endif
 
 .PHONY: rebuild-clean
-rebuild-clean: ## Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
+rebuild-clean: ## Rebuild from scratch, no cache
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build --no-cache $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
@@ -267,7 +267,7 @@ else
 endif
 
 .PHONY: logs
-logs: ## Tail logs (all services, or pass SERVICES="..." for a subset)
+logs: ## Tail logs (SERVICES="..." for a subset)
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) logs --tail=100 $(SERVICES)
 else
@@ -278,14 +278,14 @@ endif
 ## GitOps
 
 .PHONY: argocd-install
-argocd-install: ## Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
+argocd-install: ## Install ArgoCD, bootstrap GITOPS_ENV
 	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
 .PHONY: argocd-uninstall
-argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
+argocd-uninstall: ## Remove ArgoCD apps and resources
 	# 1. Delete the app-of-apps roots first (stops selfHeal recreating).
 	kubectl -n $(ARGOCD_NAMESPACE) delete application dep-dlm-$(GITOPS_ENV)-apps dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
 	# 2. Delete component apps but KEEP external-secrets so it can clear finalizers.
@@ -306,14 +306,14 @@ argocd-uninstall: ## Uninstall ArgoCD applications and ArgoCD resources
 	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
 
 .PHONY: flux-install
-flux-install: ## Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
+flux-install: ## Install Flux, bootstrap GITOPS_ENV
 	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
 
 .PHONY: flux-uninstall
-flux-uninstall: ## Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
+flux-uninstall: ## Remove Flux Kustomizations and controllers
 	# 1. Suspend + delete the entrypoint Kustomizations (stops Flux re-reconciling).
 	#    Reverse order: components -> secrets -> eso.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV) --ignore-not-found --wait=false
@@ -349,11 +349,11 @@ helm-template: ## Render manifests without installing
 
 ## Tests
 
-test-rucio-transfers: ## Rucio E2E TPC transfer test
+test-rucio-transfers: ## Rucio E2E transfer test
 	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
-test-copernicus-transfers: ## Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
+test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) \
 		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
@@ -372,25 +372,25 @@ probe-teapot: ## Teapot WebDAV probe with OIDC tokens
 
 ## Terraform
 
-tf-fmt: ## Auto-format Terraform files under deploy/terraform
+tf-fmt: ## Format Terraform files
 	terraform fmt -recursive -no-color deploy/terraform
 
-tf-fmt-check: ## Check Terraform formatting under deploy/terraform
+tf-fmt-check: ## Check Terraform formatting
 	terraform fmt -check -recursive -no-color deploy/terraform
 
 .PHONY: tf-init
-tf-init: ## Init Terraform for TF_ENV against its GCS state bucket (bucket auto-resolved from bootstrap output unless TF_STATE_BUCKET is already set)
+tf-init: ## Init Terraform for TF_ENV (bucket resolved from bootstrap output)
 	@$(TF_RESOLVE_ENV); \
 	$(TERRAFORM) init \
 	  -backend-config="bucket=$$TF_STATE_BUCKET" \
 	  -backend-config="prefix=$(TF_STATE_PREFIX)"
 
 .PHONY: tf-validate
-tf-validate: ## Validate the TF_ENV config (run tf-init first)
+tf-validate: ## Validate TF_ENV config (run tf-init first)
 	$(TERRAFORM) validate -no-color
 
 .PHONY: tf-lint
-tf-lint: ## Lint every Terraform ROOT module with tflint
+tf-lint: ## Lint every Terraform root module
 	@command -v tflint >/dev/null 2>&1 || { echo "tflint not found — check .devcontainer/devcontainer.json's terraform Feature has tflint pinned, not 'none', then rebuild the container"; exit 1; }
 	@for dir in deploy/terraform/bootstrap deploy/terraform/environments/staging deploy/terraform/environments/production; do \
 	  echo "Linting $$dir"; \
@@ -398,7 +398,7 @@ tf-lint: ## Lint every Terraform ROOT module with tflint
 	done
 
 .PHONY: tf-docs
-tf-docs: ## Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
+tf-docs: ## Generate Terraform reference docs. Needs terraform-docs.
 	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }
 	@for dir in bootstrap environments/staging environments/production \
 	            modules/networking modules/kubernetes modules/database-postgres \
@@ -411,7 +411,7 @@ tf-docs: ## Generate/update per-module Terraform reference docs (injected into e
 	@echo "Terraform reference docs injected into each module/root's own README.md"
 
 .PHONY: tf-plan
-tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
+tf-plan: ## Plan Terraform changes for TF_ENV
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
 	TF_VAR_project_id="$$GCP_PROJECT_ID" \
@@ -428,7 +428,7 @@ tf-plan: ## Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
 .PHONY: tf-apply
-tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
+tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
 	@if [ -f $(TF_DIR)/tfplan ]; then \
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
@@ -449,7 +449,7 @@ tf-apply: ## Apply TF_ENV — uses a saved tf-plan if present, otherwise plans i
 	fi
 
 .PHONY: tf-destroy
-tf-destroy: ## Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI, interactive otherwise.
+tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
 	TF_VAR_project_id="$$GCP_PROJECT_ID" \
@@ -470,19 +470,19 @@ tf-output: ## Show Terraform outputs for TF_ENV
 	$(TERRAFORM) output
 
 .PHONY: tf-kubeconfig
-tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
+tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 	@$(TF_RESOLVE_ENV); \
 	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
 	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"
 
 .PHONY: tf-smoke-test
-tf-smoke-test: ## Run post-deploy smoke tests (secrets/DB/kubeconfig) against TF_ENV — run tf-kubeconfig first
+tf-smoke-test: ## Run smoke tests against TF_ENV. Run tf-kubeconfig first.
 	TF_ENV=$(TF_ENV) pytest deploy/terraform/tests/test_deployed_infra.py -v
 
 ## Cleanup
 
 .PHONY: clean
-clean: ## Remove generated certs, compose volumes, Terraform artifacts, Python caches, and Helm chart deps (keeps CA/tls_ca_bundle.pem, .terraform.lock.hcl, envs/*.env)
+clean: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \

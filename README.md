@@ -138,11 +138,11 @@ make test-rucio-transfers
 dep-dlm-testbed
 
   RUNTIME    = compose    (compose | k8s)
-  TOKEN_MODE = managed (managed | unmanaged)
+  TOKEN_MODE = unmanaged (managed | unmanaged)
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
-  SCOPE_PROFILE = local (local | <profile>)
+  SCOPE_PROFILE = egi-dev (local | <profile>)
   TF_ENV = staging
 
 Usage:
@@ -150,56 +150,56 @@ Usage:
 
 
 Help
-  help                 Show this help (default target)
+  help                 Show this help
 
 Setup
-  certs                Generate certificates (CA, host certs)
-  init                 Initialize the testbed (accounts, RSEs, OIDC seed)
+  certs                Generate CA and host certificates
+  init                 Init testbed accounts, RSEs, OIDC seed
 
 IdP token verification
-  verify-idp-token     Verify client_credentials/resource=/token-exchange for SCOPE_PROFILE (egi-dev|lsaai-dev). Requires OIDC_CLIENT_SECRET.
+  verify-idp-token     Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
 
 Lifecycle
   start                Start the stack
-  stop                 Stop the stack and remove volumes / PVCs
+  stop                 Stop the stack, remove volumes / PVCs
   restart              Tear down and start again
-  rebuild              Rebuild one or more services: make rebuild SERVICES="fts teapot"  (compose: rebuild image; k8s: helm upgrade)
-  rebuild-clean        Rebuild from scratch (no cache) — use when a forked git dependency (davix/gfal2/fts) moved
+  rebuild              Rebuild services (SERVICES="fts teapot")
+  rebuild-clean        Rebuild from scratch, no cache
   ps                   Show running services / pods
-  logs                 Tail logs (all services, or pass SERVICES="..." for a subset)
+  logs                 Tail logs (SERVICES="..." for a subset)
 
 GitOps
-  argocd-install       Install ArgoCD + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
-  argocd-uninstall     Uninstall ArgoCD applications and ArgoCD resources
-  flux-install         Install Flux + bootstrap the chosen env (GITOPS_ENV=sandbox|staging|production, TOKEN_MODE=managed|unmanaged, SCOPE_PROFILE=local|<profile>)
-  flux-uninstall       Uninstall Flux Kustomizations, Flux resources (GitRepository) and Flux controllers
+  argocd-install       Install ArgoCD, bootstrap GITOPS_ENV
+  argocd-uninstall     Remove ArgoCD apps and resources
+  flux-install         Install Flux, bootstrap GITOPS_ENV
+  flux-uninstall       Remove Flux Kustomizations and controllers
 
 Helm-only
   helm-lint            Lint the umbrella chart
   helm-template        Render manifests without installing
 
 Tests
-  test-rucio-transfers Rucio E2E TPC transfer test
-  test-copernicus-transfers Rucio E2E TPC transfer test with Copernicus Sentinel data (WebDAV + OIDC)
+  test-rucio-transfers Rucio E2E transfer test
+  test-copernicus-transfers Rucio E2E transfer test with Copernicus data
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
 
 Terraform
-  tf-fmt               Auto-format Terraform files under deploy/terraform
-  tf-fmt-check         Check Terraform formatting under deploy/terraform
-  tf-init              Init Terraform for TF_ENV against its GCS state bucket (bucket auto-resolved from bootstrap output unless TF_STATE_BUCKET is already set)
-  tf-validate          Validate the TF_ENV config (run tf-init first)
-  tf-lint              Lint every Terraform ROOT module with tflint
-  tf-docs              Generate/update per-module Terraform reference docs (injected into each directory's own README.md) — requires terraform-docs
-  tf-plan              Plan Terraform changes for TF_ENV, saved to $(TF_DIR)/tfplan
-  tf-apply             Apply TF_ENV — uses a saved tf-plan if present, otherwise plans inline. AUTO_APPROVE=1 for CI.
-  tf-destroy           Destroy TF_ENV's infrastructure (GKE, Cloud SQL, Secret Manager — networking untouched, it's bootstrap-owned). AUTO_APPROVE=1 for CI,interactive otherwise.
+  tf-fmt               Format Terraform files
+  tf-fmt-check         Check Terraform formatting
+  tf-init              Init Terraform for TF_ENV (bucket resolved from bootstrap output)
+  tf-validate          Validate TF_ENV config (run tf-init first)
+  tf-lint              Lint every Terraform root module
+  tf-docs              Generate Terraform reference docs. Needs terraform-docs.
+  tf-plan              Plan Terraform changes for TF_ENV
+  tf-apply             Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
+  tf-destroy           Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). AUTO_APPROVE=1 for CI.
   tf-output            Show Terraform outputs for TF_ENV
-  tf-kubeconfig        Fetch kubectl credentials for TF_ENV's GKE cluster (gcloud + gke-gcloud-auth-plugin required)
-  tf-smoke-test        Run post-deploy smoke tests (secrets/DB/kubeconfig) against TF_ENV — run tf-kubeconfig first
+  tf-kubeconfig        Fetch kubectl credentials for TF_ENV's cluster
+  tf-smoke-test        Run smoke tests against TF_ENV. Run tf-kubeconfig first.
 
 Cleanup
-  clean                Remove generated certs and compose volumes (keeps CA)
+  clean                Remove certs, volumes, Terraform/Python/Helm artifacts
 ```
 
 ## Documentation
