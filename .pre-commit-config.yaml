@@ -37,3 +37,13 @@ repos:
       - id: shellcheck
         files: ^shared/scripts/.*\.sh$
         exclude: ^shared/scripts/fts/wait-for-it\.sh$
+
+  - repo: local
+    hooks:
+      - id: tf-fmt-check
+        name: terraform fmt (check only)
+        description: Same check as CI's `make tf-fmt-check` — wraps the target directly so pre-commit and CI can never drift apart.
+        entry: make tf-fmt-check
+        language: system
+        files: \.tf$
+        pass_filenames: false
