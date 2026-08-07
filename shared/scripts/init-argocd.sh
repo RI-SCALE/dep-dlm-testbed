@@ -82,6 +82,29 @@ if [[ "$APPLY_FILE" != "$APP_OF_APPS" ]]; then
   warn "merge to your default branch so HEAD resolves."
 fi
 
+# --- 3b. Render + apply the environment's ClusterSecretStore, if templated.
+# Sandbox's store is a plain, static file (no .tmpl) — nothing to do here
+# for it. staging/production's stores need projectID/region/cluster name,
+# which are dynamic (bootstrap-generated), so they're rendered via envsubst
+# and applied directly here rather than through ArgoCD's own reconciliation
+# — ArgoCD syncs straight from git with no render step, so a .tmpl file
+# committed as-is would get applied with literal, unexpanded ${VAR} text.
+# Same pattern as seed-vault.sh's own templated manifest: idempotent,
+# safe to re-run, not continuously reconciled.
+STORE_TMPL="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml.tmpl"
+if [[ -f "$STORE_TMPL" ]]; then
+  require_cmd envsubst
+  log "Rendering + applying ClusterSecretStore for ${GITOPS_ENV}"
+  TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
+  GCP_PROJECT_ID="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
+  GCP_REGION="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
+  GCP_CLUSTER_NAME="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
+  # shellcheck disable=SC2016
+  GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" \
+    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME}' < "$STORE_TMPL" \
+    | kubectl apply -n "$APP_NS" -f -
+fi
+
 # --- 4. Apply the apps root (the ApplicationSet)
 log "Applying apps root (dep-dlm-${GITOPS_ENV}-apps)"
 kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-apps")' "$APPLY_FILE")

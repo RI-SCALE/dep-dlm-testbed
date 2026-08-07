@@ -292,7 +292,7 @@ argocd-uninstall: ## Remove ArgoCD apps and resources
 	kubectl -n $(ARGOCD_NAMESPACE) delete applications -l '!keep' --field-selector metadata.name!=external-secrets --ignore-not-found --wait=false || \
 	  kubectl -n $(ARGOCD_NAMESPACE) delete application vault ruciodb rucio-server rucio-daemons rucio-bootstrap keycloak xrootd teapot fts --ignore-not-found --wait=false
 	# 3. Clear ESO-managed resources while ESO is still alive.
-	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
+	-kubectl delete clustersecretstore dep-dlm-secrets --ignore-not-found
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 4. Now the namespace can finalize. NOTE: vault-seed-once and
@@ -319,7 +319,7 @@ flux-uninstall: ## Remove Flux Kustomizations and controllers
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV) --ignore-not-found --wait=false
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
 	# 2. Clear ESO-managed resources WHILE ESO is still alive (avoids finalizer deadlock).
-	-kubectl delete clustersecretstore dep-dlm-vault --ignore-not-found
+	-kubectl delete clustersecretstore dep-dlm-secrets --ignore-not-found
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 3. Now the workload namespace can finalize. NOTE: vault-seed-once and

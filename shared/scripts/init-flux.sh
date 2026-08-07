@@ -87,6 +87,30 @@ log "Applying GitRepository source"
 kubectl apply -f "$APPLY_GITREPO"
 [[ "$APPLY_GITREPO" != "$GITREPO" ]] && rm -f "$APPLY_GITREPO"
 
+# --- 3b. Render + apply the environment's ClusterSecretStore, if templated.
+# Sandbox's store is a plain, static file (no .tmpl) — nothing to do here
+# for it. staging/production's stores need projectID/region/cluster name,
+# which are dynamic (bootstrap-generated), so they're rendered via envsubst
+# and applied directly here rather than through Flux's own reconciliation.
+# Flux applies the full entrypoint in one shot (step 4) and lets its own
+# dependsOn/wait graph handle ordering from there — but nothing in that
+# graph can render a templated manifest, so the store needs to already
+# exist in the cluster before that apply, not be part of it. Same pattern
+# as seed-vault.sh's own templated manifest: idempotent, safe to re-run.
+STORE_TMPL="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml.tmpl"
+if [[ -f "$STORE_TMPL" ]]; then
+  require_cmd envsubst
+  log "Rendering + applying ClusterSecretStore for ${GITOPS_ENV}"
+  TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
+  GCP_PROJECT_ID="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
+  GCP_REGION="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
+  GCP_CLUSTER_NAME="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
+  # shellcheck disable=SC2016
+  GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" \
+    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME}' < "$STORE_TMPL" \
+    | kubectl apply -n "$APP_NS" -f -
+fi
+
 # --- 4. Apply the FULL entrypoint in one shot
 log "Applying ${GITOPS_ENV} entrypoint (eso + core + secrets + components)"
 kubectl apply -f "$ENTRYPOINT"
