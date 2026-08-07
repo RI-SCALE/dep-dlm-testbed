@@ -482,12 +482,20 @@ tf-smoke-test: ## Run post-deploy smoke tests (secrets/DB/kubeconfig) against TF
 ## Cleanup
 
 .PHONY: clean
-clean: ## Remove generated certs and compose volumes (keeps CA)
+clean: ## Remove generated certs, compose volumes, Terraform artifacts, Python caches, and Helm chart deps (keeps CA/tls_ca_bundle.pem, .terraform.lock.hcl, envs/*.env)
 	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \
-	    \( -name '*.pem' -o -name '*.namespaces' -o -name '*.signing_policy' \
-	     -o -name '*.csr' -o -name '*.r0' -o -name '*.0' \) \
+	    ! -name 'tls_ca_bundle.pem' \
+	    \( -name '*.pem' -o -name '*.key' -o -name '*.namespaces' -o -name '*.signing_policy' \
+	     -o -name '*.csr' -o -name '*.srl' -o -name '*.r0' -o -name '*.0' \) \
 	    -delete 2>/dev/null || true
-	@echo "Cleaned certs (preserved rucio_ca.pem and rucio_ca.key.pem) and volumes"
+	@for dir in deploy/terraform/bootstrap deploy/terraform/environments/staging deploy/terraform/environments/production; do \
+	  rm -rf "$$dir/.terraform" "$$dir/tfplan" "$$dir"/crash.log; \
+	done
+	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -exec rm -rf {} + 2>/dev/null || true
+	@find deploy/helm-charts -type f -name '*.tgz' -delete 2>/dev/null || true
+	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem), compose volumes,"
+	@echo ".terraform/tfplan/crash.log (preserved .terraform.lock.hcl), __pycache__/.pytest_cache, and Helm chart .tgz deps"
+	@echo "(NOT touched: envs/*.env — this holds real configured credentials, not regenerable artifacts)"
