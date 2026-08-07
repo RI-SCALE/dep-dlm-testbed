@@ -34,7 +34,7 @@ No modules.
 | <a name="input_availability_type"></a> [availability\_type](#input\_availability\_type) | ZONAL for cost-efficient staging; REGIONAL for production HA | `string` | `"ZONAL"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Set false for ephemeral/test environments so terraform destroy can remove the instance without a manual override | `bool` | `false` | no |
 | <a name="input_mysql_version"></a> [mysql\_version](#input\_mysql\_version) | Cloud SQL MySQL version | `string` | `"MYSQL_8_0"` | no |
-| <a name="input_point_in_time_recovery"></a> [point\_in\_time\_recovery](#input\_point\_in\_time\_recovery) | Enable PITR (requires ZONAL or REGIONAL with binary logging support) | `bool` | `false` | no |
+| <a name="input_point_in_time_recovery"></a> [point\_in\_time\_recovery](#input\_point\_in\_time\_recovery) | Enable binary logging for MySQL point-in-time recovery, when availability\_type = ZONAL. Ignored when availability\_type = REGIONAL — binary logging is forced on there regardless, since GCP requires it for MySQL HA and rejects instance creation without it. | `bool` | `false` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | Cloud SQL machine tier. Small default suits a staging/test-cadence workload; size up for anything closer to production load. | `string` | `"db-custom-2-7680"` | no |
 
 ## Outputs
