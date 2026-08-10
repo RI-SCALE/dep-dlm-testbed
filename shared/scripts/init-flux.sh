@@ -116,6 +116,19 @@ fi
 log "Applying ${GITOPS_ENV} entrypoint (eso + core + secrets + components)"
 kubectl apply -f "$ENTRYPOINT"
 
+# --- 4b. APPLY the rendered ClusterSecretStore, gated on the ESO CRD
+# actually existing.
+if [[ -n "$RENDERED_STORE" ]]; then
+  log "Waiting for the ClusterSecretStore CRD to be registered (up to ${CORE_WAIT_TIMEOUT})"
+  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+    "until kubectl get crd clustersecretstores.external-secrets.io >/dev/null 2>&1; do sleep 5; done"
+  then
+    die "clustersecretstores.external-secrets.io CRD never appeared within ${CORE_WAIT_TIMEOUT} — check the external-secrets Application/HelmRelease: 'kubectl -n ${ARGOCD_NAMESPACE} get application external-secrets-${GITOPS_ENV}'. Rendered manifest left at ${RENDERED_STORE} for inspection."
+  fi
+  log "Applying ClusterSecretStore for ${GITOPS_ENV}"
+  kubectl apply -n "$APP_NS" -f "$RENDERED_STORE"
+fi
+
 # --- 5. Wait for the core Kustomization — the real gate for seeding
 if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
   log "Waiting for Kustomization/${CORE_KS} to be Ready (up to ${CORE_WAIT_TIMEOUT})"

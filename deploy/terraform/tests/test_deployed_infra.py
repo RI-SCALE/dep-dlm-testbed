@@ -40,7 +40,7 @@ TF_DIR = f"deploy/terraform/environments/{TF_ENV}"
 EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
     "configs": {"fts3config", "fts3restconfig"},
-    "rucio": {"rucio.cfg", "idpsecrets.json"},
+    "rucio": {"server.cfg", "idpsecrets.json"},
 }
 
 
@@ -83,7 +83,7 @@ def test_rucio_cfg_points_at_rucio_database(tf_outputs, secret_client):
     secret_id = tf_outputs["secret_ids"]["rucio"]
     version = secret_client.access_secret_version(name=f"{secret_id}/versions/latest")
     data = json.loads(version.payload.data.decode("utf-8"))
-    assert tf_outputs["rucio_database_private_ip"] in data["rucio.cfg"]
+    assert tf_outputs["rucio_database_private_ip"] in data["server.cfg"]
 
 
 # --- database connectivity (via kubectl, see module docstring) -----------

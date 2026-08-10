@@ -4,7 +4,7 @@ Deploy the DEP DLM data orchestration layer via Argo CD or Flux. Design and
 rationale live in `docs/gitops-blueprint.md`; this is the operational entry point.
 
 ## Layout
-- `base/` — shared architecture: ExternalSecrets, per-component values
+- `base/` — shared architecture: per-component values
 - `environments/<env>/secrets/` — per-env ClusterSecretStore + ExternalSecrets
 - `argocd/` — per-env ApplicationSet + app-of-apps entrypoints
 - `flux/` — HelmReleases, sources, ESO, staged entrypoints
