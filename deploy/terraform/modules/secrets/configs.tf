@@ -11,5 +11,6 @@ resource "google_secret_manager_secret_version" "configs" {
     "fts3restconfig" = templatefile("${path.module}/templates/fts3rest.conf.tftpl", {
       log_level = var.fts3rest_log_level
     })
+    "gfal2_http_plugin.conf" = file("${path.module}/../../../../shared/config/fts/gfal2_http_plugin.conf")
   })
 }

@@ -2,7 +2,15 @@
 # database. Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg)
 # and the script (testbed-scripts-rucio).
 #
-# DB_HOST is substituted by run-bootstrap-db.sh via envsubst, not static —
+# DB_HOST (the container's runtime env var) is set from RENDER_DB_HOST,
+# which run-bootstrap-db.sh substitutes via envsubst — deliberately a
+# different name than the bash script's own ${DB_HOST} references below,
+# not the same name "escaped": GNU envsubst has no $$ escape mechanism
+# (unlike Flux's postBuild.substituteFrom, a different tool) — it matches
+# the literal substring ${DB_HOST} wherever it appears, including inside
+# an attempted $${DB_HOST} escape, substituting it and leaving a stray $
+# behind. Two distinct names sidesteps the collision entirely rather than
+# working around it.
 # sandbox passes the in-cluster Service name (ruciodb, unchanged
 # behavior); staging/production pass the real Cloud SQL private IP
 # (dynamic, Terraform-generated, can't be a committed value).
@@ -25,15 +33,15 @@ spec:
             - |
               set -e
               for i in $(seq 1 30); do
-                if python3 -c "import socket; socket.create_connection(('$${DB_HOST}', 5432), timeout=2).close()" 2>/dev/null; then
-                  echo "  $${DB_HOST} reachable"; break
+                if python3 -c "import socket; socket.create_connection(('${DB_HOST}', 5432), timeout=2).close()" 2>/dev/null; then
+                  echo "  ${DB_HOST} reachable"; break
                 fi
-                echo "  [$i] waiting for $${DB_HOST}..."; sleep 5
+                echo "  [$i] waiting for ${DB_HOST}..."; sleep 5
               done
               python3 /scripts/bootstrap-db.py
           env:
             - name: DB_HOST
-              value: "${DB_HOST}"
+              value: "${RENDER_DB_HOST}"
           volumeMounts:
             - { name: rucio-cfg, mountPath: /opt/rucio/etc/rucio.cfg,       subPath: server.cfg }
             - { name: rucio-cfg, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }

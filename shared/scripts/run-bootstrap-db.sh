@@ -90,7 +90,7 @@ kubectl -n "$K8S_NAMESPACE" delete job "$JOB_NAME" --ignore-not-found >/dev/null
 # 3. Render + apply.
 log "Rendering ${JOB_NAME} (DB_HOST=${DB_HOST})"
 # shellcheck disable=SC2016
-DB_HOST="$DB_HOST" envsubst '${DB_HOST}' < "$BOOTSTRAP_JOB_TMPL" \
+RENDER_DB_HOST="$DB_HOST" envsubst '${RENDER_DB_HOST}' < "$BOOTSTRAP_JOB_TMPL" \
   | kubectl apply -n "$K8S_NAMESPACE" -f -
 
 log "Waiting for ${JOB_NAME} to complete (up to ${BOOTSTRAP_TIMEOUT})"
