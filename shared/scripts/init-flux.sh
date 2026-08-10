@@ -164,9 +164,35 @@ elif [[ "$SEED" -eq 0 ]]; then
   log "Skipping Vault seeding (--no-seed)"
 fi
 
-# --- 7. Bootstrap the rucio DB schema (sandbox only) ------------------------
-if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
-  "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
+# --- 7. Bootstrap the rucio DB schema -------------------------------------
+if [[ "$SEED" -eq 1 ]]; then
+  if [[ "$GITOPS_ENV" == "sandbox" ]]; then
+    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
+  else
+    # rucio-server-cfg's ExternalSecret object existing isn't the same as
+    # its content having actually synced — without the Service-existence
+    # wait sandbox incidentally gets from run-bootstrap-db.sh itself
+    # (skipped here, no Service to wait for), nothing else guarantees ESO
+    # has finished projecting real content before the Job tries to read
+    # it. Wait for SecretSynced explicitly instead.
+    log "Waiting for ExternalSecret/rucio-server-cfg to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+    if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+      "until kubectl -n '${APP_NS}' get externalsecret rucio-server-cfg >/dev/null 2>&1; do sleep 5; done"
+    then
+      warn "ExternalSecret/rucio-server-cfg never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'flux get kustomization dep-dlm-${GITOPS_ENV}-secrets'"
+    else
+      log "Waiting for ExternalSecret/rucio-server-cfg to sync (up to ${CORE_WAIT_TIMEOUT})"
+      kubectl -n "$APP_NS" wait --for=condition=Ready externalsecret/rucio-server-cfg \
+        --timeout="$CORE_WAIT_TIMEOUT" \
+        || warn "rucio-server-cfg not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret rucio-server-cfg'"
+    fi
+
+    RUCIO_DB_HOST="$(terraform -chdir="$TF_ENV_DIR" output -raw rucio_database_private_ip)"
+    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS" \
+      --db-host "$RUCIO_DB_HOST" --skip-service-check --generate-scripts-secret
+  fi
+elif [[ "$SEED" -eq 0 ]]; then
+  log "Skipping rucio DB bootstrap (--no-seed)"
 fi
 
 # --- 8. Report --------------------------------------------------------------

@@ -1,6 +1,11 @@
-# Rucio DB bootstrap Job — runs bootstrap-db.py once against ruciodb.
-# Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg) and the script
-# (testbed-scripts-rucio) — BOTH projected by ESO from Vault after vault-seed.
+# Rucio DB bootstrap Job — runs bootstrap-db.py once against the rucio
+# database. Mounts rucio.cfg/alembic.ini/idpsecrets.json (rucio-server-cfg)
+# and the script (testbed-scripts-rucio).
+#
+# DB_HOST is substituted by run-bootstrap-db.sh via envsubst, not static —
+# sandbox passes the in-cluster Service name (ruciodb, unchanged
+# behavior); staging/production pass the real Cloud SQL private IP
+# (dynamic, Terraform-generated, can't be a committed value).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -20,15 +25,15 @@ spec:
             - |
               set -e
               for i in $(seq 1 30); do
-                if python3 -c "import socket; socket.create_connection(('${DB_HOST}', 5432), timeout=2).close()" 2>/dev/null; then
-                  echo "  ${DB_HOST} reachable"; break
+                if python3 -c "import socket; socket.create_connection(('$${DB_HOST}', 5432), timeout=2).close()" 2>/dev/null; then
+                  echo "  $${DB_HOST} reachable"; break
                 fi
-                echo "  [$i] waiting for ${DB_HOST}..."; sleep 5
+                echo "  [$i] waiting for $${DB_HOST}..."; sleep 5
               done
               python3 /scripts/bootstrap-db.py
           env:
             - name: DB_HOST
-              value: ruciodb
+              value: "${DB_HOST}"
           volumeMounts:
             - { name: rucio-cfg, mountPath: /opt/rucio/etc/rucio.cfg,       subPath: server.cfg }
             - { name: rucio-cfg, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }
