@@ -36,7 +36,7 @@ spec:
                 - repoURL: https://rucio.github.io/helm-charts
                   chart: rucio-daemons
                   targetRevision: 40.0.0
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/staging/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: feat/staging-gitops-convergence
                   ref: values
