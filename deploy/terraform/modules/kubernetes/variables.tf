@@ -44,15 +44,3 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
-
-variable "eso_namespace" {
-  description = "k8s namespace the External Secrets Operator ServiceAccount lives in"
-  type        = string
-  default     = "external-secrets"
-}
-
-variable "eso_k8s_service_account" {
-  description = "Name of the k8s ServiceAccount ESO runs as (must match the ServiceAccount annotated for Workload Identity)"
-  type        = string
-  default     = "external-secrets"
-}

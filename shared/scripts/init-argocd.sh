@@ -123,6 +123,21 @@ if [[ -n "$RENDERED_STORE" ]]; then
   kubectl apply -n "$APP_NS" -f "$RENDERED_STORE"
 fi
 
+# --- 4c. Annotate the environment's external-secrets ServiceAccount
+if [[ -n "$RENDERED_STORE" ]]; then
+  ESO_SA="external-secrets-${GITOPS_ENV}"
+  log "Waiting for ServiceAccount/${ESO_SA} to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+    "until kubectl -n '${APP_NS}' get serviceaccount '${ESO_SA}' >/dev/null 2>&1; do sleep 5; done"
+  then
+    die "ServiceAccount/${ESO_SA} never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT}"
+  fi
+  ESO_GCP_SA_EMAIL="$(terraform -chdir="$TF_ENV_DIR" output -raw eso_service_account_email)"
+  log "Annotating ServiceAccount/${ESO_SA} for Workload Identity (${ESO_GCP_SA_EMAIL})"
+  kubectl -n "$APP_NS" annotate serviceaccount "$ESO_SA" \
+    iam.gke.io/gcp-service-account="$ESO_GCP_SA_EMAIL" --overwrite
+fi
+
 # --- 5. Wait for the core tier: vault + external-secrets operator
 if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
   log "Waiting for the ApplicationSet to generate vault-${GITOPS_ENV} / external-secrets-${GITOPS_ENV} (up to ${CORE_WAIT_TIMEOUT})"
