@@ -92,17 +92,18 @@ fi
 # Same pattern as seed-vault.sh's own templated manifest: idempotent,
 # safe to re-run, not continuously reconciled.
 STORE_TMPL="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml.tmpl"
+RENDERED_STORE=""
 if [[ -f "$STORE_TMPL" ]]; then
   require_cmd envsubst
-  log "Rendering + applying ClusterSecretStore for ${GITOPS_ENV}"
+  log "Rendering ClusterSecretStore for ${GITOPS_ENV}"
   TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
   GCP_PROJECT_ID="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
   GCP_REGION="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
   GCP_CLUSTER_NAME="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
+  RENDERED_STORE="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml"
   # shellcheck disable=SC2016
   GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" \
-    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME}' < "$STORE_TMPL" \
-    | kubectl apply -n "$APP_NS" -f -
+    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME}' < "$STORE_TMPL" > "$RENDERED_STORE"
 fi
 
 # --- 4. Apply the apps root (the ApplicationSet)

@@ -13,3 +13,4 @@ __pycache__
 *.0
 envs/*.env
 !envs/*.env.example
+clustersecretstore.yaml
