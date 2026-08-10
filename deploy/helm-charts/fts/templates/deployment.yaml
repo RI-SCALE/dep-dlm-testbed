@@ -35,8 +35,6 @@ spec:
               /docker-entrypoint.sh
           env:
             {{- toYaml .Values.env | nindent 12 }}
-            - name: FTS_DB_HOST
-              value: {{ .Values.ftsdbHost | quote }}
           ports:
             - name: rest
               containerPort: 8446

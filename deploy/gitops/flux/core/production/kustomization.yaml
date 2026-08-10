@@ -6,7 +6,6 @@ kind: Kustomization
 resources:
   - ../../flux-system/gitrepository.yaml
   - ../../sources/helmrepositories.yaml
-  - ../../components/postgresql.yaml
 patches:
   - target: { kind: HelmRelease }
     patch: |

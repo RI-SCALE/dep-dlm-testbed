@@ -13,9 +13,6 @@ service:
     # FTS monitoring
     monitoring: 8449
 
-# ftsdb Service hostname the server should connect to (set by umbrella)
-ftsdbHost: ftsdb
-
 # Optional MySQL StatefulSet co-located with the FTS server.
 # The umbrella enables one ftsdb per FTS instance.
 ftsdb:

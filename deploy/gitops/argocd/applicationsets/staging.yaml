@@ -46,7 +46,7 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: feat/staging-gitops-convergence
                   path: deploy/helm-charts/fts
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/staging/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: feat/staging-gitops-convergence
                   ref: values
