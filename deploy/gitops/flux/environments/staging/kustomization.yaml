@@ -11,6 +11,15 @@ configMapGenerator:
   - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
   - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
+  # Staging-specific overlays, layered on top of base via a second
+  # valuesFrom entry (patches below) — same role as ArgoCD's second
+  # entry in applicationsets/staging.yaml's helm.valueFiles list. Without
+  # these, Flux only ever sees base/values/*.yaml: ftsdb stays enabled
+  # (redundant in-cluster MySQL, competes for GCE quota) and the
+  # b96dc756.* cert items (which don't exist in staging's scoped-down
+  # testbed-certs) stay referenced, crashing the FTS mount.
+  - { name: fts-overrides-values,           namespace: flux-system, files: [ fts.yaml=../../../environments/staging/values/fts.yaml ] }
+  - { name: rucio-daemons-overrides-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../environments/staging/values/rucio-daemons.yaml ] }
 generatorOptions:
   disableNameSuffixHash: true
 patches:
@@ -19,3 +28,13 @@ patches:
       - op: replace
         path: /spec/targetNamespace
         value: dep-dlm-staging
+  - target: { kind: HelmRelease, name: fts }
+    patch: |
+      - op: add
+        path: /spec/valuesFrom/-
+        value: { kind: ConfigMap, name: fts-overrides-values, valuesKey: fts.yaml }
+  - target: { kind: HelmRelease, name: rucio-daemons }
+    patch: |
+      - op: add
+        path: /spec/valuesFrom/-
+        value: { kind: ConfigMap, name: rucio-daemons-overrides-values, valuesKey: rucio-daemons.yaml }
