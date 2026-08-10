@@ -102,8 +102,8 @@ ifeq ($(OIDC_CLIENT_ID),)
   endif
 endif
 
-# egi-dev's managed FTS token mode was found non-viable (see session
-# notes) — until the e2e tests get extended to check this properly
+# egi-dev's managed FTS token mode was found non-viable —
+# until the e2e tests get extended to check this properly
 # (separate branch/PR), default TOKEN_MODE to unmanaged specifically for
 # egi-dev so `make tf-apply SCOPE_PROFILE=egi-dev` alone doesn't silently
 # render a broken fts3config. origin==file means "still at the top-of-file

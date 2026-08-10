@@ -31,12 +31,13 @@ from google.cloud import secretmanager
 TF_ENV = os.environ.get("TF_ENV", "staging")
 TF_DIR = f"deploy/terraform/environments/{TF_ENV}"
 
-# A small, representative subset of keys per secret — not exhaustive (see
-# the session notes on why certs/configs carry more keys than this), just
+# A small, representative subset of keys per secret — not exhaustive, just
 # enough to catch "the render silently produced garbage" or "the wrong
 # keys landed in the wrong container". "patches" is excluded entirely —
-# disabled in modules/secrets (exceeds Secret Manager's 65536-byte
-# per-version limit; needs a GCS-backed redesign, tracked separately).
+# it's no longer synced through Secret Manager/ESO at all (exceeded
+# Secret Manager's 65536-byte per-version limit), and is instead
+# generated directly by Kustomize's secretGenerator from shared/patches/
+# at sync time. Nothing to smoke-test here at the Terraform layer.
 EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
     "configs": {"fts3config", "fts3restconfig"},

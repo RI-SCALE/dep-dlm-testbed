@@ -9,12 +9,11 @@ variable "name_prefix" {
 }
 
 variable "secret_names" {
-  description = "Logical secret names to create empty containers for (values provisioned out-of-band). Mirrors the sandbox's Vault seed categories: idpsecrets, certs, configs, patches, rucio, scripts."
+  description = "Logical secret names to create empty containers for (values provisioned out-of-band). Mirrors the sandbox's Vault seed categories: idpsecrets, certs, configs, rucio, scripts."
   type        = list(string)
   default = [
     "certs",
     "configs",
-    "patches",
     "rucio",
   ]
 }
