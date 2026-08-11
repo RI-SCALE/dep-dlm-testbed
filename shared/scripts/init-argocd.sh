@@ -116,12 +116,14 @@ kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET
 # --- 4b. APPLY the rendered ClusterSecretStore, gated on the ESO CRD
 # actually existing.
 if [[ -n "$RENDERED_STORE" ]]; then
-  log "Waiting for the ClusterSecretStore CRD to be registered (up to ${CORE_WAIT_TIMEOUT})"
+  ESO_WEBHOOK_SVC="${ESO_SA}-webhook"
+  log "Waiting for ${ESO_WEBHOOK_SVC} webhook endpoints in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
   if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl get crd clustersecretstores.external-secrets.io >/dev/null 2>&1; do sleep 5; done"
+    "until kubectl -n '${ESO_SA_NAMESPACE}' get endpoints '${ESO_WEBHOOK_SVC}' -o jsonpath='{.subsets}' 2>/dev/null | grep -q .; do sleep 5; done"
   then
-    die "clustersecretstores.external-secrets.io CRD never appeared within ${CORE_WAIT_TIMEOUT} — check the external-secrets Application/HelmRelease: 'kubectl -n ${ARGOCD_NAMESPACE} get application external-secrets-${GITOPS_ENV}'. Rendered manifest left at ${RENDERED_STORE} for inspection."
+    warn "${ESO_WEBHOOK_SVC} has no ready endpoints within ${CORE_WAIT_TIMEOUT} — ClusterSecretStore apply will likely fail with a webhook error; check 'kubectl -n ${ESO_SA_NAMESPACE} get pods'"
   fi
+
   log "Applying ClusterSecretStore for ${GITOPS_ENV}"
   kubectl apply -n "$APP_NS" -f "$RENDERED_STORE"
 fi
