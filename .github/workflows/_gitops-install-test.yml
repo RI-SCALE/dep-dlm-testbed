@@ -91,7 +91,7 @@ jobs:
         run: |
           make argocd-install \
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
-            GITOPS_REVISION="${{ github.sha }}"
+            GITOPS_REVISION="${{ github.ref_name }}"
 
       - name: Wait for Applications to become Healthy
         run: |
@@ -152,7 +152,7 @@ jobs:
         run: |
           make flux-install \
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
-            GITOPS_REVISION="${{ github.sha }}"
+            GITOPS_REVISION="${{ github.ref_name }}"
 
       - name: Wait for all Kustomizations to be Ready
         run: |

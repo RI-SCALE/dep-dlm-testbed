@@ -1,0 +1,79 @@
+name: GitOps install test (staging)
+
+# Nightly runs the full matrix (all 3 profile/token_mode combinations,
+# strictly sequential — realistically 2-3+ hours). workflow_dispatch
+# defaults to the same full run, but can be narrowed to a single
+# combination via the profile input — useful when iterating on a fix and
+# the full sequential chain's turnaround is the wrong tool for the job.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Which combination to run"
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - egi-dev
+          - ls-aai-dev-managed
+          - ls-aai-dev-unmanaged
+  schedule:
+    - cron: "0 2 * * *"  # ahead of the sandbox testbed's own 03:00/03:30 runs
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # egi-dev only supports unmanaged (per egi-dev.yml's own
+  # token_modes: '["unmanaged"]') — one job, not two.
+  egi-dev:
+    if: github.event_name != 'workflow_dispatch' || inputs.profile == 'all' || inputs.profile == 'egi-dev'
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: egi-dev
+      token_mode: unmanaged
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+
+  # needs: egi-dev stays static (GitHub Actions doesn't support computing
+  # needs: conditionally) — always() overrides the default behavior where
+  # a job is auto-skipped if anything in needs: was itself skipped, so
+  # selecting this stage alone doesn't get silently skipped just because
+  # egi-dev's own if: evaluated false above.
+  ls-aai-dev-managed:
+    if: |
+      always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.profile == 'all' || inputs.profile == 'ls-aai-dev-managed')
+    needs: egi-dev
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: ls-aai-dev
+      token_mode: managed
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}
+
+  ls-aai-dev-unmanaged:
+    if: |
+      always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.profile == 'all' || inputs.profile == 'ls-aai-dev-unmanaged')
+    needs: ls-aai-dev-managed
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: ls-aai-dev
+      token_mode: unmanaged
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}
