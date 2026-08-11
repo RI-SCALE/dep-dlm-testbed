@@ -35,3 +35,9 @@ resource "google_service_account_iam_member" "eso_workload_identity" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${google_container_cluster.this.workload_identity_config[0].workload_pool}[${var.name_prefix}/external-secrets-${trimprefix(var.name_prefix, "dep-dlm-")}]"
 }
+
+resource "google_service_account_iam_member" "eso_workload_identity_flux" {
+  service_account_id = google_service_account.eso.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${google_container_cluster.this.workload_identity_config[0].workload_pool}[external-secrets/external-secrets]"
+}
