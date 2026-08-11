@@ -37,6 +37,8 @@ done
 
 APP_OF_APPS="${GITOPS_DIR}/argocd/entrypoints/app-of-apps-${GITOPS_ENV}.yaml"
 ASET_NAME="dep-dlm-${GITOPS_ENV}"   # matches argocd/applicationsets/<env>.yaml metadata.name
+ESO_SA="external-secrets-${GITOPS_ENV}"
+ESO_SA_NAMESPACE="${APP_NS}"  # ESO's ServiceAccount is created in the same namespace as the apps root, not in argocd/
 
 # --- Preflight --------------------------------------------------------------
 require_cmd kubectl yq timeout
@@ -82,9 +84,63 @@ if [[ "$APPLY_FILE" != "$APP_OF_APPS" ]]; then
   warn "merge to your default branch so HEAD resolves."
 fi
 
+# --- 3b. Render + apply the environment's ClusterSecretStore, if templated.
+# Sandbox's store is a plain, static file (no .tmpl) — nothing to do here
+# for it. staging/production's stores need projectID/region/cluster name,
+# which are dynamic (bootstrap-generated), so they're rendered via envsubst
+# and applied directly here rather than through ArgoCD's own reconciliation
+# — ArgoCD syncs straight from git with no render step, so a .tmpl file
+# committed as-is would get applied with literal, unexpanded ${VAR} text.
+# Same pattern as seed-vault.sh's own templated manifest: idempotent,
+# safe to re-run, not continuously reconciled.
+STORE_TMPL="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml.tmpl"
+RENDERED_STORE=""
+if [[ -f "$STORE_TMPL" ]]; then
+  require_cmd envsubst
+  log "Rendering ClusterSecretStore for ${GITOPS_ENV}"
+  TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
+  GCP_PROJECT_ID="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
+  GCP_REGION="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
+  GCP_CLUSTER_NAME="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
+  RENDERED_STORE="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml"
+  # shellcheck disable=SC2016
+  GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" GITOPS_ENV="$GITOPS_ENV" \
+    ESO_SA_NAME="$ESO_SA" ESO_SA_NAMESPACE="$ESO_SA_NAMESPACE" \
+    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV} ${ESO_SA_NAME} ${ESO_SA_NAMESPACE}' < "$STORE_TMPL" > "$RENDERED_STORE"
+fi
+
 # --- 4. Apply the apps root (the ApplicationSet)
 log "Applying apps root (dep-dlm-${GITOPS_ENV}-apps)"
 kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-apps")' "$APPLY_FILE")
+
+# --- 4b. APPLY the rendered ClusterSecretStore, gated on the ESO CRD
+# actually existing.
+if [[ -n "$RENDERED_STORE" ]]; then
+  ESO_WEBHOOK_SVC="${ESO_SA}-webhook"
+  log "Waiting for ${ESO_WEBHOOK_SVC} webhook endpoints in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
+  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+    "until kubectl -n '${ESO_SA_NAMESPACE}' get endpoints '${ESO_WEBHOOK_SVC}' -o jsonpath='{.subsets}' 2>/dev/null | grep -q .; do sleep 5; done"
+  then
+    warn "${ESO_WEBHOOK_SVC} has no ready endpoints within ${CORE_WAIT_TIMEOUT} — ClusterSecretStore apply will likely fail with a webhook error; check 'kubectl -n ${ESO_SA_NAMESPACE} get pods'"
+  fi
+
+  log "Applying ClusterSecretStore for ${GITOPS_ENV}"
+  kubectl apply -n "$APP_NS" -f "$RENDERED_STORE"
+fi
+
+# --- 4c. Annotate the environment's external-secrets ServiceAccount
+if [[ -n "$RENDERED_STORE" ]]; then
+  log "Waiting for ServiceAccount/${ESO_SA} to exist in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
+  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+    "until kubectl -n '${ESO_SA_NAMESPACE}' get serviceaccount '${ESO_SA}' >/dev/null 2>&1; do sleep 5; done"
+  then
+    die "ServiceAccount/${ESO_SA} never appeared in ${ESO_SA_NAMESPACE} within ${CORE_WAIT_TIMEOUT}"
+  fi
+  ESO_GCP_SA_EMAIL="$(terraform -chdir="$TF_ENV_DIR" output -raw eso_service_account_email)"
+  log "Annotating ServiceAccount/${ESO_SA} for Workload Identity (${ESO_GCP_SA_EMAIL})"
+  kubectl -n "$ESO_SA_NAMESPACE" annotate serviceaccount "$ESO_SA" \
+    iam.gke.io/gcp-service-account="$ESO_GCP_SA_EMAIL" --overwrite
+fi
 
 # --- 5. Wait for the core tier: vault + external-secrets operator
 if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
@@ -124,9 +180,35 @@ elif [[ "$SEED" -eq 0 ]]; then
   log "Skipping Vault seeding (--no-seed)"
 fi
 
-# --- 8. Bootstrap the rucio DB schema (sandbox only) ------------------------
-if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
-  "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
+# --- 8. Bootstrap the rucio DB schema -------------------------------------
+if [[ "$SEED" -eq 1 ]]; then
+  if [[ "$GITOPS_ENV" == "sandbox" ]]; then
+    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
+  else
+    # rucio-server-cfg's ExternalSecret object existing isn't the same as
+    # its content having actually synced — without the Service-existence
+    # wait sandbox incidentally gets from run-bootstrap-db.sh itself
+    # (skipped here, no Service to wait for), nothing else guarantees ESO
+    # has finished projecting real content before the Job tries to read
+    # it. Wait for SecretSynced explicitly instead.
+    log "Waiting for ExternalSecret/rucio-server-cfg to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+    if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+      "until kubectl -n '${APP_NS}' get externalsecret rucio-server-cfg >/dev/null 2>&1; do sleep 5; done"
+    then
+      warn "ExternalSecret/rucio-server-cfg never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${ARGOCD_NAMESPACE} get application dep-dlm-${GITOPS_ENV}-secrets'"
+    else
+      log "Waiting for ExternalSecret/rucio-server-cfg to sync (up to ${CORE_WAIT_TIMEOUT})"
+      kubectl -n "$APP_NS" wait --for=condition=Ready externalsecret/rucio-server-cfg \
+        --timeout="$CORE_WAIT_TIMEOUT" \
+        || warn "rucio-server-cfg not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret rucio-server-cfg'"
+    fi
+
+    RUCIO_DB_HOST="$(terraform -chdir="$TF_ENV_DIR" output -raw rucio_database_private_ip)"
+    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS" \
+      --db-host "$RUCIO_DB_HOST" --skip-service-check --generate-scripts-secret
+  fi
+elif [[ "$SEED" -eq 0 ]]; then
+  log "Skipping rucio DB bootstrap (--no-seed)"
 fi
 
 # --- 9. Report --------------------------------------------------------------

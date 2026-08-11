@@ -1,4 +1,4 @@
-name: Run DEP DLM Testbed
+name: _run-dep-dlm-testbed
 
 on:
   workflow_call:

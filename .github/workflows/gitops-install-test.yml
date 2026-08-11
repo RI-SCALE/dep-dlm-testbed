@@ -1,0 +1,57 @@
+name: GitOps install test (staging, full matrix)
+
+# Nightly only, deliberately — six full install/uninstall cycles against
+# the one staging cluster runs 2-3+ hours. workflow_dispatch is available
+# for an on-demand full run, but PR/push triggers should use a narrower,
+# faster check instead (single profile, single tool) for quick feedback.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"  # ahead of the sandbox testbed's own 03:00/03:30 runs
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # egi-dev only supports unmanaged (per egi-dev.yml's own
+  # token_modes: '["unmanaged"]') — one job, not two.
+  egi-dev:
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: egi-dev
+      token_mode: unmanaged
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+
+  # needs: enforces strict ordering — the concurrency group in the
+  # reusable workflow is a backstop, not the primary ordering mechanism.
+  ls-aai-dev-managed:
+    needs: egi-dev
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: ls-aai-dev
+      token_mode: managed
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}
+
+  ls-aai-dev-unmanaged:
+    needs: ls-aai-dev-managed
+    uses: ./.github/workflows/_gitops-install-test.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_env: staging
+      scope_profile: ls-aai-dev
+      token_mode: unmanaged
+    secrets:
+      OIDC_CLIENT_ID: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}

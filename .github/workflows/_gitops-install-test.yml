@@ -1,0 +1,123 @@
+name: _gitops-install-test
+
+on:
+  workflow_call:
+    inputs:
+      tf_env:
+        required: true
+        type: string
+      environment_name:
+        required: true
+        type: string
+      gitops_env:
+        required: true
+        type: string
+      scope_profile:
+        description: "egi-dev | ls-aai-dev"
+        required: true
+        type: string
+      token_mode:
+        description: "managed | unmanaged — drives var.token_mode, a real Terraform input (module.secrets), not just a script flag. Changing it needs its own tf-apply."
+        required: true
+        type: string
+    secrets:
+      OIDC_CLIENT_ID:
+        required: true
+      OIDC_CLIENT_SECRET:
+        required: true
+
+# Serializes every call of this workflow against the SAME cluster,
+# regardless of which profile/token_mode/tool combination is running —
+# one staging cluster, only one tf-apply + GitOps cycle safe at a time.
+# The caller workflow's own jobs run this sequentially too (see below),
+# but this is the real backstop: two separate workflow runs (a manual
+# dispatch landing mid-schedule, two PRs, etc.) queue instead of racing.
+concurrency:
+  group: gitops-install-test-${{ inputs.tf_env }}
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    name: ${{ inputs.scope_profile }} (${{ inputs.token_mode }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      TF_ENV: ${{ inputs.tf_env }}
+      GITOPS_ENV: ${{ inputs.gitops_env }}
+      SCOPE_PROFILE: ${{ inputs.scope_profile }}
+      TOKEN_MODE: ${{ inputs.token_mode }}
+      OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: make tf-init
+        run: make tf-init
+
+      # Cheap, incremental: only module.secrets depends on token_mode/
+      # oidc_client_id/oidc_client_secret — cluster/DBs stay untouched,
+      # this only rotates Secret Manager versions.
+      - name: make tf-apply (re-render secrets for this profile)
+        run: make tf-apply AUTO_APPROVE=1
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      # --- ArgoCD ---------------------------------------------------------
+      - name: argocd-install
+        run: |
+          make argocd-install \
+            GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
+            GITOPS_REVISION="${{ github.sha }}"
+
+      - name: Verify ArgoCD-managed pods converge
+        run: |
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
+            pod -l app=rucio-server --timeout=600s
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
+            pod -l app=fts --timeout=600s
+
+      - name: argocd-uninstall
+        if: always()
+        run: make argocd-uninstall GITOPS_ENV=${{ inputs.gitops_env }}
+
+      # --- Flux -------------------------------------------------------------
+      - name: flux-install
+        run: |
+          make flux-install \
+            GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
+            GITOPS_REVISION="${{ github.sha }}"
+
+      - name: Verify Flux-managed pods converge
+        run: |
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
+            pod -l app=rucio-server --timeout=600s
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
+            pod -l app=fts --timeout=600s
+
+      - name: flux-uninstall
+        if: always()
+        run: make flux-uninstall GITOPS_ENV=${{ inputs.gitops_env }}

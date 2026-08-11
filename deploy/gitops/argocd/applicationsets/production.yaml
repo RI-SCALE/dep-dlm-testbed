@@ -36,7 +36,7 @@ spec:
                 - repoURL: https://rucio.github.io/helm-charts
                   chart: rucio-daemons
                   targetRevision: 40.0.0
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/production/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
                   ref: values
@@ -46,7 +46,7 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
                   path: deploy/helm-charts/fts
-                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/production/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
                   ref: values

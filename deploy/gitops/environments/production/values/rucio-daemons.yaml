@@ -1,0 +1,18 @@
+conveyorTransferSubmitter:
+  resources:
+    requests: { cpu: "50m" }
+conveyorPoller:
+  resources:
+    requests: { cpu: "50m" }
+conveyorFinisher:
+  resources:
+    requests: { cpu: "50m" }
+judgeEvaluator:
+  resources:
+    requests: { cpu: "50m" }
+judgeCleaner:
+  resources:
+    requests: { cpu: "50m" }
+reaper:
+  resources:
+    requests: { cpu: "50m" }

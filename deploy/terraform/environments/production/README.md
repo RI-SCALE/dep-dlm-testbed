@@ -52,6 +52,8 @@ No resources.
 | <a name="output_fts_database_connection_name"></a> [fts\_database\_connection\_name](#output\_fts\_database\_connection\_name) | n/a |
 | <a name="output_fts_database_private_ip"></a> [fts\_database\_private\_ip](#output\_fts\_database\_private\_ip) | n/a |
 | <a name="output_fts_db_password"></a> [fts\_db\_password](#output\_fts\_db\_password) | n/a |
+| <a name="output_project_id"></a> [project\_id](#output\_project\_id) | n/a |
+| <a name="output_region"></a> [region](#output\_region) | n/a |
 | <a name="output_rucio_database_connection_name"></a> [rucio\_database\_connection\_name](#output\_rucio\_database\_connection\_name) | n/a |
 | <a name="output_rucio_database_private_ip"></a> [rucio\_database\_private\_ip](#output\_rucio\_database\_private\_ip) | n/a |
 | <a name="output_rucio_db_password"></a> [rucio\_db\_password](#output\_rucio\_db\_password) | n/a |

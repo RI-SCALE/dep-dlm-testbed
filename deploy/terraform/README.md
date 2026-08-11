@@ -149,16 +149,6 @@ in state is worth preserving after deletion. `environments/<env>` needs
 no separate cleanup — its state lived in the bucket that just went with
 the project.
 
-## After `apply`
-
-```bash
-kubectl annotate serviceaccount external-secrets -n external-secrets \
-  iam.gke.io/gcp-service-account=$(terraform output -raw eso_service_account_email)
-```
-
-(Terraform creates the GCP-side IAM binding; this k8s-side annotation is
-GitOps/cluster-side, not Terraform's job.)
-
 ## Not yet decided
 
 See ADR-003's Open Points — region, procurement/credit, data-protection

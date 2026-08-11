@@ -20,6 +20,7 @@ No modules.
 | [google_container_cluster.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster) | resource |
 | [google_service_account.eso](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 | [google_service_account_iam_member.eso_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
+| [google_service_account_iam_member.eso_workload_identity_flux](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 
 ## Inputs
 
@@ -33,8 +34,6 @@ No modules.
 | <a name="input_services_range_name"></a> [services\_range\_name](#input\_services\_range\_name) | Secondary IP range name for services (from deploy/terraform/bootstrap's networking, as of this revision) | `string` | n/a | yes |
 | <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | Subnet ID (from deploy/terraform/bootstrap's networking, as of this revision) | `string` | n/a | yes |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Set false for ephemeral/test environments so terraform destroy can remove the cluster without a manual override | `bool` | `false` | no |
-| <a name="input_eso_k8s_service_account"></a> [eso\_k8s\_service\_account](#input\_eso\_k8s\_service\_account) | Name of the k8s ServiceAccount ESO runs as (must match the ServiceAccount annotated for Workload Identity) | `string` | `"external-secrets"` | no |
-| <a name="input_eso_namespace"></a> [eso\_namespace](#input\_eso\_namespace) | k8s namespace the External Secrets Operator ServiceAccount lives in | `string` | `"external-secrets"` | no |
 | <a name="input_release_channel"></a> [release\_channel](#input\_release\_channel) | GKE release channel | `string` | `"REGULAR"` | no |
 
 ## Outputs

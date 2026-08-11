@@ -62,4 +62,4 @@ spec:
   path: ./deploy/gitops/flux/environments/production
   prune: true
   dependsOn:
-    - { name: dep-dlm-production-bootstrap }
+    - { name: dep-dlm-production-secrets }

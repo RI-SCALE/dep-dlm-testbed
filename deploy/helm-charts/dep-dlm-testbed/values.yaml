@@ -276,7 +276,6 @@ fts:
   ftsdb:
     enabled: true
     hostname: ftsdb
-  ftsdbHost: ftsdb
 
   volumes:
     - name: certs
