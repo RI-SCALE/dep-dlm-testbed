@@ -119,7 +119,7 @@ if [[ -n "$RENDERED_STORE" ]]; then
   ESO_WEBHOOK_SVC="${ESO_SA}-webhook"
   log "Waiting for ${ESO_WEBHOOK_SVC} webhook endpoints in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
   if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${ESO_SA_NAMESPACE}' get endpoints '${ESO_WEBHOOK_SVC}' -o jsonpath='{.subsets}' 2>/dev/null | grep -q .; do sleep 5; done"
+    "until kubectl -n '${ESO_SA_NAMESPACE}' get endpoints '${ESO_WEBHOOK_SVC}' -o jsonpath='{.subsets[*].addresses}' 2>/dev/null | grep -q .; do sleep 5; done"
   then
     warn "${ESO_WEBHOOK_SVC} has no ready endpoints within ${CORE_WAIT_TIMEOUT} — ClusterSecretStore apply will likely fail with a webhook error; check 'kubectl -n ${ESO_SA_NAMESPACE} get pods'"
   fi
