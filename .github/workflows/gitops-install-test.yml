@@ -6,8 +6,6 @@ name: GitOps install test (staging, full matrix)
 # faster check instead (single profile, single tool) for quick feedback.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 2 * * *"  # ahead of the sandbox testbed's own 03:00/03:30 runs
 
 permissions:
   id-token: write
