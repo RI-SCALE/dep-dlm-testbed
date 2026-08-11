@@ -5,8 +5,8 @@ on:
   schedule:
     # Nightly at 03:00 UTC, offset from the full-testbed run
     - cron: "0 3 * * *"
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   pull_request:
     branches: [main]
 
