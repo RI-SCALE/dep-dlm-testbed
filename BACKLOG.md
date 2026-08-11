@@ -1,27 +1,45 @@
 # Backlog
 
+## Testing
+
 - [x] Extend test coverage with
     - [x] `test_add_dataset` test
     - [x] `test_add_files_to_dataset` test
     - [x] XRootD-to-Storm WebDAV transfer test
 - [x] Test replication rule deletion lifecycle via Rucio daemons
+
+## Configuration & Patches
+
 - [x] Add configuration reference links for the technologies in use (FTS, Rucio, XrootD and Teapot), with emphasis on token-based authentication
 - [x] Patches
     - [x] Document patches applied to FTS, Rucio and Teapot
 - [x] Adjust patches where possible to support managed configuration using token exchange instead of unmanaged configuration for FTS, allowing FTS to manage the token lifecycle
 - [x] Add a DAEMON_MODE flag (direct | daemons): run Rucio daemons as long-running services in Compose and Kubernetes, with the test harness switching between direct `--run-once` CLI invocation (deterministic, current behaviour) and polling the running daemons
+
+## GitOps Deployment
+
 - [x] Enable GitOps-based deployment for DEP DLM data orchestration layer workloads (Argo CD or Flux), using the testbed Helm charts as the initial blueprint. Prefer upstream charts where available (e.g. the official rucio/helm-charts for rucio-server and rucio-daemons, Bitnami PostgreSQL) with DEP DLM-specific overlays on top.
+- [x] Validate staging GitOps deployment against real external infrastructure on a hyperscaler: provisioned a managed Kubernetes cluster (GKE), PostgreSQL (Cloud SQL), and GCP Secret Manager (via External Secrets Operator) as the testbed's own validation target, automated via Terraform; wired to external AAI federation hubs as the OIDC issuer (both EGI Check-In Dev and LS AAI Perun); confirmed convergence on both Argo CD and Flux, verified at the pod level (rucio-server, rucio-daemons, fts Running with correct DB connections, OIDC credentials, and certs).
+- [ ] Extend the above to a second hyperscaler (EKS/AKS) for multi-cloud parity, and/or validate a Vault-on-hyperscaler variant — this round deliberately moved staging/production off Vault onto GCP Secret Manager (sandbox keeps Vault), so Vault-backed secrets management on a hyperscaler remains unvalidated.
+- [ ] Validate the same against on-premise infrastructure: provisioning of Vault, PostgreSQL and the Kubernetes cluster is anticipated to require manual or partner-managed setup rather than automated tooling — needs clarification with the partner on who owns this provisioning and whether it happens via IaC outside the GitOps deployment scope.
+- [ ] Set up a dedicated `dep-dlm-deployment` repo (Terraform to provision managed Kubernetes/DB/secrets on a public cloud, plus the GitOps convergence on top — for partners without on-premises infrastructure, or for whom maintaining it is impractical), separate from the testbed.
+
+## Documentation & Runbooks
+
 - [ ] Provide runbooks explaining the key configurations to apply (Rucio rucio.cfg, OIDC, FTS, RSE settings, certificates, WP4 token-provider integration) so partners and DEP owners can deploy and operate their own workloads — applying their own sensitive credentials, which are not checked into this repository.
     - [x] Sandbox quickstart end-to-end — see [01-sandbox-quickstart.md](docs/runbooks/01-sandbox-quickstart.md).
     - [x] Bring-your-own runbook set (IdP, storage, config reference) + index — see [docs/runbooks/](docs/runbooks/).
     - [ ] Remaining staging/production runbooks: external Vault secrets, certificate installation (Rucio/FTS) and observability.
-    - [ ] Register and validate RSEs against **external storage backends** (data-holding sites, data spaces, or partner compute centres), primarily WebDAV-based — the token-provider side of "replicate CERN's setup" is done (see below), but no RSE has yet been registered against storage outside this testbed's own bundled XRootD/Teapot instances. Needs: RSE protocol/PFN config for external WebDAV endpoints, distance/attribute setup and an end-to-end transfer test against a real external endpoint (not just an external IdP issuing tokens for internal storage). Follow-on to runbook 03 (bring-your-own-storage); related to the last item below (staging validation against real infra) but scoped to Rucio/RSE config specifically, not GitOps/cluster provisioning.
+
+## External Identity Provider Integration
+
 - [x] Replicate the CERN FTS and Rucio test-instance configurations for integration against an external token provider (EGI Check-In Dev), with proper certificate installation for trusted connections to the IAM backend — see [06-adding-a-new-idp-profile.md](docs/runbooks/06-adding-a-new-idp-profile.md) and the `SCOPE_PROFILE=egi-dev` CI workflow. Sensitive values (real idpsecrets, cert keys) are NOT checked in — supplied per-environment via Vault/external-secrets or local env files; the repo holds only templated/example configs.
 - [x] Integrate the testbed against LS AAI (Perun) as a second external token provider, following the `06-adding-a-new-idp-profile.md` pattern. Confirm `resource=` support on client_credentials and token-exchange first - constraints differ from EGI/IAM and may require `scope_profile` to become a per-IdP capability flag rather than a binary wlcg/egi switch.
-- [ ] Set up a dedicated `dep-dlm-deployment` repo (Terraform to provision managed Kubernetes/DB/secrets on a public cloud, plus the GitOps convergence on top — for partners without on-premises infrastructure, or for whom maintaining it is impractical), separate from the testbed.
+
+## Storage & Authorization
+
+- [ ] Register and validate RSEs against **external storage backends** (data-holding sites, data spaces, or partner compute centres), primarily WebDAV-based — the token-provider side of "replicate CERN's setup" is done (see above), but no RSE has yet been registered against storage outside this testbed's own bundled XRootD/Teapot instances. Needs: RSE protocol/PFN config for external WebDAV endpoints, distance/attribute setup and an end-to-end transfer test against a real external endpoint (not just an external IdP issuing tokens for internal storage). Follow-on to runbook 03 (bring-your-own-storage); related to the GitOps infrastructure-validation items above but scoped to Rucio/RSE config specifically, not GitOps/cluster provisioning.
 - [ ] Storage authorization hardening (XRootD SciTokens + Teapot Storm-WebDAV), two related sub-concerns:
     - [ ] Offline permission/authorization checks: currently authorization is validated only via the live token-introspection/JWKS path at request time. Investigate and enable offline policy evaluation (cached JWKS, local scope/entitlement checks) for both storage backends, so authorization decisions don't require a live round-trip to the IdP on every request — relevant once external storage endpoints (above) are in play and network path to the IdP may not be as reliable as it is inside this testbed.
     - [ ] VO-based Teapot mapping via `eduperson_entitlements`: configure Keycloak to issue `eduperson_entitlement` claims alongside `wlcg.groups` and demonstrate Teapot's VO mapping mode as an alternative to FILE mapping (requires group membership claims not available on the current service account token path). Investigate whether equivalent group/entitlement-based authorization exists for XRootD SciTokens (current understanding: scope-based only). Overlaps with offline-checks above — both touch the same authorization internals; solve together where practical.
-- [ ] Validate staging GitOps deployment against real external infrastructure on a hyperscaler: provision Vault, PostgreSQL and a managed Kubernetes cluster (e.g. EKS/AKS) as the testbed's own validation target (automatable), wire to an external AAI federation hub as the OIDC issuer, wire external endpoints, seed Vault, confirm convergence on Argo CD and Flux.
-- [ ] Validate the same against on-premise infrastructure: provisioning of Vault, PostgreSQL and the Kubernetes cluster is anticipated to require manual or partner-managed setup rather than automated tooling — needs clarification with the partner on who owns this provisioning and whether it happens via IaC outside the GitOps deployment scope.
 - [ ] Design & scaffold an Authorization Service as its own repository (e.g. `dep-authz-service`), in Go, embedding OPA via its native SDK to avoid an extra network hop — see opa-policy-package ADRs ([authorization-service](https://github.com/mgajek-cern/opa-policy-package/blob/main/docs/adrs/adr-001-authz-service.md), [opa-deployment-topology](https://github.com/mgajek-cern/opa-policy-package/blob/main/docs/adrs/adr-003-opa-deploy-topology.md)) for the contract. Consumers: Rucio and, on behalf of storage endpoints, their AAI IAM; FTS is out of scope as a direct consumer per the ADR. OpenAPI-first, plain direct integration only (no service mesh, per the deployment-topology ADR — storage-endpoint deployment model still needs confirmation before that's finalized). Reuse the Rego policy bundles and Phase 4 OIDC/Keycloak integration already built in [opa-policy-package](https://github.com/mgajek-cern/opa-policy-package/tree/main) rather than rebuilding them. Once available, this testbed integrates against it rather than building authorization logic itself.
