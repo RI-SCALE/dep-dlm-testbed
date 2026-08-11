@@ -12,5 +12,8 @@ resource "google_secret_manager_secret_version" "configs" {
       log_level = var.fts3rest_log_level
     })
     "gfal2_http_plugin.conf" = file("${path.module}/../../../../shared/config/fts/gfal2_http_plugin.conf")
+    "docker-entrypoint.sh" = templatefile("${path.module}/templates/fts3-docker-entrypoint.sh.tftpl", {
+      fts_db_host = var.fts_db_host
+    })
   })
 }
