@@ -37,6 +37,8 @@ done
 
 APP_OF_APPS="${GITOPS_DIR}/argocd/entrypoints/app-of-apps-${GITOPS_ENV}.yaml"
 ASET_NAME="dep-dlm-${GITOPS_ENV}"   # matches argocd/applicationsets/<env>.yaml metadata.name
+ESO_SA="external-secrets-${GITOPS_ENV}"
+ESO_SA_NAMESPACE="${APP_NS}"  # ESO's ServiceAccount is created in the same namespace as the apps root, not in argocd/
 
 # --- Preflight --------------------------------------------------------------
 require_cmd kubectl yq timeout
@@ -103,7 +105,8 @@ if [[ -f "$STORE_TMPL" ]]; then
   RENDERED_STORE="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml"
   # shellcheck disable=SC2016
   GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" GITOPS_ENV="$GITOPS_ENV" \
-    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV}' < "$STORE_TMPL" > "$RENDERED_STORE"
+    ESO_SA_NAME="$ESO_SA" ESO_SA_NAMESPACE="$ESO_SA_NAMESPACE" \
+    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV} ${ESO_SA_NAME} ${ESO_SA_NAMESPACE}' < "$STORE_TMPL" > "$RENDERED_STORE"
 fi
 
 # --- 4. Apply the apps root (the ApplicationSet)
@@ -125,16 +128,15 @@ fi
 
 # --- 4c. Annotate the environment's external-secrets ServiceAccount
 if [[ -n "$RENDERED_STORE" ]]; then
-  ESO_SA="external-secrets-${GITOPS_ENV}"
-  log "Waiting for ServiceAccount/${ESO_SA} to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+  log "Waiting for ServiceAccount/${ESO_SA} to exist in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
   if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${APP_NS}' get serviceaccount '${ESO_SA}' >/dev/null 2>&1; do sleep 5; done"
+    "until kubectl -n '${ESO_SA_NAMESPACE}' get serviceaccount '${ESO_SA}' >/dev/null 2>&1; do sleep 5; done"
   then
-    die "ServiceAccount/${ESO_SA} never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT}"
+    die "ServiceAccount/${ESO_SA} never appeared in ${ESO_SA_NAMESPACE} within ${CORE_WAIT_TIMEOUT}"
   fi
   ESO_GCP_SA_EMAIL="$(terraform -chdir="$TF_ENV_DIR" output -raw eso_service_account_email)"
   log "Annotating ServiceAccount/${ESO_SA} for Workload Identity (${ESO_GCP_SA_EMAIL})"
-  kubectl -n "$APP_NS" annotate serviceaccount "$ESO_SA" \
+  kubectl -n "$ESO_SA_NAMESPACE" annotate serviceaccount "$ESO_SA" \
     iam.gke.io/gcp-service-account="$ESO_GCP_SA_EMAIL" --overwrite
 fi
 
