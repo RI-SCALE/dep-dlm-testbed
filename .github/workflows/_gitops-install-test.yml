@@ -26,12 +26,6 @@ on:
       OIDC_CLIENT_SECRET:
         required: true
 
-# Serializes every call of this workflow against the SAME cluster,
-# regardless of which profile/token_mode/tool combination is running —
-# one staging cluster, only one tf-apply + GitOps cycle safe at a time.
-# The caller workflow's own jobs run this sequentially too (see below),
-# but this is the real backstop: two separate workflow runs (a manual
-# dispatch landing mid-schedule, two PRs, etc.) queue instead of racing.
 concurrency:
   group: gitops-install-test-${{ inputs.tf_env }}
   cancel-in-progress: false
@@ -40,6 +34,7 @@ jobs:
   cycle:
     name: ${{ inputs.scope_profile }} (${{ inputs.token_mode }})
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
@@ -74,52 +69,152 @@ jobs:
         with:
           install_components: "gke-gcloud-auth-plugin"
 
+      - name: Install Flux CLI
+        uses: fluxcd/flux2/action@main
+
       - name: Generate certificates
         run: make certs
 
       - name: make tf-init
         run: make tf-init
 
-      # Cheap, incremental: only module.secrets depends on token_mode/
-      # oidc_client_id/oidc_client_secret — cluster/DBs stay untouched,
-      # this only rotates Secret Manager versions.
       - name: make tf-apply (re-render secrets for this profile)
         run: make tf-apply AUTO_APPROVE=1
 
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
 
-      # --- ArgoCD ---------------------------------------------------------
+      # =====================================================================
+      # ArgoCD
+      # =====================================================================
       - name: argocd-install
         run: |
           make argocd-install \
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
             GITOPS_REVISION="${{ github.sha }}"
 
-      - name: Verify ArgoCD-managed pods converge
+      - name: Wait for Applications to become Healthy
         run: |
-          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
-            pod -l app=rucio-server --timeout=600s
-          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
-            pod -l app=fts --timeout=600s
+          # Gate on Application HEALTH, not sync status — same reasoning as
+          # gitops-argocd.yml (sandbox): some apps stay permanently
+          # OutOfSync-but-Healthy (hook resources excluded from Argo's
+          # desired-state diff), that's expected, not a failure.
+          ns=argocd
+          for i in $(seq 1 80); do
+            total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
+            healthy=$(kubectl -n $ns get applications \
+              -o custom-columns='NAME:.metadata.name,HS:.status.health.status' \
+              --no-headers 2>/dev/null | awk '$2=="Healthy"' | wc -l | tr -d ' ')
+            echo "  [$i] $healthy/$total Applications Healthy"
+            if [ "$total" -gt 0 ] && [ "$healthy" = "$total" ]; then
+              echo "All Applications Healthy"; exit 0
+            fi
+            kubectl -n $ns get applications \
+              -o custom-columns='NAME:.metadata.name,HEALTH:.status.health.status,SYNC:.status.sync.status' \
+              --no-headers 2>/dev/null | awk '$2!="Healthy"' | sed 's/^/      not-healthy: /' || true
+            sleep 15
+          done
+          echo "ERROR: Applications did not all become Healthy in time"
+          kubectl -n $ns get applications
+          exit 1
+
+      - name: Verify ArgoCD-managed workload pods are Running
+        run: |
+          ns=dep-dlm-${{ inputs.gitops_env }}
+          # rollout status polls for the Deployment to exist and converge in
+          # one call — unlike `kubectl wait -l`, which errors instantly if
+          # zero pods currently match the selector (the actual bug that
+          # broke this workflow's first run: ArgoCD's Application sync was
+          # still converging in the background when the old check ran).
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
+          kubectl -n $ns rollout status deploy/fts --timeout=300s
+          kubectl -n $ns get pods
+
+      - name: Diagnostics on ArgoCD failure
+        if: failure()
+        run: |
+          echo "=== Applications ==="; kubectl -n argocd get applications -o wide || true
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ inputs.gitops_env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} get events --sort-by=.lastTimestamp | tail -50 || true
+          echo "=== job/rucio-bootstrap-db ==="
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} logs job/rucio-bootstrap-db --tail=50 2>/dev/null || true
 
       - name: argocd-uninstall
         if: always()
         run: make argocd-uninstall GITOPS_ENV=${{ inputs.gitops_env }}
 
-      # --- Flux -------------------------------------------------------------
+      # =====================================================================
+      # Flux
+      # =====================================================================
       - name: flux-install
         run: |
           make flux-install \
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
             GITOPS_REVISION="${{ github.sha }}"
 
-      - name: Verify Flux-managed pods converge
+      - name: Wait for all Kustomizations to be Ready
         run: |
-          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
-            pod -l app=rucio-server --timeout=600s
-          kubectl -n dep-dlm-${{ inputs.gitops_env }} wait --for=condition=Ready \
-            pod -l app=fts --timeout=600s
+          ns=flux-system
+          for i in $(seq 1 60); do
+            total=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+              -o name 2>/dev/null | grep dep-dlm | wc -l | tr -d ' ')
+            ready=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+              | grep '^dep-dlm' | awk '$2=="True"' | wc -l | tr -d ' ')
+            echo "  [$i] $ready/$total dep-dlm Kustomizations Ready"
+            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+              echo "All Kustomizations Ready"; break
+            fi
+            sleep 15
+            [ "$i" = 60 ] && { echo "ERROR: Kustomizations not Ready in time"; flux get kustomizations; exit 1; }
+          done
+
+      - name: Wait for all HelmReleases to be Ready
+        run: |
+          ns=flux-system
+          for i in $(seq 1 60); do
+            total=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o name 2>/dev/null | wc -l | tr -d ' ')
+            ready=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+              | awk '$2=="True"' | wc -l | tr -d ' ')
+            echo "  [$i] $ready/$total HelmReleases Ready"
+            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+              echo "All HelmReleases Ready"; exit 0
+            fi
+            kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\t"}{.message}{end}{"\n"}{end}' 2>/dev/null \
+              | awk -F'\t' '$2!="True"' | sed 's/^/      pending: /' || true
+            sleep 15
+          done
+          echo "ERROR: HelmReleases did not all become Ready in time"
+          flux get helmreleases -A
+          exit 1
+
+      - name: Verify Flux-managed workload pods are Running
+        run: |
+          ns=dep-dlm-${{ inputs.gitops_env }}
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
+          kubectl -n $ns rollout status deploy/fts --timeout=300s
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s
+          done
+          kubectl -n $ns get pods
+
+      - name: Diagnostics on Flux failure
+        if: failure()
+        run: |
+          echo "=== Kustomizations ==="; flux get kustomizations || true
+          echo "=== HelmReleases ==="; flux get helmreleases -A || true
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ inputs.gitops_env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} get events --sort-by=.lastTimestamp | tail -50 || true
+          echo "=== job/rucio-bootstrap-db ==="
+          kubectl -n dep-dlm-${{ inputs.gitops_env }} logs job/rucio-bootstrap-db --tail=50 2>/dev/null || true
 
       - name: flux-uninstall
         if: always()
