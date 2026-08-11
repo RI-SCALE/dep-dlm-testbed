@@ -37,3 +37,15 @@ patches:
       - op: add
         path: /spec/valuesFrom/-
         value: { kind: ConfigMap, name: rucio-daemons-overrides-values, valuesKey: rucio-daemons.yaml }
+  # rucio-server's dependsOn: postgresql (in components/rucio-server.yaml)
+  # is sandbox-only — staging has no bundled postgresql HelmRelease at
+  # all (real Cloud SQL instance from Terraform instead), so that
+  # dependency could structurally never resolve. Confirmed live:
+  # "unable to get 'flux-system/postgresql' dependency: helmreleases...
+  # not found", permanently blocking rucio-server (and rucio-daemons
+  # behind it, which correctly depends on rucio-server — that one stays,
+  # it resolves naturally once rucio-server itself converges).
+  - target: { kind: HelmRelease, name: rucio-server }
+    patch: |
+      - op: remove
+        path: /spec/dependsOn
