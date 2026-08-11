@@ -3,7 +3,6 @@ kind: Kustomization
 # Sandbox components — AFTER core(vault+postgresql) + secrets + bootstrap.
 # (vault and postgresql are in core/; not here.)
 resources:
-  - ../../flux-system/gitrepository.yaml
   - ../../sources/helmrepositories.yaml
   - ../../components/keycloak.yaml
   - ../../components/xrd3.yaml
