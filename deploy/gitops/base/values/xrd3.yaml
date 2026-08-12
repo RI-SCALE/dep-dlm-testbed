@@ -1,4 +1,3 @@
-# xrootd-xrd3.yaml
 fullnameOverride: xrd3
 volumes:
   - name: certs
@@ -10,9 +9,9 @@ volumes:
         - { key: xrd3key.pem,  path: xrd3key.pem,  mode: 0600 }
         - { key: rucio_ca.pem, path: rucio_ca.pem, mode: 0644 }
   - name: configs
-    secret: { secretName: testbed-configs }
+    configMap: { name: testbed-configs }
   - name: scripts
-    secret: { secretName: testbed-scripts-xrootd, defaultMode: 0755 }
+    secret: { secretName: testbed-scripts, defaultMode: 0755 }
 volumeMounts:
   - { name: certs,   mountPath: /etc/grid-security/certificates/5fca1cb1.0, subPath: rucio_ca.pem }
   - { name: certs,   mountPath: /tmp/xrdcert.pem, subPath: xrd3cert.pem }

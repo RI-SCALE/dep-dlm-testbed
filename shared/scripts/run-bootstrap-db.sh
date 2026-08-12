@@ -20,7 +20,7 @@ BOOTSTRAP_JOB_TMPL="${SCRIPT_DIR}/k8s/bootstrap-job.yaml.tmpl"
 # staging/production pass their real Cloud SQL private IP instead.
 DB_HOST="${DB_HOST:-ruciodb}"
 
-# Sandbox's bootstrap-db.py comes from testbed-scripts-rucio, already
+# Sandbox's bootstrap-db.py comes from testbed-scripts, already
 # ESO-managed from Vault — nothing to generate. staging/production have
 # no Vault-sourced equivalent (scripts/tests were scoped out of the GCP
 # secret set entirely, no counterpart exists), so this materializes the
@@ -56,16 +56,14 @@ preflight() {
   [[ -f "$BOOTSTRAP_JOB_TMPL" ]] || die "bootstrap manifest template not found: $BOOTSTRAP_JOB_TMPL"
 }
 
-# Materializes testbed-scripts-rucio from the git checkout, staging/
-# production only. Idempotent — safe to re-run. NOT done for sandbox: that
-# namespace's testbed-scripts-rucio is ESO-owned (Vault-sourced), and this
-# would fight it for ownership of the same object name.
+# Materializes testbed-scripts from the git checkout, staging/production
+# only. Idempotent — safe to re-run.
 generate_scripts_secret() {
   [[ "$GENERATE_SCRIPTS_SECRET" -eq 1 ]] || return 0
   local bootstrap_script="${REPO_ROOT}/shared/scripts/rucio/bootstrap-db.py"
   [[ -f "$bootstrap_script" ]] || die "bootstrap-db.py not found: $bootstrap_script"
-  log "Materializing testbed-scripts-rucio from $bootstrap_script"
-  kubectl create secret generic testbed-scripts-rucio \
+  log "Materializing testbed-scripts from $bootstrap_script"
+  kubectl create secret generic testbed-scripts \
     --namespace "$K8S_NAMESPACE" \
     --from-file="bootstrap-db.py=${bootstrap_script}" \
     --dry-run=client -o yaml | kubectl apply -f -

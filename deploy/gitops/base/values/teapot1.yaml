@@ -19,8 +19,8 @@ volumes:
         - { key: 5fca1cb1.signing_policy, path: 5fca1cb1.signing_policy }
         - { key: b96dc756.signing_policy, path: b96dc756.signing_policy }
   - name: configs
-    secret:
-      secretName: testbed-configs
+    configMap:
+      name: testbed-configs
   - name: patches
     secret:
       secretName: testbed-patches

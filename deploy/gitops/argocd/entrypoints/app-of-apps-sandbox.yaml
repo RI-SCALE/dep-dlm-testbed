@@ -39,7 +39,7 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: main
-    path: deploy/gitops/environments/sandbox/secrets
+    path: deploy/gitops/environments/sandbox
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }
   syncPolicy:
     automated: { prune: true, selfHeal: true }

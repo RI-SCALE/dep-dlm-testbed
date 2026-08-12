@@ -8,8 +8,9 @@
   gracefully.
 
   The Job uses the same Secret as the rucio-server Deployment for its
-  rucio.cfg / alembic.ini, and pulls bootstrap-db.py from the
-  testbed-scripts-rucio ConfigMap.
+  rucio.cfg / alembic.ini (testbed-secrets, was rucio-server-cfg — retired
+  per Design-002), and pulls bootstrap-db.py from the testbed-scripts
+  ConfigMap.
 */}}
 
 {{- if (index .Values "rucio-server" "enabled") }}
@@ -63,9 +64,9 @@ spec:
       volumes:
         - name: rucio-cfg
           secret:
-            secretName: rucio-server-cfg
+            secretName: testbed-secrets
         - name: bootstrap
           configMap:
-            name: testbed-scripts-rucio
+            name: testbed-scripts
             defaultMode: 0755
 {{- end }}

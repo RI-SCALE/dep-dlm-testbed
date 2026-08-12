@@ -4,9 +4,9 @@ volumes:
     secret:
       secretName: testbed-certs
       defaultMode: 0600
-  - name: configs
+  - name: secrets
     secret:
-      secretName: testbed-configs
+      secretName: testbed-secrets
   - name: scripts
     secret:
       secretName: testbed-scripts
@@ -32,7 +32,7 @@ volumeMounts:
     mountPath: /etc/grid-security/certificates/rucio_ca.pem
     subPath: rucio_ca.pem
     readOnly: true
-  - name: configs
+  - name: secrets
     mountPath: /opt/rucio/etc/rucio.cfg
     subPath: userpass-client.cfg
     readOnly: true

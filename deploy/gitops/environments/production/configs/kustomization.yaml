@@ -1,0 +1,11 @@
+# testbed-configs — plain git-committed ConfigMap, replacing the Vault/ESO
+# path per Design-002..
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+configMapGenerator:
+  - name: testbed-configs
+    files:
+      - gfal2_http_plugin.conf=../../../../../shared/config/fts/gfal2_http_plugin.conf
+    options:
+      disableNameSuffixHash: true

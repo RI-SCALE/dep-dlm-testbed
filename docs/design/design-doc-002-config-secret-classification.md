@@ -175,6 +175,14 @@ both are confirmed working, retire the `rucio-server-cfg` object and its
 
 - `helm template` diff per environment: only the migrated files' object
   kind and volume-source stanza change.
+- `kustomize build deploy/gitops/environments/<env>/secrets` per
+  environment, for every environment, before merge. An initial
+  implementation pass caught exactly the kind of mistake this step exists
+  to prevent: a per-environment file silently missing (production's
+  `testbed-secrets.yaml`), a wrong namespace copy-pasted from another
+  environment, and a `configMapGenerator` split across two files in a way
+  Kustomize can't actually resolve. None of these are visible from reading
+  the diff casually — `kustomize build` fails loudly on all three.
 - Existing environment CI (`egi-dev`, sandbox e2e) passing is the live
   regression signal.
 

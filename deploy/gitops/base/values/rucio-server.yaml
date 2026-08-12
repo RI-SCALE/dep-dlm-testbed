@@ -1,7 +1,3 @@
-# Shared rucio-server values — mirrors the umbrella `rucio-server:` block so the
-# UPSTREAM chart mounts the same testbed-certs / rucio-server-cfg / patches the
-# umbrella supplied. Secrets now come from ESO (testbed-certs etc.), seeded from
-# Vault — but the mountPaths/items are identical to the umbrella.
 fullnameOverride: rucio-server
 replicaCount: 1
 image:
@@ -44,16 +40,16 @@ secretMounts:
       - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
       - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
       - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
-  - secretFullName: rucio-server-cfg
+  - secretFullName: testbed-secrets
     volumeName: rucio-cfg-server
     mountPath: /opt/rucio/etc/rucio.cfg
     subPath: server.cfg
-  - secretFullName: rucio-server-cfg
+  - secretFullName: testbed-secrets
     volumeName: rucio-cfg-alembic
     mountPath: /opt/rucio/etc/alembic.ini
     subPath: alembic.ini
-  - secretFullName: rucio-server-cfg
-    volumeName: idpsecrets
+  - secretFullName: testbed-secrets
+    volumeName: rucio-cfg-idpsecrets
     mountPath: /opt/rucio/etc/idpsecrets.json
     subPath: idpsecrets.json
   - secretFullName: testbed-patches

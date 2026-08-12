@@ -38,7 +38,7 @@ spec:
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: main
-    path: deploy/gitops/environments/staging/secrets
+    path: deploy/gitops/environments/staging
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-staging }
   syncPolicy:
     automated: { prune: true, selfHeal: true }

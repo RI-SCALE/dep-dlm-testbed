@@ -1,3 +1,9 @@
+{{- /*
+  realm.json and userpass-client.cfg are excluded from testbed-configs per
+  Design-002 — they embed real credentials (Keycloak client secrets, a
+  literal password). They're produced by testbed-secrets.yaml instead.
+*/}}
+{{- $excluded := list "realm.json" "userpass-client.cfg" }}
 {{- if .Values.configs.create }}
 apiVersion: v1
 kind: ConfigMap
@@ -20,8 +26,10 @@ data:
     {{- $rel := trimPrefix "files/configs/" $path }}
     {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
       {{- $name := base $path }}
+      {{- if not (has $name $excluded) }}
   {{ $name }}: |-
 {{ $.Files.Get $path | indent 4 }}
+      {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}
@@ -47,11 +55,17 @@ data:
   {{- range $path, $_ := $.Files.Glob "files/configs/*/*" }}
     {{- $rel := trimPrefix "files/configs/" $path }}
     {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
-      {{- $_ := set $merged (base $path) $path }}
+      {{- $name := base $path }}
+      {{- if not (has $name $excluded) }}
+        {{- $_ := set $merged $name $path }}
+      {{- end }}
     {{- end }}
   {{- end }}
   {{- range $path, $_ := $.Files.Glob (printf "files/configs/*/%s/*" $profile) }}
-    {{- $_ := set $merged (base $path) $path }}
+    {{- $name := base $path }}
+    {{- if not (has $name $excluded) }}
+      {{- $_ := set $merged $name $path }}
+    {{- end }}
   {{- end }}
   {{- range $name, $path := $merged }}
   {{ $name }}: |-
