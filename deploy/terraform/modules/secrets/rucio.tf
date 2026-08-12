@@ -7,7 +7,7 @@ resource "google_secret_manager_secret_version" "rucio" {
       rucio_host             = var.rucio_host
       bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
       oidc_issuer            = var.oidc_issuer
-      oidc_token_strategy    = var.token_mode == "managed" ? "client_credentials" : "exchange"
+      oidc_token_strategy    = var.token_mode == "managed" ? "exchange" : "client_credentials"
     })
     "alembic.ini" = templatefile("${path.module}/templates/alembic.ini.tftpl", {
       rucio_db_host     = var.rucio_db_host

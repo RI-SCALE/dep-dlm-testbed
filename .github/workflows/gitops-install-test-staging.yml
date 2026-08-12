@@ -1,10 +1,5 @@
 name: GitOps install test (staging)
 
-# Nightly runs the full matrix (all 3 profile/token_mode combinations,
-# strictly sequential — realistically 2-3+ hours). workflow_dispatch
-# defaults to the same full run, but can be narrowed to a single
-# combination via the profile input — useful when iterating on a fix and
-# the full sequential chain's turnaround is the wrong tool for the job.
 on:
   workflow_dispatch:
     inputs:
@@ -18,8 +13,6 @@ on:
           - egi-dev
           - ls-aai-dev-managed
           - ls-aai-dev-unmanaged
-  schedule:
-    - cron: "0 2 * * *"  # ahead of the sandbox testbed's own 03:00/03:30 runs
 
 permissions:
   id-token: write

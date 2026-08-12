@@ -65,7 +65,7 @@ variable "oidc_client_secret" {
 }
 
 variable "token_mode" {
-  description = "managed (client_credentials, FTS manages token lifecycle) | unmanaged (exchange, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
+  description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string
   default     = "managed"
   validation {

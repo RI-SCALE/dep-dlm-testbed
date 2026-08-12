@@ -40,7 +40,7 @@ No resources.
 | <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | GKE subnet ID from deploy/terraform/bootstrap output subnet\_ids.production | `string` | n/a | yes |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Should default true for production once this environment is actually used — left false here only because this whole environment is an unvalidated placeholder | `bool` | `false` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment name, used to derive resource name prefixes | `string` | `"production"` | no |
-| <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (client\_credentials, FTS manages token lifecycle) \| unmanaged (exchange, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
+| <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (exchange, FTS manages token lifecycle) \| unmanaged (client\_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
 
 ## Outputs
 

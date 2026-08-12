@@ -42,7 +42,7 @@ No modules.
 | <a name="input_rucio_host"></a> [rucio\_host](#input\_rucio\_host) | Base URL the rucio client/auth host point at | `string` | `"http://rucio-server"` | no |
 | <a name="input_secret_names"></a> [secret\_names](#input\_secret\_names) | Logical secret names to create empty containers for (values provisioned out-of-band). Mirrors the sandbox's Vault seed categories: idpsecrets, certs, configs, rucio, scripts. | `list(string)` | <pre>[<br/>  "certs",<br/>  "configs",<br/>  "rucio"<br/>]</pre> | no |
 | <a name="input_site_name"></a> [site\_name](#input\_site\_name) | FTS SiteName / rucio SiteName-equivalent | `string` | `"DOCKER"` | no |
-| <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (client\_credentials, FTS manages token lifecycle) \| unmanaged (exchange, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
+| <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (exchange, FTS manages token lifecycle) \| unmanaged (client\_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
 
 ## Outputs
 
