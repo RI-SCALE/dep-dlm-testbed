@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ── Global Config ───────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GITOPS_DIR="${REPO_ROOT}/deploy/gitops"
@@ -36,26 +37,35 @@ while [[ $# -gt 0 ]]; do
 done
 
 APP_OF_APPS="${GITOPS_DIR}/argocd/entrypoints/app-of-apps-${GITOPS_ENV}.yaml"
-ASET_NAME="dep-dlm-${GITOPS_ENV}"   # matches argocd/applicationsets/<env>.yaml metadata.name
+ASET_NAME="dep-dlm-${GITOPS_ENV}"          # matches argocd/applicationsets/<env>.yaml metadata.name
+# shellcheck disable=SC2034  # read by common.sh's provision_cluster_secret_store()
 ESO_SA="external-secrets-${GITOPS_ENV}"
-ESO_SA_NAMESPACE="${APP_NS}"  # ESO's ServiceAccount is created in the same namespace as the apps root, not in argocd/
+# shellcheck disable=SC2034  # read by common.sh's provision_cluster_secret_store()
+ESO_SA_NAMESPACE="${APP_NS}"               # ESO's ServiceAccount lives in the apps-root namespace, not argocd/
+# shellcheck disable=SC2034  # read by common.sh's bootstrap_rucio_db()
+SECRETS_READY_HINT="kubectl -n ${ARGOCD_NAMESPACE} get application dep-dlm-${GITOPS_ENV}-secrets"
 
-# --- Preflight --------------------------------------------------------------
-require_cmd kubectl yq timeout
-require_cluster
-[[ -f "$APP_OF_APPS" ]] || die "app-of-apps-${GITOPS_ENV}.yaml not found at $APP_OF_APPS"
-if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
-  require_cmd envsubst
-fi
+APPLY_FILE=""   # set by apply_apps_root, consumed + cleaned up by apply_secrets_root
 
-log "Target cluster:"
-kubectl config current-context || true
+# ── Logic Blocks ────────────────────────────────────────────────────────────
 
-# --- 1. Install Argo CD -----------------------------------------------------
-if kubectl get ns "$ARGOCD_NAMESPACE" >/dev/null 2>&1 \
-   && kubectl -n "$ARGOCD_NAMESPACE" get deploy argocd-server >/dev/null 2>&1; then
-  log "Argo CD already present in namespace '$ARGOCD_NAMESPACE' — skipping install"
-else
+preflight() {
+  require_cmd kubectl yq timeout
+  require_cluster
+  [[ -f "$APP_OF_APPS" ]] || die "app-of-apps-${GITOPS_ENV}.yaml not found at $APP_OF_APPS"
+  if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
+    require_cmd envsubst
+  fi
+  log "Target cluster:"
+  kubectl config current-context || true
+}
+
+install_argocd() {
+  if kubectl get ns "$ARGOCD_NAMESPACE" >/dev/null 2>&1 \
+     && kubectl -n "$ARGOCD_NAMESPACE" get deploy argocd-server >/dev/null 2>&1; then
+    log "Argo CD already present in namespace '$ARGOCD_NAMESPACE' — skipping install"
+    return 0
+  fi
   log "Installing Argo CD ($ARGOCD_VERSION) into namespace '$ARGOCD_NAMESPACE'"
   kubectl create namespace "$ARGOCD_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
   # --server-side avoids kubectl's 256KB last-applied-configuration annotation,
@@ -63,88 +73,40 @@ else
   # (or a prior client-side apply) hand over field ownership cleanly.
   kubectl apply --server-side --force-conflicts -n "$ARGOCD_NAMESPACE" \
     -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
-fi
+}
 
-# --- 2. Wait for Argo CD to be ready ----------------------------------------
-if [[ "$WAIT" -eq 1 ]]; then
+wait_for_argocd_ready() {
+  [[ "$WAIT" -eq 1 ]] || return 0
   log "Waiting for Argo CD components to become Available (up to 5m)"
   # application-controller is a StatefulSet on newer installs; try both.
   wait_for_workload "$ARGOCD_NAMESPACE" deploy      argocd-repo-server
   wait_for_workload "$ARGOCD_NAMESPACE" deploy      argocd-server
   wait_for_workload "$ARGOCD_NAMESPACE" deploy      argocd-application-controller
   wait_for_workload "$ARGOCD_NAMESPACE" statefulset argocd-application-controller
-fi
+}
 
-# --- 3. Patch app-of-apps-<env>.yaml repo/revision if overrides given -------
-APPLY_FILE="$(patch_git_ref "$APP_OF_APPS" repoURL targetRevision "$REPO_URL" "$REVISION")"
-if [[ "$APPLY_FILE" != "$APP_OF_APPS" ]]; then
-  warn "Applied repo/revision overrides only to the app-of-apps-${GITOPS_ENV}.yaml root."
-  warn "The child Applications under argocd/applicationsets/ still carry their"
-  warn "own repoURL/targetRevision — edit those for the bundled charts, or"
-  warn "merge to your default branch so HEAD resolves."
-fi
-
-# --- 3b. Render + apply the environment's ClusterSecretStore, if templated.
-# Sandbox's store is a plain, static file (no .tmpl) — nothing to do here
-# for it. staging/production's stores need projectID/region/cluster name,
-# which are dynamic (bootstrap-generated), so they're rendered via envsubst
-# and applied directly here rather than through ArgoCD's own reconciliation
-# — ArgoCD syncs straight from git with no render step, so a .tmpl file
-# committed as-is would get applied with literal, unexpanded ${VAR} text.
-# Same pattern as seed-vault.sh's own templated manifest: idempotent,
-# safe to re-run, not continuously reconciled.
-STORE_TMPL="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml.tmpl"
-RENDERED_STORE=""
-if [[ -f "$STORE_TMPL" ]]; then
-  require_cmd envsubst
-  log "Rendering ClusterSecretStore for ${GITOPS_ENV}"
-  TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
-  GCP_PROJECT_ID="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
-  GCP_REGION="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
-  GCP_CLUSTER_NAME="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
-  RENDERED_STORE="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml"
-  # shellcheck disable=SC2016
-  GCP_PROJECT_ID="$GCP_PROJECT_ID" GCP_REGION="$GCP_REGION" GCP_CLUSTER_NAME="$GCP_CLUSTER_NAME" GITOPS_ENV="$GITOPS_ENV" \
-    ESO_SA_NAME="$ESO_SA" ESO_SA_NAMESPACE="$ESO_SA_NAMESPACE" \
-    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV} ${ESO_SA_NAME} ${ESO_SA_NAMESPACE}' < "$STORE_TMPL" > "$RENDERED_STORE"
-fi
-
-# --- 4. Apply the apps root (the ApplicationSet)
-log "Applying apps root (dep-dlm-${GITOPS_ENV}-apps)"
-kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-apps")' "$APPLY_FILE")
-
-# --- 4b. APPLY the rendered ClusterSecretStore, gated on the ESO CRD
-# actually existing.
-if [[ -n "$RENDERED_STORE" ]]; then
-  ESO_WEBHOOK_SVC="${ESO_SA}-webhook"
-  log "Waiting for ${ESO_WEBHOOK_SVC} webhook endpoints in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
-  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${ESO_SA_NAMESPACE}' get endpoints '${ESO_WEBHOOK_SVC}' -o jsonpath='{.subsets[*].addresses}' 2>/dev/null | grep -q .; do sleep 5; done"
-  then
-    warn "${ESO_WEBHOOK_SVC} has no ready endpoints within ${CORE_WAIT_TIMEOUT} — ClusterSecretStore apply will likely fail with a webhook error; check 'kubectl -n ${ESO_SA_NAMESPACE} get pods'"
+# Patches app-of-apps-<env>.yaml repo/revision (if overrides given) and
+# applies just the apps-root Application out of it.
+apply_apps_root() {
+  APPLY_FILE="$(patch_git_ref "$APP_OF_APPS" repoURL targetRevision "$REPO_URL" "$REVISION")"
+  if [[ "$APPLY_FILE" != "$APP_OF_APPS" ]]; then
+    warn "Applied repo/revision overrides only to the app-of-apps-${GITOPS_ENV}.yaml root."
+    warn "The child Applications under argocd/applicationsets/ still carry their"
+    warn "own repoURL/targetRevision — edit those for the bundled charts, or"
+    warn "merge to your default branch so HEAD resolves."
   fi
 
-  log "Applying ClusterSecretStore for ${GITOPS_ENV}"
-  kubectl apply -n "$APP_NS" -f "$RENDERED_STORE"
-fi
+  log "Applying apps root (dep-dlm-${GITOPS_ENV}-apps)"
+  kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-apps")' "$APPLY_FILE")
+}
 
-# --- 4c. Annotate the environment's external-secrets ServiceAccount
-if [[ -n "$RENDERED_STORE" ]]; then
-  log "Waiting for ServiceAccount/${ESO_SA} to exist in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
-  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${ESO_SA_NAMESPACE}' get serviceaccount '${ESO_SA}' >/dev/null 2>&1; do sleep 5; done"
-  then
-    die "ServiceAccount/${ESO_SA} never appeared in ${ESO_SA_NAMESPACE} within ${CORE_WAIT_TIMEOUT}"
-  fi
-  ESO_GCP_SA_EMAIL="$(terraform -chdir="$TF_ENV_DIR" output -raw eso_service_account_email)"
-  log "Annotating ServiceAccount/${ESO_SA} for Workload Identity (${ESO_GCP_SA_EMAIL})"
-  kubectl -n "$ESO_SA_NAMESPACE" annotate serviceaccount "$ESO_SA" \
-    iam.gke.io/gcp-service-account="$ESO_GCP_SA_EMAIL" --overwrite
-fi
+# Waits for the core tier (vault + external-secrets operator) to come up,
+# via the Applications the ApplicationSet generates for them.
+wait_for_core_tier() {
+  [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]] || return 0
 
-# --- 5. Wait for the core tier: vault + external-secrets operator
-if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
   log "Waiting for the ApplicationSet to generate vault-${GITOPS_ENV} / external-secrets-${GITOPS_ENV} (up to ${CORE_WAIT_TIMEOUT})"
+  local app
   for app in "vault-${GITOPS_ENV}" "external-secrets-${GITOPS_ENV}"; do
     if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
       "until kubectl -n '${ARGOCD_NAMESPACE}' get application '${app}' >/dev/null 2>&1; do sleep 5; done"
@@ -158,71 +120,28 @@ if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" && "$WAIT" -eq 1 ]]; then
     "application/vault-${GITOPS_ENV}" "application/external-secrets-${GITOPS_ENV}" \
     --timeout="$CORE_WAIT_TIMEOUT" \
     || warn "core tier not Healthy within ${CORE_WAIT_TIMEOUT} — seeding will likely fail; check 'kubectl -n ${ARGOCD_NAMESPACE} get application vault-${GITOPS_ENV} external-secrets-${GITOPS_ENV}'"
-fi
+}
 
-# --- 6. Apply the secrets root — Vault + ESO now exist, so ExternalSecrets
-# CAN resolve once seeded
-log "Applying secrets root (dep-dlm-${GITOPS_ENV}-secrets)"
-kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-secrets")' "$APPLY_FILE")
-[[ "$APPLY_FILE" != "$APP_OF_APPS" ]] && rm -f "$APPLY_FILE"
+# Applies the secrets root — Vault + ESO now exist, so ExternalSecrets CAN
+# resolve once seeded. Also cleans up the tempfile from apply_apps_root.
+apply_secrets_root() {
+  log "Applying secrets root (dep-dlm-${GITOPS_ENV}-secrets)"
+  kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-secrets")' "$APPLY_FILE")
+  [[ "$APPLY_FILE" != "$APP_OF_APPS" ]] && rm -f "$APPLY_FILE"
+}
 
-# --- 7. Seed Vault (sandbox only) — Vault is reachable (step 5)
-if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
-  "${SCRIPT_DIR}/seed-vault.sh" \
-    --namespace "$APP_NS" \
-    --repo-url "${REPO_URL:-https://github.com/ri-scale/dep-dlm-testbed.git}" \
-    --revision "${REVISION:-main}" \
-    --flow "$FLOW" \
-    --scope-profile "$SCOPE_PROFILE" \
-    --vault-timeout "$CORE_WAIT_TIMEOUT"
-
-elif [[ "$SEED" -eq 0 ]]; then
-  log "Skipping Vault seeding (--no-seed)"
-fi
-
-# --- 8. Bootstrap the rucio DB schema -------------------------------------
-if [[ "$SEED" -eq 1 ]]; then
-  if [[ "$GITOPS_ENV" == "sandbox" ]]; then
-    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
+report() {
+  log "Argo CD admin password (initial):"
+  if kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
+    kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret \
+      -o jsonpath='{.data.password}' 2>/dev/null \
+      | base64 -d 2>/dev/null \
+      || warn "Failed to decode initial admin password"
   else
-    # rucio-server-cfg's ExternalSecret object existing isn't the same as
-    # its content having actually synced — without the Service-existence
-    # wait sandbox incidentally gets from run-bootstrap-db.sh itself
-    # (skipped here, no Service to wait for), nothing else guarantees ESO
-    # has finished projecting real content before the Job tries to read
-    # it. Wait for SecretSynced explicitly instead.
-    log "Waiting for ExternalSecret/rucio-server-cfg to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
-    if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-      "until kubectl -n '${APP_NS}' get externalsecret rucio-server-cfg >/dev/null 2>&1; do sleep 5; done"
-    then
-      warn "ExternalSecret/rucio-server-cfg never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${ARGOCD_NAMESPACE} get application dep-dlm-${GITOPS_ENV}-secrets'"
-    else
-      log "Waiting for ExternalSecret/rucio-server-cfg to sync (up to ${CORE_WAIT_TIMEOUT})"
-      kubectl -n "$APP_NS" wait --for=condition=Ready externalsecret/rucio-server-cfg \
-        --timeout="$CORE_WAIT_TIMEOUT" \
-        || warn "rucio-server-cfg not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret rucio-server-cfg'"
-    fi
-
-    RUCIO_DB_HOST="$(terraform -chdir="$TF_ENV_DIR" output -raw rucio_database_private_ip)"
-    "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS" \
-      --db-host "$RUCIO_DB_HOST" --skip-service-check --generate-scripts-secret
+    warn "initial-admin-secret not found (already rotated?)"
   fi
-elif [[ "$SEED" -eq 0 ]]; then
-  log "Skipping rucio DB bootstrap (--no-seed)"
-fi
 
-# --- 9. Report --------------------------------------------------------------
-log "Argo CD admin password (initial):"
-if kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
-  kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret \
-    -o jsonpath='{.data.password}' 2>/dev/null \
-    | base64 -d 2>/dev/null \
-    || warn "Failed to decode initial admin password"
-else
-  warn "initial-admin-secret not found (already rotated?)"
-fi
-
-cat <<EOF
+  cat <<EOF
 
 ------------------------------------------------------------------------------
 Next steps:
@@ -245,5 +164,22 @@ can't read yet. Either merge this branch to the tracked default branch, or
 edit each child Application's repoURL/targetRevision to your fork/branch.
 ------------------------------------------------------------------------------
 EOF
+  log "Done."
+}
 
-log "Done."
+# ── Main Entry Point ────────────────────────────────────────────────────────
+
+main() {
+  preflight
+  install_argocd
+  wait_for_argocd_ready
+  apply_apps_root
+  provision_cluster_secret_store   # from common.sh
+  wait_for_core_tier
+  apply_secrets_root
+  seed_vault                       # from common.sh
+  bootstrap_rucio_db               # from common.sh
+  report
+}
+
+main

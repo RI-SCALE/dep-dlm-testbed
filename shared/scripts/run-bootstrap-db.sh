@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ── Global Config ───────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -47,57 +48,70 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-require_cmd kubectl envsubst
-require_cluster
-[[ -f "$BOOTSTRAP_JOB_TMPL" ]] || die "bootstrap manifest template not found: $BOOTSTRAP_JOB_TMPL"
+# ── Logic Blocks ────────────────────────────────────────────────────────────
 
-# 0. Materialize testbed-scripts-rucio from the git checkout, staging/
-#    production only. Idempotent — safe to re-run. NOT done for sandbox:
-#    that namespace's testbed-scripts-rucio is ESO-owned (Vault-sourced),
-#    and this would fight it for ownership of the same object name.
-if [[ "$GENERATE_SCRIPTS_SECRET" -eq 1 ]]; then
-  BOOTSTRAP_SCRIPT="${REPO_ROOT}/shared/scripts/rucio/bootstrap-db.py"
-  [[ -f "$BOOTSTRAP_SCRIPT" ]] || die "bootstrap-db.py not found: $BOOTSTRAP_SCRIPT"
-  log "Materializing testbed-scripts-rucio from $BOOTSTRAP_SCRIPT"
+preflight() {
+  require_cmd kubectl envsubst
+  require_cluster
+  [[ -f "$BOOTSTRAP_JOB_TMPL" ]] || die "bootstrap manifest template not found: $BOOTSTRAP_JOB_TMPL"
+}
+
+# Materializes testbed-scripts-rucio from the git checkout, staging/
+# production only. Idempotent — safe to re-run. NOT done for sandbox: that
+# namespace's testbed-scripts-rucio is ESO-owned (Vault-sourced), and this
+# would fight it for ownership of the same object name.
+generate_scripts_secret() {
+  [[ "$GENERATE_SCRIPTS_SECRET" -eq 1 ]] || return 0
+  local bootstrap_script="${REPO_ROOT}/shared/scripts/rucio/bootstrap-db.py"
+  [[ -f "$bootstrap_script" ]] || die "bootstrap-db.py not found: $bootstrap_script"
+  log "Materializing testbed-scripts-rucio from $bootstrap_script"
   kubectl create secret generic testbed-scripts-rucio \
     --namespace "$K8S_NAMESPACE" \
-    --from-file="bootstrap-db.py=${BOOTSTRAP_SCRIPT}" \
+    --from-file="bootstrap-db.py=${bootstrap_script}" \
     --dry-run=client -o yaml | kubectl apply -f -
-fi
+}
 
-# 1. The Job resolves DB_HOST as a plain TCP endpoint, not necessarily a
-#    Service DNS name — skip this check where there's no Service to wait
-#    for at all.
-if [[ "$SKIP_SERVICE_CHECK" -eq 0 ]]; then
+# The Job resolves DB_HOST as a plain TCP endpoint, not necessarily a
+# Service DNS name — skip this check where there's no Service to wait for
+# at all.
+wait_for_db_service() {
+  if [[ "$SKIP_SERVICE_CHECK" -eq 1 ]]; then
+    log "Skipping Service existence check (--skip-service-check) — DB_HOST=${DB_HOST}"
+    return 0
+  fi
   log "Waiting for Service/${DB_SERVICE} to exist in ${K8S_NAMESPACE}"
+  local i
   for i in $(seq 1 30); do
     if kubectl -n "$K8S_NAMESPACE" get service "$DB_SERVICE" >/dev/null 2>&1; then
       log "  ✓ Service/${DB_SERVICE} exists"
-      break
+      return 0
     fi
     if [[ "$i" == "30" ]]; then
       die "Service/${DB_SERVICE} never appeared in ${K8S_NAMESPACE} — check 'kubectl -n ${K8S_NAMESPACE} get svc,pods'"
     fi
     echo "  [$i] waiting for Service/${DB_SERVICE}..."; sleep 5
   done
-else
-  log "Skipping Service existence check (--skip-service-check) — DB_HOST=${DB_HOST}"
-fi
+}
 
-# 2. Clean up any prior failed/completed attempt
-kubectl -n "$K8S_NAMESPACE" delete job "$JOB_NAME" --ignore-not-found >/dev/null
+# Clears out any prior failed/completed attempt, then renders + applies.
+apply_bootstrap_job() {
+  kubectl -n "$K8S_NAMESPACE" delete job "$JOB_NAME" --ignore-not-found >/dev/null
 
-# 3. Render + apply.
-log "Rendering ${JOB_NAME} (DB_HOST=${DB_HOST})"
-# shellcheck disable=SC2016
-RENDER_DB_HOST="$DB_HOST" envsubst '${RENDER_DB_HOST}' < "$BOOTSTRAP_JOB_TMPL" \
-  | kubectl apply -n "$K8S_NAMESPACE" -f -
+  log "Rendering ${JOB_NAME} (DB_HOST=${DB_HOST})"
+  # shellcheck disable=SC2016
+  RENDER_DB_HOST="$DB_HOST" envsubst '${RENDER_DB_HOST}' < "$BOOTSTRAP_JOB_TMPL" \
+    | kubectl apply -n "$K8S_NAMESPACE" -f -
+}
 
-log "Waiting for ${JOB_NAME} to complete (up to ${BOOTSTRAP_TIMEOUT})"
-if ! kubectl -n "$K8S_NAMESPACE" wait --for=condition=complete "job/${JOB_NAME}" --timeout="$BOOTSTRAP_TIMEOUT"; then
-  warn "${JOB_NAME} did not complete in time — logs:"
-  kubectl -n "$K8S_NAMESPACE" logs "job/${JOB_NAME}" --all-containers --tail=100 || true
-  die "rucio DB bootstrap failed"
-fi
+# ── Main Entry Point ────────────────────────────────────────────────────────
 
-log "rucio-bootstrap-db complete."
+main() {
+  preflight
+  generate_scripts_secret
+  wait_for_db_service
+  apply_bootstrap_job
+  wait_for_job "$K8S_NAMESPACE" "$JOB_NAME" "$BOOTSTRAP_TIMEOUT" "rucio DB bootstrap failed"
+  log "rucio-bootstrap-db complete."
+}
+
+main
