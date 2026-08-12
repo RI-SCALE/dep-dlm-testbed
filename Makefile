@@ -479,6 +479,31 @@ tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 tf-smoke-test: ## Run smoke tests against TF_ENV. Run tf-kubeconfig first.
 	TF_ENV=$(TF_ENV) pytest deploy/terraform/tests/test_deployed_infra.py -v
 
+.PHONY: tf-import
+tf-import: ## Import an existing GCP resource into TF_ENV's state. Usage: make tf-import RESOURCE=module.rucio_database.google_sql_database_instance.this ID=dep-dlm-staging-e52e0d90/dep-dlm-staging-pg
+	$(call tf_require_oidc)
+	@[ -n "$(RESOURCE)" ] && [ -n "$(ID)" ] || \
+	  { echo "ERROR: usage: make tf-import RESOURCE=<terraform address> ID=<cloud resource id>"; exit 1; }
+	@$(TF_RESOLVE_ENV); \
+	TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	TF_VAR_region="$$GCP_REGION" \
+	TF_VAR_network_id="$$TF_NETWORK_ID" \
+	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	  $(TERRAFORM) import -no-color "$(RESOURCE)" "$(ID)"
+
+.PHONY: tf-force-unlock
+tf-force-unlock: ## Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running against TF_ENV first — see the Lock Info 'Who' field.
+	@[ -n "$(LOCK_ID)" ] || \
+	  { echo "ERROR: usage: make tf-force-unlock LOCK_ID=<lock id from the error message>"; exit 1; }
+	$(TERRAFORM) force-unlock $(if $(filter 1,$(AUTO_APPROVE)),-force) $(LOCK_ID)
+
 ## Cleanup
 
 .PHONY: clean

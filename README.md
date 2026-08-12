@@ -142,7 +142,7 @@ dep-dlm-testbed
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
-  SCOPE_PROFILE = egi-dev (local | <profile>)
+  SCOPE_PROFILE = local (local | <profile>)
   TF_ENV = staging
 
 Usage:
@@ -197,6 +197,8 @@ Terraform
   tf-output            Show Terraform outputs for TF_ENV
   tf-kubeconfig        Fetch kubectl credentials for TF_ENV's cluster
   tf-smoke-test        Run smoke tests against TF_ENV. Run tf-kubeconfig first.
+  tf-import            Import an existing GCP resource into TF_ENV's state. Usage: make tf-import RESOURCE=module.rucio_database.google_sql_database_instance.this ID=dep-dlm-staging-e52e0d90/dep-dlm-staging-pg
+  tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running againstTF_ENV first — see the Lock Info 'Who' field.
 
 Cleanup
   clean                Remove certs, volumes, Terraform/Python/Helm artifacts
