@@ -142,21 +142,34 @@ wait_for_job() {
   fi
 }
 
-# bootstrap_rucio_db — bootstrap the rucio DB schema. Waits for both
-# testbed-secrets and testbed-scripts ExternalSecrets to sync in EVERY
-# environment (including sandbox) before applying the bootstrap Job — the
-# object existing isn't the same as ESO having finished projecting its
-# content, and nothing else in the sandbox flow guarantees that ordering:
-# seed_vault() completing means Vault has the data, not that ESO has
-# already pulled it into a real K8s Secret/ConfigMap yet.
+# bootstrap_rucio_db — bootstrap the rucio DB schema. Sandbox runs it
+# directly; other envs first wait for testbed-secrets's ExternalSecret to
+# actually sync (the secret object existing isn't the same as ESO having
+# finished projecting its content — sandbox gets an equivalent guarantee
+# for free via run-bootstrap-db.sh's own Service-existence wait, which
+# doesn't apply here), then pass an explicit --db-host.
+#
+# Requires globals: SEED GITOPS_ENV SCRIPT_DIR APP_NS CORE_WAIT_TIMEOUT
+# TF_ENV_DIR (set by provision_cluster_secret_store for non-sandbox envs),
+# and SECRETS_READY_HINT — a one-line command suggestion shown on warn,
+# set per-caller since Argo and Flux surface secrets-root health differently.
 bootstrap_rucio_db() {
   if [[ "$SEED" -eq 0 ]]; then
     log "Skipping rucio DB bootstrap (--no-seed)"
     return 0
   fi
 
-  local secret_name
-  for secret_name in testbed-secrets testbed-scripts; do
+  # Waits for testbed-secrets (rucio-cfg's server.cfg/alembic.ini/
+  # idpsecrets.json, mounted via subPath — a missing key here is a hard
+  # FailedMount, not a soft runtime failure). testbed-scripts (bootstrap-db.py)
+  # used to need this same wait when it was ESO/Vault-backed, but it's a
+  # plain git-committed ConfigMap now (shared/scripts/kustomization.yaml) —
+  # created synchronously by the same Kustomize apply this function already
+  # waited on via Kustomization/dep-dlm-<env>-core being Ready, no async
+  # ESO sync to race against, so checking it as an ExternalSecret here would
+  # hang forever (that object kind no longer exists for this name).
+  local secret_names="testbed-secrets"
+  for secret_name in $secret_names; do
     log "Waiting for ExternalSecret/${secret_name} to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
     if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
       "until kubectl -n '${APP_NS}' get externalsecret ${secret_name} >/dev/null 2>&1; do sleep 5; done"

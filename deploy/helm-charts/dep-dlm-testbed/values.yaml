@@ -47,26 +47,14 @@ certs:
 
 configs:
   create: true
-  configMapName: testbed-configs
-# NOTE: realm.json and userpass-client.cfg are excluded from this ConfigMap
-# as of Design-002 (see docs/design/design-doc-002-config-secret-classification.md)
-# — they carry real credentials and are sourced from the `secrets:` block
-# below instead. This value alone doesn't enforce that exclusion; the
-# corresponding change belongs in templates/configs-cm.yaml, which this repo
-# snapshot doesn't include full content for — verify the Files.Glob pattern
-# there excludes both filenames before relying on this comment.
 secrets:
   create: true
-  secretName: testbed-secrets
 scripts:
   create: true
-  configMapName: testbed-scripts
 patches:
   create: true
-  configMapName: testbed-patches
 tests:
   create: true
-  configMapName: testbed-tests
 
 # DATABASES
 

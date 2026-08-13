@@ -24,7 +24,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.scripts.configMapName }}
+  name: testbed-scripts
   labels:
     app.kubernetes.io/name: dep-dlm-testbed
     app.kubernetes.io/instance: {{ .Release.Name }}

@@ -10,7 +10,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.patches.configMapName }}
+  name: testbed-patches
   labels:
     app.kubernetes.io/name: dep-dlm-testbed
     app.kubernetes.io/instance: {{ .Release.Name }}
