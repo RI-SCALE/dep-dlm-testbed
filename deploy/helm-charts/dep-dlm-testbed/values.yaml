@@ -144,20 +144,21 @@ ruciodb:
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
 
+  configMounts:
     # Python patches
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: fts3-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
       subPath: rucio--fts3.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: oidc-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
       subPath: rucio--oidc.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
@@ -265,19 +266,21 @@ rucio-daemons:
       volumeName: rucio-cfg-idpsecrets
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
-    - secretFullName: testbed-patches
+
+  configMounts:
+    - configMapFullName: testbed-patches
       volumeName: fts3-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
       subPath: rucio--fts3.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: oidc-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
       subPath: rucio--oidc.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
@@ -345,8 +348,8 @@ fts:
         name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
   volumeMounts:
     # Certs
@@ -698,8 +701,8 @@ teapot1:
         name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
     - name: teapot-data
       persistentVolumeClaim:
@@ -813,8 +816,8 @@ teapot2:
         name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
     - name: teapot-data
       persistentVolumeClaim:
