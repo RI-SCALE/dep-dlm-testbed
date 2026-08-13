@@ -4,3 +4,6 @@ namespace: dep-dlm-sandbox
 resources:
   - secrets
   - configs
+  - patches
+  - scripts
+  - tests

@@ -1,17 +1,5 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-configMapGenerator:
-  - name: testbed-configs
-    files:
-      - gfal2_http_plugin.conf=../../../../../shared/config/fts/gfal2_http_plugin.conf
-      - authdb=../../../../../shared/config/xrootd/authdb
-      - scitokens.conf=../../../../../shared/config/xrootd/scitokens.conf
-      - xrdrucio-scitokens.cfg=../../../../../shared/config/xrootd/xrdrucio-scitokens.cfg
-      - config.ini=../../../../../shared/config/teapot/config.ini
-      - user-mapping.csv=../../../../../shared/config/teapot/user-mapping.csv
-      - logback.xml=../../../../../shared/config/teapot/logback.xml
-      - application.yml=../../../../../shared/config/teapot/application.yml
-      - data.properties=../../../../../shared/config/teapot/data.properties
-    options:
-      disableNameSuffixHash: true
+resources:
+  - ../../../../../shared/config

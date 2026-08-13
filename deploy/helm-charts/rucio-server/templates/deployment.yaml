@@ -87,6 +87,18 @@ spec:
 {{ toYaml $val.items | indent 12 }}
           {{- end }}
       {{- end}}
+      {{- range $key, $val := .Values.configMounts }}
+      - name: {{ coalesce $val.volumeName $val.configMapName $val.configMapFullName }}
+        configMap:
+          name: {{ coalesce $val.configMapFullName (printf "%s-%s" $.Release.Name $val.configMapName) }}
+          {{- if $val.defaultMode }}
+          defaultMode: {{ $val.defaultMode }}
+          {{- end }}
+          {{- if $val.items }}
+          items:
+{{ toYaml $val.items | indent 12 }}
+          {{- end }}
+      {{- end}}
       {{- range $key, $val := .Values.persistentVolumes }}
       - name: {{ $key }}
         persistentVolumeClaim:
@@ -211,6 +223,19 @@ spec:
           {{-   end}}
           {{-  else }}
           - name: {{ coalesce $val.volumeName $val.secretName $val.secretFullName }}
+            mountPath: {{ $val.mountPath }}
+            subPath: {{ $val.subPath }}
+          {{-  end}}
+          {{- end}}
+          {{- range $key, $val := .Values.configMounts }}
+          {{-  if $val.subPaths }}
+          {{-   range $val.subPaths }}
+          - name: {{ coalesce $val.volumeName $val.configMapName $val.configMapFullName }}
+            mountPath: {{ $val.mountPath }}{{ . }}
+            subPath: {{ . }}
+          {{-   end}}
+          {{-  else }}
+          - name: {{ coalesce $val.volumeName $val.configMapName $val.configMapFullName }}
             mountPath: {{ $val.mountPath }}
             subPath: {{ $val.subPath }}
           {{-  end}}

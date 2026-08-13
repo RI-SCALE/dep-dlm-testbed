@@ -96,18 +96,6 @@ spec:
                 storm-webdav-localhostcert.pem=@certs/storm-webdav-localhostcert.pem \
                 storm-webdav-localhostkey.pem=@certs/storm-webdav-localhostkey.pem \
                 tls_ca_bundle.pem=@certs/tls_ca_bundle.pem
-              vault kv put secret/dep-dlm/patches \
-                rucio--fts3.py=@shared/patches/rucio/fts3.py \
-                rucio--oidc.py=@shared/patches/rucio/oidc.py \
-                rucio--constants.py=@shared/patches/rucio/constants.py \
-                rucio--rse.py=@shared/patches/rucio/rse.py \
-                fts--middleware.py=@shared/patches/fts/middleware.py \
-                fts--openidconnect.py=@shared/patches/fts/openidconnect.py \
-                fts--JobBuilder.py=@shared/patches/fts/JobBuilder.py \
-                fts--cloudStorage.py=@shared/patches/fts/cloudStorage.py \
-                fts--cloud.py=@shared/patches/fts/cloud.py \
-                fts--tokenproviders.py=@shared/patches/fts/tokenproviders.py \
-                teapot--teapot.py=@shared/patches/teapot/teapot.py
               vault kv put secret/dep-dlm/secrets \
                 server.cfg=@shared/config/rucio/${PDIR}${CFG} \
                 alembic.ini=@shared/config/rucio/alembic.ini \
@@ -116,14 +104,6 @@ spec:
                 fts3restconfig=@shared/config/fts/${PDIR}${FLOW}.fts3restconfig \
                 realm.json=@shared/config/keycloak/realm.json \
                 userpass-client.cfg=@shared/config/rucio/userpass-client.cfg
-              vault kv put secret/dep-dlm/tests \
-                $(for f in shared/tests/*.py; do echo "$(basename $f)=@$f"; done)  \
-                pytest.ini=@shared/tests/pytest.ini
-              vault kv put secret/dep-dlm/scripts \
-                init-testbed.sh=@shared/scripts/init-testbed.sh \
-                generate-certs.sh=@shared/scripts/generate-certs.sh \
-                docker-entrypoint.sh=@shared/scripts/xrootd/docker-entrypoint.sh \
-                bootstrap-db.py=@shared/scripts/rucio/bootstrap-db.py
               echo "seed complete: FLOW=$FLOW SCOPE_PROFILE=$SCOPE_PROFILE"
           volumeMounts:
             - { name: repo, mountPath: /repo }

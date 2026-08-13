@@ -52,19 +52,26 @@ secretMounts:
     volumeName: rucio-cfg-idpsecrets
     mountPath: /opt/rucio/etc/idpsecrets.json
     subPath: idpsecrets.json
-  - secretFullName: testbed-patches
+
+# testbed-patches is a ConfigMap now (see shared/patches/kustomization.yaml —
+# converted from secretGenerator, since none of its content is sensitive),
+# so it mounts via configMounts, not secretMounts. Requires rucio-server's
+# templates/deployment.yaml + values.yaml to support configMounts — patched
+# alongside this change; see deploy/helm-charts/rucio-server/.
+configMounts:
+  - configMapFullName: testbed-patches
     volumeName: fts3-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
     subPath: rucio--fts3.py
-  - secretFullName: testbed-patches
+  - configMapFullName: testbed-patches
     volumeName: oidc-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
     subPath: rucio--oidc.py
-  - secretFullName: testbed-patches
+  - configMapFullName: testbed-patches
     volumeName: constants-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
     subPath: rucio--constants.py
-  - secretFullName: testbed-patches
+  - configMapFullName: testbed-patches
     volumeName: rse-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
     subPath: rucio--rse.py

@@ -10,6 +10,12 @@ useDeprecatedImplicitSecrets: true
 # When set, run extra busybox containers in the relevant pods to also expose the error logs
 exposeErrorLogs: true
 
+configMounts: []
+  # - volumeName: patches
+  #   configMapFullName: testbed-patches
+  #   mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
+  #   subPath: rucio--fts3.py
+
 errorLogsExporterResources:
   limits:
     cpu: 30m
