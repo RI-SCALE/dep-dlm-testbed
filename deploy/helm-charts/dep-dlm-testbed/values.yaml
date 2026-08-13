@@ -334,11 +334,6 @@ fts:
         name: testbed-scripts
         defaultMode: 0755
 
-    - name: scripts-fts
-      configMap:
-        name: testbed-scripts-fts
-        defaultMode: 0755
-
     # NOTE per Design-002: fts3config's sensitivity is environment-conditional
     # (sandbox: static, non-sensitive; staging/production: Terraform-rendered
     # with fts_db_password embedded, sensitive). The umbrella chart only
@@ -397,9 +392,9 @@ fts:
       subPath: gfal2_http_plugin.conf
 
     # Entrypoint
-    - name: scripts-fts
+    - name: scripts
       mountPath: /docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: fts--docker-entrypoint.sh
 
     # Python patches for fts-rest-flask
     - name: patches
@@ -506,7 +501,7 @@ xrd3:
       subPath: rucio_ca.pem
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: xrootd--docker-entrypoint.sh
       readOnly: true
     - name: configs
       mountPath: /etc/xrootd/xrdrucio.cfg
@@ -570,7 +565,7 @@ xrd4:
       subPath: rucio_ca.pem
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: xrootd--docker-entrypoint.sh
       readOnly: true
     - name: configs
       mountPath: /etc/xrootd/xrdrucio.cfg

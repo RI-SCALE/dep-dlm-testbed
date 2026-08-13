@@ -27,12 +27,12 @@ spec:
             - name: DB_HOST
               value: "${RENDER_DB_HOST}"
           volumeMounts:
-            - { name: rucio-cfg, mountPath: /opt/rucio/etc/rucio.cfg,       subPath: server.cfg }
-            - { name: rucio-cfg, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }
-            - { name: rucio-cfg, mountPath: /opt/rucio/etc/idpsecrets.json, subPath: idpsecrets.json }
+            - { name: secrets, mountPath: /opt/rucio/etc/rucio.cfg,       subPath: server.cfg }
+            - { name: secrets, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }
+            - { name: secrets, mountPath: /opt/rucio/etc/idpsecrets.json, subPath: idpsecrets.json }
             - { name: bootstrap, mountPath: /scripts }
       volumes:
-        - name: rucio-cfg
+        - name: secrets
           secret: { secretName: testbed-secrets }
         - name: bootstrap
           secret: { secretName: testbed-scripts, defaultMode: 0755 }

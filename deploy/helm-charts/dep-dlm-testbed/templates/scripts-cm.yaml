@@ -1,19 +1,26 @@
 {{- if .Values.scripts.create }}
 {{- /*
-  Scripts are split into multiple ConfigMaps because (a) ConfigMap keys can't
-  contain "/", and (b) some filenames collide across directories
-  (e.g. fts/docker-entrypoint-gsi.sh vs xrootd/docker-entrypoint.sh).
+  Same technique as patches-cm.yaml: everything under files/scripts/ goes
+  into one ConfigMap, keyed by path-with-slashes-replaced-by-"--". Avoids
+  the basename collisions that used to require a separate ConfigMap per
+  subdirectory (fts/docker-entrypoint.sh vs xrootd/docker-entrypoint.sh
+  both existed — same basename, different content).
 
-  Each per-directory ConfigMap is named "<base-configMapName>-<dir>" and its
-  keys are just the filenames within that directory. The top-level files
-  (init-testbed.sh, generate-certs.sh, the test-*.sh scripts…) go into
-  the base-named ConfigMap.
+  Top-level files (init-testbed.sh, generate-certs.sh, ...) have no "/" to
+  replace, so they keep their bare filename as the key, unchanged from
+  before. Subdirectory files get a "<dir>--<file>" key instead of landing
+  in their own per-directory ConfigMap.
 
-  Consumers:
-    testbed-scripts        → rucio-server, rucio-client (mounted at /scripts)
-    testbed-scripts-fts    → fts entrypoint + related helpers
+  Consumers (subPath names, not volume/ConfigMap names):
+    testbed-scripts (this ConfigMap) → rucio-server, rucio-client (whole
+      dir mounted at /scripts, no subPath — unaffected by this merge)
+    fts--docker-entrypoint.sh    → fts entrypoint
+    xrootd--docker-entrypoint.sh → xrd3/xrd4 entrypoint (same volume,
+      mounted twice under two different Application names)
+    rucio--bootstrap-db.py       → rucio-bootstrap-db Job (see
+      rucio-bootstrap-job.yaml — its hardcoded `python3 /scripts/...`
+      command path must match this key exactly)
 */}}
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,27 +30,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 data:
-  {{- range $path, $_ := .Files.Glob "files/scripts/*" }}
-    {{- /* Only top-level files in scripts/, not subdirectories */}}
-    {{- if not (regexMatch "^files/scripts/[^/]+/" $path) }}
-  {{ base $path }}: |-
-{{ $.Files.Get $path | indent 4 }}
-    {{- end }}
-  {{- end }}
-{{- range $dir := list "fts" "xrootd" "rucio" }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ $.Values.scripts.configMapName }}-{{ $dir }}
-  labels:
-    app.kubernetes.io/name: dep-dlm-testbed
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-data:
-  {{- range $path, $_ := $.Files.Glob (printf "files/scripts/%s/*" $dir) }}
-  {{ base $path }}: |-
+  {{- range $path, $_ := .Files.Glob "files/scripts/**" }}
+    {{- $rel := trimPrefix "files/scripts/" $path }}
+    {{- $key := replace "/" "--" $rel }}
+  {{ $key }}: |-
 {{ $.Files.Get $path | indent 4 }}
   {{- end }}
-{{- end }}
 {{- end }}
