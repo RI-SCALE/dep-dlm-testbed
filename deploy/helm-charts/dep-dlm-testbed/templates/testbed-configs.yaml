@@ -45,7 +45,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $.Values.configs.configMapName }}-{{ $profile }}
+  name: testbed-configs-{{ $profile }}
   labels:
     app.kubernetes.io/name: dep-dlm-testbed
     app.kubernetes.io/instance: {{ $.Release.Name }}
