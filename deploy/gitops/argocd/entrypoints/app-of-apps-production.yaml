@@ -39,6 +39,7 @@ spec:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
     targetRevision: refactor/testbed-secrets-classification
     path: deploy/gitops/environments/production
+    kustomize: {}
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
   syncPolicy:
     automated: { prune: true, selfHeal: true }

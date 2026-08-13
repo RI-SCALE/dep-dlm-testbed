@@ -142,38 +142,37 @@ wait_for_job() {
   fi
 }
 
-# bootstrap_rucio_db — bootstrap the rucio DB schema. Sandbox runs it
-# directly; other envs first wait for rucio-server-cfg's ExternalSecret to
-# actually sync (the secret object existing isn't the same as ESO having
-# finished projecting its content — sandbox gets an equivalent guarantee
-# for free via run-bootstrap-db.sh's own Service-existence wait, which
-# doesn't apply here), then pass an explicit --db-host.
-#
-# Requires globals: SEED GITOPS_ENV SCRIPT_DIR APP_NS CORE_WAIT_TIMEOUT
-# TF_ENV_DIR (set by provision_cluster_secret_store for non-sandbox envs),
-# and SECRETS_READY_HINT — a one-line command suggestion shown on warn,
-# set per-caller since Argo and Flux surface secrets-root health differently.
+# bootstrap_rucio_db — bootstrap the rucio DB schema. Waits for both
+# testbed-secrets and testbed-scripts ExternalSecrets to sync in EVERY
+# environment (including sandbox) before applying the bootstrap Job — the
+# object existing isn't the same as ESO having finished projecting its
+# content, and nothing else in the sandbox flow guarantees that ordering:
+# seed_vault() completing means Vault has the data, not that ESO has
+# already pulled it into a real K8s Secret/ConfigMap yet.
 bootstrap_rucio_db() {
   if [[ "$SEED" -eq 0 ]]; then
     log "Skipping rucio DB bootstrap (--no-seed)"
     return 0
   fi
 
+  local secret_name
+  for secret_name in testbed-secrets testbed-scripts; do
+    log "Waiting for ExternalSecret/${secret_name} to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+    if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+      "until kubectl -n '${APP_NS}' get externalsecret ${secret_name} >/dev/null 2>&1; do sleep 5; done"
+    then
+      warn "ExternalSecret/${secret_name} never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check '${SECRETS_READY_HINT}'"
+      continue
+    fi
+    log "Waiting for ExternalSecret/${secret_name} to sync (up to ${CORE_WAIT_TIMEOUT})"
+    kubectl -n "$APP_NS" wait --for=condition=Ready "externalsecret/${secret_name}" \
+      --timeout="$CORE_WAIT_TIMEOUT" \
+      || warn "${secret_name} not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret ${secret_name}'"
+  done
+
   if [[ "$GITOPS_ENV" == "sandbox" ]]; then
     "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
     return 0
-  fi
-
-  log "Waiting for ExternalSecret/rucio-server-cfg to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
-  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${APP_NS}' get externalsecret rucio-server-cfg >/dev/null 2>&1; do sleep 5; done"
-  then
-    warn "ExternalSecret/rucio-server-cfg never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check '${SECRETS_READY_HINT}'"
-  else
-    log "Waiting for ExternalSecret/rucio-server-cfg to sync (up to ${CORE_WAIT_TIMEOUT})"
-    kubectl -n "$APP_NS" wait --for=condition=Ready externalsecret/rucio-server-cfg \
-      --timeout="$CORE_WAIT_TIMEOUT" \
-      || warn "rucio-server-cfg not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret rucio-server-cfg'"
   fi
 
   local rucio_db_host

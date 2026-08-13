@@ -9,7 +9,7 @@ variable "name_prefix" {
 }
 
 variable "secret_names" {
-  description = "Logical secret names to create empty containers for (values provisioned out-of-band). \"secrets\" replaces the former \"rucio\" (rucio-server-cfg retired per Design-002; now also carries fts3config/fts3restconfig/docker-entrypoint.sh). \"configs\" removed — its only static content (gfal2_http_plugin.conf) moved to a plain git-committed ConfigMap."
+  description = "Logical secret names to create empty containers for (values provisioned out-of-band)."
   type        = list(string)
   default = [
     "certs",

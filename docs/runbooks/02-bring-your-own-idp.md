@@ -35,20 +35,20 @@ of errors.
 > ```
 >
 > **To unblock a running sandbox without a reseed**, patch Vault directly
-> instead (use `kv patch`, not `put` — `dep-dlm/rucio` also holds
+> instead (use `kv patch`, not `put` — `dep-dlm/secrets` also holds
 > `server.cfg` and `alembic.ini`):
 > ```bash
 > kubectl exec -n dep-dlm-sandbox vault-0 -- sh -c '
 >   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
->   vault kv get -mount=secret -field=idpsecrets.json dep-dlm/rucio
+>   vault kv get -mount=secret -field=idpsecrets.json dep-dlm/secrets
 > ' | sed -e "s|<valid client id>|$OIDC_CLIENT_ID|g" -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" > /tmp/idpsecrets.json
 > kubectl cp /tmp/idpsecrets.json dep-dlm-sandbox/vault-0:/tmp/idpsecrets.json
 > kubectl exec -n dep-dlm-sandbox vault-0 -- sh -c '
 >   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root \
->   vault kv patch -mount=secret dep-dlm/rucio idpsecrets.json=@/tmp/idpsecrets.json
+>   vault kv patch -mount=secret dep-dlm/secrets idpsecrets.json=@/tmp/idpsecrets.json
 > '
 > rm /tmp/idpsecrets.json
-> kubectl annotate externalsecret rucio-server-cfg -n dep-dlm-sandbox force-sync=$(date +%s) --overwrite
+> kubectl annotate externalsecret testbed-secrets -n dep-dlm-sandbox force-sync=$(date +%s) --overwrite
 > kubectl rollout restart deployment rucio-server rucio-daemons-conveyor-finisher \
 >   rucio-daemons-conveyor-poller rucio-daemons-conveyor-submitter \
 >   rucio-daemons-judge-cleaner rucio-daemons-judge-evaluator rucio-daemons-reaper \
