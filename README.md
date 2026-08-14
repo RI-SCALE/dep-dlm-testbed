@@ -46,12 +46,12 @@ make stop
 # 1. Generate certificates
 make certs
 
-# 2. Install the Helm chart
-make start
-
 export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
 export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
 export RUNTIME=k8s
+
+# 2. Install the Helm chart
+make start
 
 # 3. Initialize DEP DLM testbed
 make init
@@ -99,6 +99,7 @@ sed -i \
 export TOKEN_MODE=unmanaged #  managed mode isn't viable against egi-dev — EGI doesn't honor resource= on token-exchange; see runbook 02
 export DAEMON_MODE=direct
 export RUNTIME=k8s
+
 make start
 make init
 
@@ -127,6 +128,7 @@ sed -i \
 export TOKEN_MODE=managed # or unmanaged
 export DAEMON_MODE=direct
 export RUNTIME=k8s
+
 make start
 make init
 
