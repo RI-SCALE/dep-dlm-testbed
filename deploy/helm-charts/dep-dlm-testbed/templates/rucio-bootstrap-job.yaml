@@ -6,12 +6,6 @@
   helm.sh/hook annotations so it's run before the rucio Deployments start
   serving traffic. Idempotent: bootstrap-db.py handles "schema exists"
   gracefully.
-
-  The Job uses the same Secret as the rucio-server Deployment for its
-  rucio.cfg / alembic.ini (testbed-secrets, was rucio-server-cfg — retired
-  per Design-002), and pulls bootstrap-db.py from the merged testbed-scripts
-  ConfigMap (scripts-cm.yaml) — key rucio--bootstrap-db.py, not bootstrap-db.py,
-  since that ConfigMap now keys subdirectory files as "<dir>--<file>".
 */}}
 
 {{- if (index .Values "rucio-server" "enabled") }}

@@ -320,17 +320,15 @@ fts:
             path: b96dc756.signing_policy
             mode: 0644
 
+    - name: secrets
+      secret:
+        secretName: testbed-secrets
+
     - name: scripts
       configMap:
         name: testbed-scripts
         defaultMode: 0755
 
-    # NOTE per Design-002: fts3config's sensitivity is environment-conditional
-    # (sandbox: static, non-sensitive; staging/production: Terraform-rendered
-    # with fts_db_password embedded, sensitive). The umbrella chart only
-    # serves local/sandbox-style deployments, so `configs:`/ConfigMap remains
-    # correct here — this note exists so the divergence isn't missed if this
-    # chart's scope ever expands to staging/production-style rendering.
     - name: configs
       configMap:
         name: testbed-configs
@@ -367,14 +365,15 @@ fts:
       subPath: rucio_ca.pem
       readOnly: false
 
+    - name: secrets
+      mountPath: /etc/fts3/fts3config
+      subPath: fts3config
+
     # Scripts directory
     - name: scripts
       mountPath: /scripts
 
     # FTS configs (token-mode conditional for fts3restconfig)
-    - name: configs
-      mountPath: /etc/fts3/fts3config
-      subPath: fts3config
     - name: configs
       mountPath: /etc/fts3/fts3restconfig
       subPath: fts3restconfig
@@ -418,9 +417,6 @@ keycloak:
       secret:
         secretName: testbed-certs
 
-    # realm.json moved off testbed-configs per Design-002 (embeds real
-    # Keycloak client secrets). configs volume dropped entirely — it was
-    # only ever used for this one file.
     - name: secrets
       secret:
         secretName: testbed-secrets
@@ -583,9 +579,6 @@ xrd4:
         secretName: testbed-certs
         defaultMode: 0600
 
-    # userpass-client.cfg moved off testbed-configs per Design-002 (contains
-    # a literal password). configs volume dropped entirely — it was only
-    # ever used for this one file.
     - name: secrets
       secret:
         secretName: testbed-secrets
