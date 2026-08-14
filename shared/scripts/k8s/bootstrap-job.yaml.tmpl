@@ -30,7 +30,7 @@ spec:
             - { name: secrets, mountPath: /opt/rucio/etc/rucio.cfg,       subPath: server.cfg }
             - { name: secrets, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }
             - { name: secrets, mountPath: /opt/rucio/etc/idpsecrets.json, subPath: idpsecrets.json }
-            - { name: bootstrap, mountPath: /scripts }
+            - { name: bootstrap, mountPath: /scripts/bootstrap-db.py, subPath: rucio--bootstrap-db.py }
       volumes:
         - name: secrets
           secret: { secretName: testbed-secrets }

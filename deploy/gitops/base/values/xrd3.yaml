@@ -17,7 +17,7 @@ volumeMounts:
   - { name: certs,   mountPath: /tmp/xrdcert.pem, subPath: xrd3cert.pem }
   - { name: certs,   mountPath: /tmp/xrdkey.pem,  subPath: xrd3key.pem }
   - { name: certs,   mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt, subPath: rucio_ca.pem }
-  - { name: scripts, mountPath: /usr/local/bin/docker-entrypoint.sh, subPath: docker-entrypoint.sh, readOnly: true }
+  - { name: scripts, mountPath: /usr/local/bin/docker-entrypoint.sh, subPath: xrootd--docker-entrypoint.sh, readOnly: true }
   - { name: configs, mountPath: /etc/xrootd/xrdrucio.cfg,   subPath: xrdrucio-scitokens.cfg, readOnly: true }
   - { name: configs, mountPath: /etc/xrootd/authdb,         subPath: authdb,                readOnly: true }
   - { name: configs, mountPath: /etc/xrootd/scitokens.conf, subPath: scitokens.conf,        readOnly: true }
