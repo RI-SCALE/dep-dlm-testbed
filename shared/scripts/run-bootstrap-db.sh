@@ -63,7 +63,7 @@ generate_scripts_secret() {
   local bootstrap_script="${REPO_ROOT}/shared/scripts/rucio/bootstrap-db.py"
   [[ -f "$bootstrap_script" ]] || die "bootstrap-db.py not found: $bootstrap_script"
   log "Materializing testbed-scripts from $bootstrap_script"
-  kubectl create secret generic testbed-scripts \
+  kubectl create configmap testbed-scripts \
     --namespace "$K8S_NAMESPACE" \
     --from-file="bootstrap-db.py=${bootstrap_script}" \
     --dry-run=client -o yaml | kubectl apply -f -

@@ -22,8 +22,8 @@ volumes:
     configMap:
       name: testbed-configs
   - name: patches
-    secret:
-      secretName: testbed-patches
+    configMap:
+      name: testbed-patches
   - name: teapot-data
     persistentVolumeClaim:
       claimName: teapot1-data

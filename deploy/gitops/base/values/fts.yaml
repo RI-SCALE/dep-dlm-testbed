@@ -26,8 +26,8 @@ volumes:
     configMap:
       name: testbed-configs
   - name: patches
-    secret:
-      secretName: testbed-patches
+    configMap:
+      name: testbed-patches
 
 volumeMounts:
   - { name: certs, mountPath: /etc/grid-security/hostcert.pem, subPath: hostcert.pem }

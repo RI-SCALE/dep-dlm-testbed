@@ -8,12 +8,12 @@ volumes:
     secret:
       secretName: testbed-secrets
   - name: scripts
-    secret:
-      secretName: testbed-scripts
+    configMap:
+      name: testbed-scripts
       defaultMode: 0755
   - name: tests
-    secret:
-      secretName: testbed-tests
+    configMap:
+      name: testbed-tests
       defaultMode: 0755
 volumeMounts:
   - name: certs

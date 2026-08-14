@@ -25,8 +25,8 @@ volumes:
       items:
         - { key: gfal2_http_plugin.conf, path: gfal2_http_plugin.conf, mode: 0644 }
   - name: patches
-    secret:
-      secretName: testbed-patches
+    configMap:
+      name: testbed-patches
 
 volumeMounts:
   - { name: certs, mountPath: /etc/grid-security/hostcert.pem, subPath: hostcert.pem }

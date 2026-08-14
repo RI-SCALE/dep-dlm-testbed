@@ -35,4 +35,4 @@ spec:
         - name: secrets
           secret: { secretName: testbed-secrets }
         - name: bootstrap
-          secret: { secretName: testbed-scripts, defaultMode: 0755 }
+          configMap: { name: testbed-scripts, defaultMode: 0755 }
