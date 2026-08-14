@@ -5,6 +5,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 5m
+  timeout: 20m
   releaseName: fts
   targetNamespace: dep-dlm-PLACEHOLDER
   install: { createNamespace: true }

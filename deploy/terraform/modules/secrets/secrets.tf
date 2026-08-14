@@ -25,9 +25,6 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_issuer              = var.oidc_issuer
       allow_non_managed_tokens = var.token_mode == "unmanaged"
     })
-    "fts3restconfig" = templatefile("${path.module}/templates/fts3rest.conf.tftpl", {
-      log_level = var.fts3rest_log_level
-    })
     "docker-entrypoint.sh" = templatefile("${path.module}/templates/fts3-docker-entrypoint.sh.tftpl", {
       fts_db_host = var.fts_db_host
     })
