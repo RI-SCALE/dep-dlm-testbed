@@ -333,7 +333,7 @@ fts:
     # chart's scope ever expands to staging/production-style rendering.
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
       configMap:
@@ -377,7 +377,7 @@ fts:
       subPath: fts3config
     - name: configs
       mountPath: /etc/fts3/fts3restconfig
-      subPath: '{{ if eq .Values.global.tokenMode "managed" }}managed.fts3restconfig{{ else }}unmanaged.fts3restconfig{{ end }}'
+      subPath: fts3restconfig
     - name: configs
       mountPath: /etc/gfal2.d/http_plugin.conf
       subPath: gfal2_http_plugin.conf
@@ -467,7 +467,7 @@ xrd3:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: scripts
       configMap:
@@ -531,7 +531,7 @@ xrd4:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: scripts
       configMap:
@@ -686,7 +686,7 @@ teapot1:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
       configMap:
@@ -801,7 +801,7 @@ teapot2:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
       configMap:

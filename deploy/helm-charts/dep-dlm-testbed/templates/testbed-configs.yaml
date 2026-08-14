@@ -1,9 +1,49 @@
 {{- /*
-  realm.json and userpass-client.cfg are excluded from testbed-configs per
-  Design-002 — they embed real credentials (Keycloak client secrets, a
-  literal password). They're produced by testbed-secrets.yaml instead.
+  realm.json is excluded from testbed-configs per Design-002 — it embeds
+  real Keycloak client secrets. It's produced by testbed-secrets.yaml
+  instead.
+
+  Everything under files/configs/rucio/ is excluded wholesale, not by
+  filename — that whole directory is already sourced separately into
+  testbed-secrets by rucio-cfg-secrets.yaml (server.cfg, alembic.ini,
+  idpsecrets.json, userpass-client.cfg, and per-profile companions like
+  idpsecrets.json.secret.pem). A filename-by-filename exclusion list
+  silently misses new files as they're added under rucio/ — confirmed in
+  practice: idpsecrets.json itself, plus alembic.ini and both
+  server.*.cfg variants, were all leaking into this ConfigMap before this
+  fix, and idpsecrets.json.secret.pem would have too under the
+  egi-dev profile. Directory-level exclusion is safe by construction
+  against that whole class of miss, matching how the GitOps-side
+  generator (shared/config/kustomization.yaml) is a file-by-file
+  whitelist rather than a glob in the first place.
+
+  fts-activemq.conf and fts3rest.conf are excluded pending an actual
+  content review — Design-002's classification table never covered
+  either, and ADR-004's own stated default for unreviewed files is
+  Secret/excluded, not ConfigMap. Move them into the merge loop (or into
+  testbed-secrets) once reviewed.
+
+  Profile selection (scopeProfile) happens ONCE here, at template-render
+  time — .Values.global.scopeProfile is fixed for the whole release, so
+  there's no reason to generate a ConfigMap per profile and re-derive
+  which one to mount in every consumer's values.yaml block. One
+  testbed-configs object, correct content because of how it was
+  generated. Mirrors the GitOps-side fix (ESO-projected ConfigMap,
+  profile resolved once at Vault-seed time via ${PDIR}).
+
+  tokenMode selection for fts3restconfig gets the same treatment: instead
+  of shipping both managed.fts3restconfig and unmanaged.fts3restconfig as
+  separate keys and picking one via a runtime subPath conditional in
+  fts's values.yaml, resolve .Values.global.tokenMode once here and emit
+  a single fts3restconfig key with the correct content already selected.
+  fts.yaml's volumeMounts subPath becomes a plain "fts3restconfig", no
+  {{ if eq .Values.global.tokenMode "managed" }}...{{ end }} needed there
+  anymore.
 */}}
-{{- $excluded := list "realm.json" "userpass-client.cfg" }}
+{{- $excludedDirs := list "rucio" }}
+{{- $excludedFiles := list "realm.json" "fts-activemq.conf" "fts3rest.conf" "managed.fts3restconfig" "unmanaged.fts3restconfig" }}
+{{- $profile := .Values.global.scopeProfile }}
+{{- $tokenMode := .Values.global.tokenMode }}
 {{- if .Values.configs.create }}
 apiVersion: v1
 kind: ConfigMap
@@ -15,62 +55,43 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 data:
   {{- /*
-    Only top-level files per service directory go into the flat/default
-    ConfigMap (files/configs/<service>/<file>), keyed by basename — this is
-    what every subchart's plain subPath: <name> assumes. Files under a
-    second-level profile directory (e.g. files/configs/rucio/egi-dev/*) are
-    intentionally excluded here to avoid basename collisions with the
-    default file of the same name; see the per-profile ConfigMap below.
+    Start with every flat/default file (files/configs/<service>/<file>),
+    keyed by basename, skipping excluded directories/files. Then, if
+    scopeProfile isn't "local", override with whatever exists under that
+    profile's subdirectory (files/configs/<service>/<profile>/<file>) —
+    same basename, so subPath: <name> references never change based on
+    profile.
   */}}
+  {{- $merged := dict }}
   {{- range $path, $_ := .Files.Glob "files/configs/*/*" }}
     {{- $rel := trimPrefix "files/configs/" $path }}
     {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
+      {{- $dir := first (splitList "/" $rel) }}
       {{- $name := base $path }}
-      {{- if not (has $name $excluded) }}
-  {{ $name }}: |-
-{{ $.Files.Get $path | indent 4 }}
-      {{- end }}
-    {{- end }}
-  {{- end }}
-{{- end }}
----
-{{- if .Values.configs.create }}
-{{- /*
-  Profile-specific overrides (e.g. egi-dev), one ConfigMap per profile
-  subdirectory found under files/configs/<service>/<profile>/. Keyed by
-  basename same as the default map, so a subchart can swap which ConfigMap
-  it mounts (default vs profile) without changing subPath names.
-*/}}
-{{- range $profile := list "egi-dev" "ls-aai-dev" }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: testbed-configs-{{ $profile }}
-  labels:
-    app.kubernetes.io/name: dep-dlm-testbed
-    app.kubernetes.io/instance: {{ $.Release.Name }}
-    app.kubernetes.io/managed-by: {{ $.Release.Service }}
-data:
-  {{- $merged := dict }}
-  {{- range $path, $_ := $.Files.Glob "files/configs/*/*" }}
-    {{- $rel := trimPrefix "files/configs/" $path }}
-    {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
-      {{- $name := base $path }}
-      {{- if not (has $name $excluded) }}
+      {{- if and (not (has $dir $excludedDirs)) (not (has $name $excludedFiles)) }}
         {{- $_ := set $merged $name $path }}
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- range $path, $_ := $.Files.Glob (printf "files/configs/*/%s/*" $profile) }}
+  {{- if ne $profile "local" }}
+  {{- range $path, $_ := .Files.Glob (printf "files/configs/*/%s/*" $profile) }}
+    {{- $rel := trimPrefix "files/configs/" $path }}
+    {{- $dir := first (splitList "/" $rel) }}
     {{- $name := base $path }}
-    {{- if not (has $name $excluded) }}
+    {{- if and (not (has $dir $excludedDirs)) (not (has $name $excludedFiles)) }}
       {{- $_ := set $merged $name $path }}
     {{- end }}
   {{- end }}
+  {{- end }}
+  {{- /*
+    fts3restconfig: resolved once via tokenMode, emitted under a single
+    fixed key rather than two profile-named keys picked at mount time.
+  */}}
+  {{- $fts3restconfigFile := "unmanaged.fts3restconfig" }}
+  {{- if eq $tokenMode "managed" }}{{ $fts3restconfigFile = "managed.fts3restconfig" }}{{- end }}
+  {{- $_ := set $merged "fts3restconfig" (printf "files/configs/fts/%s" $fts3restconfigFile) }}
   {{- range $name, $path := $merged }}
   {{ $name }}: |-
 {{ $.Files.Get $path | indent 4 }}
   {{- end }}
----
-{{- end }}
 {{- end }}
