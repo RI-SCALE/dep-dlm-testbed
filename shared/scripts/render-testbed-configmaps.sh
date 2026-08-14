@@ -32,6 +32,17 @@ preflight() {
   # helm template validates Chart.yaml's dependencies against charts/
   # before rendering anything, even with --show-only narrowing output to
   # top-level templates that don't touch any subchart.
+  #
+  # helm dependency build resolves Chart.lock's pinned entries, but still
+  # needs the repository itself registered in Helm's local repo cache first
+  # — unlike `helm dependency update`, it won't add one on the fly just
+  # because Chart.yaml/Chart.lock references its URL. This script has never
+  # run `helm repo add` itself, and nothing else in the ArgoCD/Flux CI path
+  # does either, so a fresh runner has no repo cache at all.
+  log "Adding bitnami chart repo"
+  helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+  helm repo update bitnami
+
   log "Ensuring chart dependencies (helm dependency build)"
   helm dependency build "$CHART_DIR"
 }
