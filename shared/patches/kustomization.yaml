@@ -13,5 +13,6 @@ configMapGenerator:
       - rucio--fts3.py=rucio/fts3.py
       - rucio--oidc.py=rucio/oidc.py
       - rucio--rse.py=rucio/rse.py
+      - teapot--teapot.py=teapot/teapot.py
 generatorOptions:
   disableNameSuffixHash: true
