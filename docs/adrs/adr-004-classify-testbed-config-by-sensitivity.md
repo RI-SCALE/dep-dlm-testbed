@@ -93,6 +93,15 @@ post-migration confirms no runtime regression.
 
 * [Design-002: Config/Secret Classification for Testbed
   Config](../design/design-doc-002-config-secret-classification.md) —
-  per-file classification table, touch points, sequencing.
+  final classification, generation mechanism.
 * GitOps shared values file, `testbed-configs` comment (source of the
   ConfigMap→Secret drift observation).
+* Option 3 (extend ESO to target ConfigMaps) was investigated directly
+  during implementation: ESO's `spec.target.manifest` does support
+  arbitrary target kinds including ConfigMap, but requires the
+  `external-secrets.io/v1` API — confirmed via `kubectl explain` that
+  this cluster's ESO version (0.10.7, `v1beta1` only) doesn't expose
+  it. Upgrading several minor versions to get there contradicts ESO's
+  own stated policy of upgrading one minor version at a time.
+  Reinforces the "Bad" already listed for Option 3 rather than
+  changing the decision.

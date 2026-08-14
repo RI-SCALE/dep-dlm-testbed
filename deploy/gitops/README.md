@@ -5,16 +5,22 @@ rationale live in `docs/gitops-blueprint.md`; this is the operational entry poin
 
 ## Layout
 - `base/` — shared architecture: per-component values
-- `environments/<env>/secrets/` — per-env ClusterSecretStore + ExternalSecrets
-- `argocd/` — per-env ApplicationSet + app-of-apps entrypoints
+- `environments/<env>/secrets/` — per-env ClusterSecretStore + `testbed-certs`/
+  `testbed-secrets` ExternalSecrets (the only Secrets in any environment)
+- `argocd/` — per-env ApplicationSet + app-of-apps entrypoints (`.../secrets`
+  is the whole synced tree per environment)
 - `flux/` — HelmReleases, sources, ESO, staged entrypoints
 
-Vault seeding and the Rucio DB bootstrap are **not** GitOps-synced resources —
-they're imperative one-shot steps (`shared/scripts/seed-vault.sh`,
-`shared/scripts/run-bootstrap-db.sh`), run automatically by
-`init-argocd.sh`/`init-flux.sh` at the right point in the bootstrap sequence.
-This is what makes `TOKEN_MODE`/`SCOPE_PROFILE` bootstrap-time flags instead
-of values you'd otherwise have to hand-edit into a committed manifest.
+`testbed-configs`/`testbed-patches`/`testbed-scripts`/`testbed-tests` are
+**not** Kustomize-generated or GitOps-synced — same as Vault seeding and the
+Rucio DB bootstrap, they're rendered once at bootstrap time
+(`shared/scripts/render-testbed-configmaps.sh`, via `helm template` against
+the umbrella chart — single source of truth with the local/helm-only
+deployment path) and applied directly, run automatically by
+`init-argocd.sh`/`init-flux.sh` alongside `seed-vault.sh`. This is what
+keeps `TOKEN_MODE`/`SCOPE_PROFILE` bootstrap-time flags instead of values
+baked into committed manifests, and avoids maintaining two independent
+definitions of the same objects that can silently drift apart.
 
 ## Component selection
 Per environment by presence: which elements the env's ApplicationSet lists (Argo)
