@@ -9,6 +9,9 @@
 # by all subcharts, e.g.:
 #   - Secret      "testbed-certs"   (all PEMs)
 #   - ConfigMap   "testbed-configs" (all non-secret config files)
+#   - Secret      "testbed-secrets" (realm.json, userpass-client.cfg,
+#                                     server.cfg, alembic.ini, idpsecrets.json
+#                                     — see docs/design/design-doc-002)
 #   - ConfigMap   "testbed-scripts" (all entrypoint/test scripts)
 #
 # These are populated from files/ under this chart. See README.md for how to
@@ -44,16 +47,14 @@ certs:
 
 configs:
   create: true
-  configMapName: testbed-configs
+secrets:
+  create: true
 scripts:
   create: true
-  configMapName: testbed-scripts
 patches:
   create: true
-  configMapName: testbed-patches
 tests:
   create: true
-  configMapName: testbed-tests
 
 # DATABASES
 
@@ -118,33 +119,34 @@ ruciodb:
         - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
         - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
 
-    - secretFullName: rucio-server-cfg
+    - secretFullName: testbed-secrets
       volumeName: rucio-cfg-server
       mountPath: /opt/rucio/etc/rucio.cfg
       subPath: server.cfg
-    - secretFullName: rucio-server-cfg
+    - secretFullName: testbed-secrets
       volumeName: rucio-cfg-alembic
       mountPath: /opt/rucio/etc/alembic.ini
       subPath: alembic.ini
-    - secretFullName: rucio-server-cfg
-      volumeName: idpsecrets
+    - secretFullName: testbed-secrets
+      volumeName: rucio-cfg-idpsecrets
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
 
+  configMounts:
     # Python patches
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: fts3-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
       subPath: rucio--fts3.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: oidc-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
       subPath: rucio--oidc.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
@@ -239,31 +241,34 @@ rucio-daemons:
         - { key: rucio_ca.pem,          path: certificates/rucio_ca.pem, mode: 0644 }
         - { key: rucio_ca.pem,          path: certificates/5fca1cb1.0, mode: 0644 }
         - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
-    - secretFullName: rucio-server-cfg
+
+    - secretFullName: testbed-secrets
       volumeName: rucio-cfg-server
       mountPath: /opt/rucio/etc/rucio.cfg
       subPath: server.cfg
-    - secretFullName: rucio-server-cfg
+    - secretFullName: testbed-secrets
       volumeName: rucio-cfg-alembic
       mountPath: /opt/rucio/etc/alembic.ini
       subPath: alembic.ini
-    - secretFullName: rucio-server-cfg
-      volumeName: idpsecrets
+    - secretFullName: testbed-secrets
+      volumeName: rucio-cfg-idpsecrets
       mountPath: /opt/rucio/etc/idpsecrets.json
       subPath: idpsecrets.json
-    - secretFullName: testbed-patches
+
+  configMounts:
+    - configMapFullName: testbed-patches
       volumeName: fts3-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py
       subPath: rucio--fts3.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: oidc-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/oidc.py
       subPath: rucio--oidc.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: constants-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/common/constants.py
       subPath: rucio--constants.py
-    - secretFullName: testbed-patches
+    - configMapFullName: testbed-patches
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
@@ -315,23 +320,22 @@ fts:
             path: b96dc756.signing_policy
             mode: 0644
 
+    - name: secrets
+      secret:
+        secretName: testbed-secrets
+
     - name: scripts
       configMap:
         name: testbed-scripts
         defaultMode: 0755
 
-    - name: scripts-fts
-      configMap:
-        name: testbed-scripts-fts
-        defaultMode: 0755
-
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
   volumeMounts:
     # Certs
@@ -361,25 +365,26 @@ fts:
       subPath: rucio_ca.pem
       readOnly: false
 
+    - name: secrets
+      mountPath: /etc/fts3/fts3config
+      subPath: fts3config
+
     # Scripts directory
     - name: scripts
       mountPath: /scripts
 
     # FTS configs (token-mode conditional for fts3restconfig)
     - name: configs
-      mountPath: /etc/fts3/fts3config
-      subPath: fts3config
-    - name: configs
       mountPath: /etc/fts3/fts3restconfig
-      subPath: '{{ if eq .Values.global.tokenMode "managed" }}managed.fts3restconfig{{ else }}unmanaged.fts3restconfig{{ end }}'
+      subPath: fts3restconfig
     - name: configs
       mountPath: /etc/gfal2.d/http_plugin.conf
       subPath: gfal2_http_plugin.conf
 
     # Entrypoint
-    - name: scripts-fts
+    - name: scripts
       mountPath: /docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: fts--docker-entrypoint.sh
 
     # Python patches for fts-rest-flask
     - name: patches
@@ -412,9 +417,9 @@ keycloak:
       secret:
         secretName: testbed-certs
 
-    - name: configs
-      configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+    - name: secrets
+      secret:
+        secretName: testbed-secrets
 
   volumeMounts:
     - name: certs
@@ -427,7 +432,7 @@ keycloak:
       subPath: keycloakkey.pem
       readOnly: true
 
-    - name: configs
+    - name: secrets
       mountPath: /opt/keycloak/data/import/realm.json
       subPath: realm.json
       readOnly: true
@@ -458,11 +463,11 @@ xrd3:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: scripts
       configMap:
-        name: testbed-scripts-xrootd
+        name: testbed-scripts
         defaultMode: 0755
 
   volumeMounts:
@@ -483,7 +488,7 @@ xrd3:
       subPath: rucio_ca.pem
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: xrootd--docker-entrypoint.sh
       readOnly: true
     - name: configs
       mountPath: /etc/xrootd/xrdrucio.cfg
@@ -522,11 +527,11 @@ xrd4:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: scripts
       configMap:
-        name: testbed-scripts-xrootd
+        name: testbed-scripts
         defaultMode: 0755
 
   volumeMounts:
@@ -547,7 +552,7 @@ xrd4:
       subPath: rucio_ca.pem
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
-      subPath: docker-entrypoint.sh
+      subPath: xrootd--docker-entrypoint.sh
       readOnly: true
     - name: configs
       mountPath: /etc/xrootd/xrdrucio.cfg
@@ -574,9 +579,10 @@ xrd4:
         secretName: testbed-certs
         defaultMode: 0600
 
-    - name: configs
-      configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+    - name: secrets
+      secret:
+        secretName: testbed-secrets
+        defaultMode: 0600
 
     - name: scripts
       configMap:
@@ -609,7 +615,7 @@ xrd4:
       mountPath: /etc/grid-security/certificates/rucio_ca.pem
       subPath: rucio_ca.pem
       readOnly: true
-    - name: configs
+    - name: secrets
       mountPath: /opt/rucio/etc/rucio.cfg
       subPath: userpass-client.cfg
       readOnly: true
@@ -673,11 +679,11 @@ teapot1:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
     - name: teapot-data
       persistentVolumeClaim:
@@ -788,11 +794,11 @@ teapot2:
 
     - name: configs
       configMap:
-        name: '{{ if eq .Values.global.scopeProfile "local" }}testbed-configs{{ else }}testbed-configs-{{ .Values.global.scopeProfile }}{{ end }}'
+        name: testbed-configs
 
     - name: patches
-      secret:
-        secretName: testbed-patches
+      configMap:
+        name: testbed-patches
 
     - name: teapot-data
       persistentVolumeClaim:

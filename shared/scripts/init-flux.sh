@@ -153,6 +153,7 @@ main() {
   apply_entrypoint
   provision_cluster_secret_store   # from common.sh
   wait_for_core_kustomization
+  render_testbed_configmaps        # from common.sh
   seed_vault                       # from common.sh
   bootstrap_rucio_db               # from common.sh
   report

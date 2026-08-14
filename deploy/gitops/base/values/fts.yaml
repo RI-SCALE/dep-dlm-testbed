@@ -1,10 +1,3 @@
-# Shared FTS values — mirrors the umbrella `fts:` block. testbed-configs is now
-# an ESO-managed Secret (was a ConfigMap in the umbrella); volume sources change
-# from configMap: to secret: accordingly, mounts are unchanged.
-# NOTE: the umbrella split scripts into testbed-scripts / testbed-scripts-fts.
-# Seed those into Vault under dep-dlm/scripts-fts and add an ExternalSecret if
-# FTS needs the entrypoint; for the bundled testbed chart the entrypoint is in
-# the image, so only configs/certs/patches are required here.
 fullnameOverride: fts
 ftsdb:
   enabled: true
@@ -23,12 +16,18 @@ volumes:
         - { key: 5fca1cb1.signing_policy, path: 5fca1cb1.signing_policy, mode: 0644 }
         - { key: b96dc756.0,              path: b96dc756.0,              mode: 0644 }
         - { key: b96dc756.signing_policy, path: b96dc756.signing_policy, mode: 0644 }
+  - name: secrets
+    secret:
+      secretName: testbed-secrets
+      items:
+        - { key: fts3config,     path: fts3config,     mode: 0644 }
+        - { key: fts3restconfig, path: fts3restconfig, mode: 0644 }
   - name: configs
-    secret:
-      secretName: testbed-configs
+    configMap:
+      name: testbed-configs
   - name: patches
-    secret:
-      secretName: testbed-patches
+    configMap:
+      name: testbed-patches
 
 volumeMounts:
   - { name: certs, mountPath: /etc/grid-security/hostcert.pem, subPath: hostcert.pem }
@@ -38,9 +37,7 @@ volumeMounts:
   - { name: certs, mountPath: /etc/grid-security/certificates/b96dc756.0,              subPath: b96dc756.0 }
   - { name: certs, mountPath: /etc/grid-security/certificates/b96dc756.signing_policy, subPath: b96dc756.signing_policy }
   - { name: certs, mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt, subPath: rucio_ca.pem }
-  - { name: configs, mountPath: /etc/fts3/fts3config, subPath: fts3config }
-  # tokenMode picks managed vs unmanaged restconfig; overlay sets which key is
-  # seeded as fts3restconfig, keeping this mount env-agnostic.
+  - { name: secrets, mountPath: /etc/fts3/fts3config, subPath: fts3config }
   - { name: configs, mountPath: /etc/fts3/fts3restconfig, subPath: fts3restconfig }
   - { name: configs, mountPath: /etc/gfal2.d/http_plugin.conf, subPath: gfal2_http_plugin.conf }
   - { name: patches, mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py, subPath: fts--middleware.py }

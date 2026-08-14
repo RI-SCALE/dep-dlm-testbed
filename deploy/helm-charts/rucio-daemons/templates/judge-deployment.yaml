@@ -105,6 +105,20 @@ spec:
           {{- end }}
       {{- end}}
       {{- end}}
+      {{- range $collection := tuple (coalesce .component_values.configMounts .Values.configMounts) .component_values.extraConfigMounts }}
+      {{- range $key, $val := $collection }}
+      - name: {{ coalesce $val.volumeName $val.configMapName $val.configMapFullName }}
+        configMap:
+          name: {{ coalesce $val.configMapFullName (printf "%s-%s" $.Release.Name $val.configMapName) }}
+          {{- if $val.defaultMode }}
+          defaultMode: {{ $val.defaultMode }}
+          {{- end }}
+          {{- if $val.items }}
+          items:
+{{ toYaml $val.items | indent 12 }}
+          {{- end }}
+      {{- end}}
+      {{- end}}
       {{- range $key, $val := .Values.persistentVolumes }}
       - name: {{ $key }}
         persistentVolumeClaim:
@@ -147,6 +161,15 @@ spec:
           {{- range $collection := tuple (coalesce .component_values.secretMounts .Values.secretMounts) .component_values.extraSecretMounts }}
           {{- range $key, $val := $collection }}
             - name: {{ coalesce $val.volumeName $val.secretName $val.secretFullName }}
+              mountPath: {{ $val.mountPath }}
+              {{- if $val.subPath }}
+              subPath: "{{ $val.subPath }}"
+              {{- end }}
+          {{- end}}
+          {{- end}}
+          {{- range $collection := tuple (coalesce .component_values.configMounts .Values.configMounts) .component_values.extraConfigMounts }}
+          {{- range $key, $val := $collection }}
+            - name: {{ coalesce $val.volumeName $val.configMapName $val.configMapFullName }}
               mountPath: {{ $val.mountPath }}
               {{- if $val.subPath }}
               subPath: "{{ $val.subPath }}"

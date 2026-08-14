@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.certs.secretName }}
+  name: testbed-certs
   labels:
     app.kubernetes.io/name: dep-dlm-testbed
     app.kubernetes.io/instance: {{ .Release.Name }}

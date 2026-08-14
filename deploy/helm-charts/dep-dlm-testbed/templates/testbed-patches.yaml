@@ -1,0 +1,25 @@
+{{- /*
+  Same technique as scripts-cm.yaml: everything under files/patches/ goes
+  into one ConfigMap, keyed by path-with-slashes-replaced-by-"--". No
+  longer a Secret — rucio-server/rucio-daemons (the only charts that used
+  to require secretMounts specifically) now support configMounts too, so
+  there's no remaining reason for this content to be a Secret; none of it
+  is sensitive.
+*/}}
+{{- if .Values.patches.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testbed-patches
+  labels:
+    app.kubernetes.io/name: dep-dlm-testbed
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  {{- range $path, $_ := .Files.Glob "files/patches/**" }}
+    {{- $rel := trimPrefix "files/patches/" $path }}
+    {{- $key := replace "/" "--" $rel }}
+  {{ $key }}: |-
+{{ $.Files.Get $path | indent 4 }}
+  {{- end }}
+{{- end }}

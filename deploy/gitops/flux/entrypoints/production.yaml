@@ -1,14 +1,3 @@
-# ============================================================================
-# DEP DLM — Flux entrypoint (production)
-# ============================================================================
-# Ordering: namespace -> eso -> core -> secrets -> bootstrap -> components
-#   core      : vault + postgresql, up BEFORE the seed so vault-seed can reach
-#               Vault and ESO can project the secrets bootstrap mounts
-#   secrets   : ESO ClusterSecretStore + vault-seed Job + ExternalSecrets
-#   bootstrap : Rucio DB-init Job (mounts rucio-server-cfg + testbed-scripts-rucio)
-#   components: rucio-server/daemons, keycloak, xrootd, teapot, fts
-# Fixes: vault-seed 'no such host' (Vault now exists first) and bootstrap
-# FailedMount (ESO secrets now projected before the Job runs).
 ---
 apiVersion: v1
 kind: Namespace

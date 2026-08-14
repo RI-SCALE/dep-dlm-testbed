@@ -9,12 +9,11 @@ variable "name_prefix" {
 }
 
 variable "secret_names" {
-  description = "Logical secret names to create empty containers for (values provisioned out-of-band). Mirrors the sandbox's Vault seed categories: idpsecrets, certs, configs, rucio, scripts."
+  description = "Logical secret names to create empty containers for (values provisioned out-of-band)."
   type        = list(string)
   default = [
     "certs",
-    "configs",
-    "rucio",
+    "secrets",
   ]
 }
 
@@ -23,7 +22,7 @@ variable "eso_service_account_email" {
   type        = string
 }
 
-# --- New inputs for rendered secret content (rucio.cfg, fts3config) ------
+# --- Inputs for rendered secret content (rucio.cfg, fts3config, etc.) ----
 # Wire these from environments/<env>/main.tf using the OTHER modules'
 # outputs already available in that scope:
 #   rucio_db_host        = module.rucio_database.private_ip_address

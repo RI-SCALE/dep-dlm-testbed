@@ -1,0 +1,55 @@
+{{- $excludedDirs := list "rucio" }}
+{{- $excludedFiles := list "realm.json" "fts-activemq.conf" "fts3rest.conf" "managed.fts3restconfig" "unmanaged.fts3restconfig" "fts3config" }}
+{{- $profile := .Values.global.scopeProfile }}
+{{- $tokenMode := .Values.global.tokenMode }}
+{{- if .Values.configs.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testbed-configs
+  labels:
+    app.kubernetes.io/name: dep-dlm-testbed
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  {{- /*
+    Start with every flat/default file (files/configs/<service>/<file>),
+    keyed by basename, skipping excluded directories/files. Then, if
+    scopeProfile isn't "local", override with whatever exists under that
+    profile's subdirectory (files/configs/<service>/<profile>/<file>) —
+    same basename, so subPath: <name> references never change based on
+    profile.
+  */}}
+  {{- $merged := dict }}
+  {{- range $path, $_ := .Files.Glob "files/configs/*/*" }}
+    {{- $rel := trimPrefix "files/configs/" $path }}
+    {{- if not (regexMatch "^[^/]+/[^/]+/" $rel) }}
+      {{- $dir := first (splitList "/" $rel) }}
+      {{- $name := base $path }}
+      {{- if and (not (has $dir $excludedDirs)) (not (has $name $excludedFiles)) }}
+        {{- $_ := set $merged $name $path }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if ne $profile "local" }}
+  {{- range $path, $_ := .Files.Glob (printf "files/configs/*/%s/*" $profile) }}
+    {{- $rel := trimPrefix "files/configs/" $path }}
+    {{- $dir := first (splitList "/" $rel) }}
+    {{- $name := base $path }}
+    {{- if and (not (has $dir $excludedDirs)) (not (has $name $excludedFiles)) }}
+      {{- $_ := set $merged $name $path }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- /*
+    fts3restconfig: resolved once via tokenMode, emitted under a single
+    fixed key rather than two profile-named keys picked at mount time.
+  */}}
+  {{- $fts3restconfigFile := "unmanaged.fts3restconfig" }}
+  {{- if eq $tokenMode "managed" }}{{ $fts3restconfigFile = "managed.fts3restconfig" }}{{- end }}
+  {{- $_ := set $merged "fts3restconfig" (printf "files/configs/fts/%s" $fts3restconfigFile) }}
+  {{- range $name, $path := $merged }}
+  {{ $name }}: |-
+{{ $.Files.Get $path | indent 4 }}
+  {{- end }}
+{{- end }}

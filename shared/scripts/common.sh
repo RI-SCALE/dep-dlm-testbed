@@ -127,6 +127,22 @@ seed_vault() {
   fi
 }
 
+# render_testbed_configmaps — testbed-configs/patches/scripts/tests,
+# rendered from the umbrella chart's own templates (single source of
+# truth with the local/helm-only deployment path — see
+# render-testbed-configmaps.sh for the full rationale and for re-running
+# standalone with different SCOPE_PROFILE/TOKEN_MODE values).
+#
+# Requires globals: SEED GITOPS_ENV SCRIPT_DIR APP_NS SCOPE_PROFILE FLOW
+render_testbed_configmaps() {
+  if [[ "$SEED" -eq 1 ]]; then
+    "${SCRIPT_DIR}/render-testbed-configmaps.sh" \
+      --namespace "$APP_NS" \
+      --scope-profile "$SCOPE_PROFILE" \
+      --token-mode "$FLOW"
+  fi
+}
+
 # wait_for_job <namespace> <job_name> <timeout> [fail_msg]
 # Waits for a Job to reach condition=complete. On timeout/failure, dumps its
 # logs and dies with fail_msg (defaults to "<job_name> did not complete").
@@ -143,7 +159,7 @@ wait_for_job() {
 }
 
 # bootstrap_rucio_db — bootstrap the rucio DB schema. Sandbox runs it
-# directly; other envs first wait for rucio-server-cfg's ExternalSecret to
+# directly; other envs first wait for testbed-secrets's ExternalSecret to
 # actually sync (the secret object existing isn't the same as ESO having
 # finished projecting its content — sandbox gets an equivalent guarantee
 # for free via run-bootstrap-db.sh's own Service-existence wait, which
@@ -159,21 +175,33 @@ bootstrap_rucio_db() {
     return 0
   fi
 
+  # Waits for testbed-secrets (rucio-cfg's server.cfg/alembic.ini/
+  # idpsecrets.json, mounted via subPath — a missing key here is a hard
+  # FailedMount, not a soft runtime failure). testbed-scripts (bootstrap-db.py)
+  # used to need this same wait when it was ESO/Vault-backed, but it's a
+  # plain git-committed ConfigMap now (shared/scripts/kustomization.yaml) —
+  # created synchronously by the same Kustomize apply this function already
+  # waited on via Kustomization/dep-dlm-<env>-core being Ready, no async
+  # ESO sync to race against, so checking it as an ExternalSecret here would
+  # hang forever (that object kind no longer exists for this name).
+  local secret_names="testbed-secrets"
+  for secret_name in $secret_names; do
+    log "Waiting for ExternalSecret/${secret_name} to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
+    if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
+      "until kubectl -n '${APP_NS}' get externalsecret ${secret_name} >/dev/null 2>&1; do sleep 5; done"
+    then
+      warn "ExternalSecret/${secret_name} never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check '${SECRETS_READY_HINT}'"
+      continue
+    fi
+    log "Waiting for ExternalSecret/${secret_name} to sync (up to ${CORE_WAIT_TIMEOUT})"
+    kubectl -n "$APP_NS" wait --for=condition=Ready "externalsecret/${secret_name}" \
+      --timeout="$CORE_WAIT_TIMEOUT" \
+      || warn "${secret_name} not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret ${secret_name}'"
+  done
+
   if [[ "$GITOPS_ENV" == "sandbox" ]]; then
     "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS"
     return 0
-  fi
-
-  log "Waiting for ExternalSecret/rucio-server-cfg to exist in ${APP_NS} (up to ${CORE_WAIT_TIMEOUT})"
-  if ! timeout "$CORE_WAIT_TIMEOUT" bash -c \
-    "until kubectl -n '${APP_NS}' get externalsecret rucio-server-cfg >/dev/null 2>&1; do sleep 5; done"
-  then
-    warn "ExternalSecret/rucio-server-cfg never appeared in ${APP_NS} within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check '${SECRETS_READY_HINT}'"
-  else
-    log "Waiting for ExternalSecret/rucio-server-cfg to sync (up to ${CORE_WAIT_TIMEOUT})"
-    kubectl -n "$APP_NS" wait --for=condition=Ready externalsecret/rucio-server-cfg \
-      --timeout="$CORE_WAIT_TIMEOUT" \
-      || warn "rucio-server-cfg not synced within ${CORE_WAIT_TIMEOUT} — bootstrap will likely fail; check 'kubectl -n ${APP_NS} describe externalsecret rucio-server-cfg'"
   fi
 
   local rucio_db_host
