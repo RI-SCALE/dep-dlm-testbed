@@ -89,6 +89,13 @@ Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
 
 ```bash
 source envs/egi-dev.env
+
+# Substitute your credentials into idpsecrets.json
+sed -i \
+  -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
+  -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
+  shared/config/rucio/egi-dev/idpsecrets.json
+
 export TOKEN_MODE=unmanaged #  managed mode isn't viable against egi-dev — EGI doesn't honor resource= on token-exchange; see runbook 02
 export DAEMON_MODE=direct
 export RUNTIME=k8s
@@ -110,6 +117,13 @@ Copy `envs/ls-aai-dev.env.example` to `envs/ls-aai-dev.env`, fill in your LS AAI
 
 ```bash
 source envs/ls-aai-dev.env
+
+# Substitute your credentials into idpsecrets.json
+sed -i \
+  -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
+  -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
+  shared/config/rucio/ls-aai-dev/idpsecrets.json
+
 export TOKEN_MODE=managed # or unmanaged
 export DAEMON_MODE=direct
 export RUNTIME=k8s
@@ -124,13 +138,19 @@ kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
 make test-rucio-transfers
 ```
 
-> **Note:** the LS AAI test-phase environment requires the authenticating
+> **NOTE:** the LS AAI test-phase environment requires the authenticating
 > user to be a member of the `Life Science Community - Test Environment`
 > VO before login succeeds — if `rucio whoami` (or a browser login against
 > `login.aai.lifescience-ri.eu`) returns an access-denied page listing
 > required organizational units, register at
 > `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
 > with the same identity first; propagation can take a few minutes.
+
+> **NOTE:** **Don't commit the substituted `idpsecrets.json`.** The `sed` step above
+> writes real credentials into a git-tracked file. Before committing
+> anything else, check `git status shared/config/rucio/<profile>/idpsecrets.json`
+> and revert it (`git checkout -- shared/config/rucio/<profile>/idpsecrets.json`)
+> once you're done testing.
 
 ## Make Targets
 
