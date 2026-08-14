@@ -177,6 +177,7 @@ main() {
   provision_cluster_secret_store   # from common.sh
   wait_for_core_tier
   apply_secrets_root
+  render_testbed_configmaps
   seed_vault                       # from common.sh
   bootstrap_rucio_db               # from common.sh
   report

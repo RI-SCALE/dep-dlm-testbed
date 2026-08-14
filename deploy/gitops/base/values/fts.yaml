@@ -38,7 +38,7 @@ volumeMounts:
   - { name: certs, mountPath: /etc/grid-security/certificates/b96dc756.signing_policy, subPath: b96dc756.signing_policy }
   - { name: certs, mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt, subPath: rucio_ca.pem }
   - { name: secrets, mountPath: /etc/fts3/fts3config, subPath: fts3config }
-  - { name: secrets, mountPath: /etc/fts3/fts3restconfig, subPath: fts3restconfig }
+  - { name: configs, mountPath: /etc/fts3/fts3restconfig, subPath: fts3restconfig }
   - { name: configs, mountPath: /etc/gfal2.d/http_plugin.conf, subPath: gfal2_http_plugin.conf }
   - { name: patches, mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py, subPath: fts--middleware.py }
   - { name: patches, mountPath: /tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py, subPath: fts--openidconnect.py }

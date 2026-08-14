@@ -34,7 +34,7 @@ metadata: { name: dep-dlm-sandbox-secrets, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
-  path: ./deploy/gitops/environments/sandbox
+  path: ./deploy/gitops/environments/sandbox/secrets
   prune: true
   targetNamespace: dep-dlm-sandbox
   wait: true                      # ExternalSecrets projected before bootstrap mounts them

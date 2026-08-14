@@ -53,9 +53,7 @@ ln -s ../../../../shared/patches patches
 make certs
 
 # 2. Create the namespace and install
-kubectl create namespace dep-dlm-testbed
-helm dependency update helm-charts/dep-dlm-testbed
-helm install testbed helm-charts/dep-dlm-testbed --namespace dep-dlm-testbed
+make start
 ```
 
 You should end up with something like:
@@ -79,6 +77,5 @@ xrd4-5f94846b87-bjxq9           1/1     Running   0          18s
 Tear down:
 
 ```sh
-helm uninstall testbed -n dep-dlm-sandbox
-kubectl -n dep-dlm-sandbox delete pvc --all   # PVCs aren't removed by `helm uninstall`
+make stop
 ```

@@ -127,6 +127,22 @@ seed_vault() {
   fi
 }
 
+# render_testbed_configmaps — testbed-configs/patches/scripts/tests,
+# rendered from the umbrella chart's own templates (single source of
+# truth with the local/helm-only deployment path — see
+# render-testbed-configmaps.sh for the full rationale and for re-running
+# standalone with different SCOPE_PROFILE/TOKEN_MODE values).
+#
+# Requires globals: SEED GITOPS_ENV SCRIPT_DIR APP_NS SCOPE_PROFILE FLOW
+render_testbed_configmaps() {
+  if [[ "$SEED" -eq 1 ]]; then
+    "${SCRIPT_DIR}/render-testbed-configmaps.sh" \
+      --namespace "$APP_NS" \
+      --scope-profile "$SCOPE_PROFILE" \
+      --token-mode "$FLOW"
+  fi
+}
+
 # wait_for_job <namespace> <job_name> <timeout> [fail_msg]
 # Waits for a Job to reach condition=complete. On timeout/failure, dumps its
 # logs and dies with fail_msg (defaults to "<job_name> did not complete").

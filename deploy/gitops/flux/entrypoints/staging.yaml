@@ -34,7 +34,7 @@ metadata: { name: dep-dlm-staging-secrets, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
-  path: ./deploy/gitops/environments/staging
+  path: ./deploy/gitops/environments/staging/secrets
   prune: true
   targetNamespace: dep-dlm-staging
   wait: true                      # ExternalSecrets projected before bootstrap mounts them

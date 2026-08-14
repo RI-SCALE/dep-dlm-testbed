@@ -34,7 +34,7 @@ metadata: { name: dep-dlm-production-secrets, namespace: flux-system }
 spec:
   interval: 5m
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
-  path: ./deploy/gitops/environments/production
+  path: ./deploy/gitops/environments/production/secrets
   prune: true
   targetNamespace: dep-dlm-production
   wait: true                      # ExternalSecrets projected before bootstrap mounts them
