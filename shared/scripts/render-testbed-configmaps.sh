@@ -28,6 +28,12 @@ preflight() {
   require_cmd kubectl helm
   require_cluster
   [[ -d "$CHART_DIR" ]] || die "umbrella chart not found: $CHART_DIR"
+
+  # helm template validates Chart.yaml's dependencies against charts/
+  # before rendering anything, even with --show-only narrowing output to
+  # top-level templates that don't touch any subchart.
+  log "Ensuring chart dependencies (helm dependency build)"
+  helm dependency build "$CHART_DIR"
 }
 
 render_and_apply() {
