@@ -21,7 +21,6 @@ volumes:
       secretName: testbed-secrets
       items:
         - { key: fts3config,     path: fts3config,     mode: 0644 }
-        - { key: fts3restconfig, path: fts3restconfig, mode: 0644 }
   - name: configs
     configMap:
       name: testbed-configs
