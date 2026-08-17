@@ -34,6 +34,10 @@ EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
     "secrets": {"server.cfg", "idpsecrets.json", "fts3config"},
 }
+DB_CHECK_RETRIES = 1
+DB_CHECK_BACKOFF_S = 15
+GATEWAY_CHECK_RETRIES = 3
+GATEWAY_CHECK_BACKOFF_S = 20
 
 
 @pytest.fixture(scope="session")
@@ -79,14 +83,6 @@ def test_rucio_cfg_points_at_rucio_database(tf_outputs, secret_client):
 
 
 # --- database connectivity (via kubectl, see module docstring) -----------
-# Retried, unlike the checks above. These depend on external factors that
-# have nothing to do with deployment correctness: Docker Hub's anonymous
-# pull rate limiting on postgres:16/mysql:8 (a known, common source of
-# exactly this kind of intermittent CI failure) and rare scheduling
-# hiccups beyond what the wait timeout already covers.
-
-DB_CHECK_RETRIES = 1  # 1 retry = 2 total attempts, kept small deliberately —
-DB_CHECK_BACKOFF_S = 15  # this isn't meant to paper over a real, persistent failure
 
 
 def _run_db_check_pod_once(pod_name, image, *cmd_args):
@@ -209,4 +205,47 @@ def test_kubeconfig_can_reach_cluster(tf_outputs):
         f"current kubectl context ({ctx.stdout.strip()!r}) doesn't reference "
         f"{TF_ENV}'s cluster ({tf_outputs['cluster_name']!r}) — wrong context "
         f"selected? run 'make tf-kubeconfig TF_ENV={TF_ENV}' again"
+    )
+
+
+# --- public gateway reachability ------------------------------------------
+
+
+def _check_gateway_endpoint(scheme, ip, hostname, path, expected_status=200):
+    import requests
+
+    url = f"{scheme}://{ip}{path}"
+    last_error = None
+    for attempt in range(1, GATEWAY_CHECK_RETRIES + 2):
+        try:
+            resp = requests.get(
+                url, headers={"Host": hostname}, timeout=10, verify=False
+            )
+            assert resp.status_code == expected_status, (
+                f"{hostname}{path} via gateway {ip} returned "
+                f"{resp.status_code}, expected {expected_status}"
+            )
+            return resp
+        except (requests.RequestException, AssertionError) as e:
+            last_error = e
+            if attempt <= GATEWAY_CHECK_RETRIES:
+                time.sleep(GATEWAY_CHECK_BACKOFF_S)
+    raise last_error
+
+
+def test_rucio_server_gateway_reachable(tf_outputs):
+    _check_gateway_endpoint(
+        "http",
+        tf_outputs["gateway_static_ip"],
+        tf_outputs["rucio_public_hostname"],
+        "/ping",
+    )
+
+
+def test_fts_gateway_reachable(tf_outputs):
+    _check_gateway_endpoint(
+        "http",
+        tf_outputs["gateway_static_ip"],
+        tf_outputs["fts_public_hostname"],
+        "/whoami",
     )

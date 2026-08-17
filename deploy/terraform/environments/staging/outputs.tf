@@ -48,3 +48,15 @@ output "fts_db_password" {
   value     = module.fts_database.fts_db_password
   sensitive = true
 }
+
+output "gateway_static_ip" {
+  value = module.kubernetes.gateway_static_ip
+}
+
+output "rucio_public_hostname" {
+  value = module.kubernetes.rucio_public_hostname
+}
+
+output "fts_public_hostname" {
+  value = module.kubernetes.fts_public_hostname
+}
