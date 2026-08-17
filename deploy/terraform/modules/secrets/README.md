@@ -20,8 +20,7 @@ No modules.
 | [google_secret_manager_secret.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.eso_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.certs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
-| [google_secret_manager_secret_version.configs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
-| [google_secret_manager_secret_version.rucio](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
+| [google_secret_manager_secret_version.secrets](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 
 ## Inputs
 
@@ -38,9 +37,8 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | n/a | yes |
 | <a name="input_rucio_db_host"></a> [rucio\_db\_host](#input\_rucio\_db\_host) | Private IP of the rucio Cloud SQL instance (module.rucio\_database.private\_ip\_address) | `string` | n/a | yes |
 | <a name="input_rucio_db_password"></a> [rucio\_db\_password](#input\_rucio\_db\_password) | rucio DB user password (module.rucio\_database.rucio\_db\_password) — sensitive, lands in this module's plan/state same as the password itself already does upstream | `string` | n/a | yes |
-| <a name="input_fts3rest_log_level"></a> [fts3rest\_log\_level](#input\_fts3rest\_log\_level) | Apache LogLevel for the fts3rest vhost (fts3restconfig). Defaults to the sandbox's current 'debug' — tighten for production once past validation. | `string` | `"debug"` | no |
 | <a name="input_rucio_host"></a> [rucio\_host](#input\_rucio\_host) | Base URL the rucio client/auth host point at | `string` | `"http://rucio-server"` | no |
-| <a name="input_secret_names"></a> [secret\_names](#input\_secret\_names) | Logical secret names to create empty containers for (values provisioned out-of-band). Mirrors the sandbox's Vault seed categories: idpsecrets, certs, configs, rucio, scripts. | `list(string)` | <pre>[<br/>  "certs",<br/>  "configs",<br/>  "rucio"<br/>]</pre> | no |
+| <a name="input_secret_names"></a> [secret\_names](#input\_secret\_names) | Logical secret names to create empty containers for (values provisioned out-of-band). | `list(string)` | <pre>[<br/>  "certs",<br/>  "secrets"<br/>]</pre> | no |
 | <a name="input_site_name"></a> [site\_name](#input\_site\_name) | FTS SiteName / rucio SiteName-equivalent | `string` | `"DOCKER"` | no |
 | <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (exchange, FTS manages token lifecycle) \| unmanaged (client\_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
 

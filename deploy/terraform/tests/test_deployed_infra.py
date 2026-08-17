@@ -30,18 +30,9 @@ from google.cloud import secretmanager
 
 TF_ENV = os.environ.get("TF_ENV", "staging")
 TF_DIR = f"deploy/terraform/environments/{TF_ENV}"
-
-# A small, representative subset of keys per secret — not exhaustive, just
-# enough to catch "the render silently produced garbage" or "the wrong
-# keys landed in the wrong container". "patches" is excluded entirely —
-# it's no longer synced through Secret Manager/ESO at all (exceeded
-# Secret Manager's 65536-byte per-version limit), and is instead
-# generated directly by Kustomize's secretGenerator from shared/patches/
-# at sync time. Nothing to smoke-test here at the Terraform layer.
 EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
-    "configs": {"fts3config", "fts3restconfig"},
-    "rucio": {"server.cfg", "idpsecrets.json"},
+    "secrets": {"server.cfg", "idpsecrets.json", "fts3config"},
 }
 
 
@@ -81,7 +72,7 @@ def test_secret_populated_with_expected_keys(tf_outputs, secret_client, secret_n
 
 
 def test_rucio_cfg_points_at_rucio_database(tf_outputs, secret_client):
-    secret_id = tf_outputs["secret_ids"]["rucio"]
+    secret_id = tf_outputs["secret_ids"]["secrets"]
     version = secret_client.access_secret_version(name=f"{secret_id}/versions/latest")
     data = json.loads(version.payload.data.decode("utf-8"))
     assert tf_outputs["rucio_database_private_ip"] in data["server.cfg"]

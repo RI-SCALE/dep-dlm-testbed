@@ -98,9 +98,3 @@ variable "fts_db_password" {
   type        = string
   sensitive   = true
 }
-
-variable "fts3rest_log_level" {
-  description = "Apache LogLevel for the fts3rest vhost (fts3restconfig). Defaults to the sandbox's current 'debug' — tighten for production once past validation."
-  type        = string
-  default     = "debug"
-}
