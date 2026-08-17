@@ -12,6 +12,7 @@ service:
     rest: 8446
     # FTS monitoring
     monitoring: 8449
+  annotations: {}
 
 # Optional MySQL StatefulSet co-located with the FTS server.
 # The umbrella enables one ftsdb per FTS instance.

@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: fts-healthcheck
+  namespace: dep-dlm-staging
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 15
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTPS
+      httpsHealthCheck:
+        requestPath: /whoami
+        port: 8446
+  targetRef:
+    group: ""
+    kind: Service
+    name: fts

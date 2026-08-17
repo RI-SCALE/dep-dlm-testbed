@@ -1,0 +1,20 @@
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: rucio-server-healthcheck
+  namespace: dep-dlm-production
+spec:
+  default:
+    checkIntervalSec: 15
+    timeoutSec: 15
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        requestPath: /ping
+        port: 80
+  targetRef:
+    group: ""
+    kind: Service
+    name: rucio-server

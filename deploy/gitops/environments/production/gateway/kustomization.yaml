@@ -5,3 +5,5 @@ resources:
   - gateway.yaml
   - httproute-rucio-server.yaml
   - httproute-fts.yaml
+  - healthcheckpolicy-rucio-server.yaml
+  - healthcheckpolicy-fts.yaml
