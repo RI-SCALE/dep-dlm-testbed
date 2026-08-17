@@ -44,3 +44,21 @@ spec:
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-production-gateway
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: main
+    path: deploy/gitops/environments/production/gateway
+    kustomize: {}
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
