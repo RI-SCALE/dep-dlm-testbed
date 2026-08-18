@@ -1,21 +1,29 @@
-name: _terraform-apply
+name: _gitops-deploy
 
 on:
   workflow_call:
     inputs:
       tf_env:
-        description: "Environment directory name under deploy/terraform/environments/ (e.g. staging, production)"
         required: true
         type: string
       environment_name:
-        description: "GitHub Environment to resolve vars from and gate apply behind (usually the same as tf_env)"
         required: true
         type: string
-      scope_profile:
-        description: "local | egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile (see verify-idp-token). Only OIDC_CLIENT_SECRET needs to travel as a real secret."
+      gitops_engine:
+        description: "argocd | flux"
         required: false
         type: string
-        default: egi-dev
+        default: argocd
+      deploy_depth:
+        description: "gitops (install + full smoke tests) | e2e (also seed + run e2e tests)"
+        required: false
+        type: string
+        default: gitops
+      token_mode:
+        description: "managed | unmanaged — passed through to make argocd-install/flux-install for Vault/token-exchange seeding"
+        required: false
+        type: string
+        default: unmanaged
     secrets:
       OIDC_CLIENT_ID:
         required: true
@@ -26,18 +34,19 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
-  SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
+  GITOPS_ENV: ${{ inputs.tf_env }}
+  GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  plan:
-    name: plan
+  install:
+    name: ${{ inputs.gitops_engine }} install
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
       contents: read
-      pull-requests: write
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
@@ -46,9 +55,7 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    outputs:
-      certs_artifact_id: ${{ steps.upload-certs.outputs.artifact-id }}
-      tfplan_artifact_id: ${{ steps.upload-tfplan.outputs.artifact-id }}
+      GITOPS_REVISION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v6
 
@@ -62,38 +69,22 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      - name: Generate certificates
-        run: make certs
-
-      - name: Upload certs artifact
-        id: upload-certs
-        uses: actions/upload-artifact@v4
+      - uses: google-github-actions/setup-gcloud@v2
         with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-          retention-days: 1
+          install_components: "gke-gcloud-auth-plugin"
 
       - name: make tf-init
         run: make tf-init
 
-      - name: make tf-validate
-        run: make tf-validate
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
 
-      - name: make tf-plan
-        run: make tf-plan
+      - name: make ${{ inputs.gitops_engine }}-install
+        run: make ${{ inputs.gitops_engine }}-install
 
-      - name: Upload plan artifact
-        id: upload-tfplan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}/tfplan
-          retention-days: 1
-
-  apply:
-    name: apply
-    needs: plan
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+  smoke-test-full:
+    name: smoke test (full, incl. public endpoints)
+    needs: install
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -107,58 +98,6 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: Download certs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Download plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}
-
-      - name: make tf-apply
-        run: make tf-apply AUTO_APPROVE=1
-
-  smoke-test:
-    name: smoke test (infra only)
-    needs: apply
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-      # No gitops engine installed at this stage — public endpoint tests
-      # would fail deterministically, not flakily, so they're skipped
-      # here rather than allowed to fail. _gitops-deploy.yml's smoke-test
-      # job runs the full suite, including these, once an engine is up.
-      SKIP_GATEWAY_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
 
@@ -194,26 +133,48 @@ jobs:
       - name: make tf-smoke-test
         run: make tf-smoke-test
 
-  cleanup:
-    name: delete sensitive artifacts
-    needs: [plan, apply]
-    if: always()
+  seed-and-e2e:
+    name: seed + e2e tests
+    needs: smoke-test-full
+    if: inputs.deploy_depth == 'e2e'
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
     permissions:
-      actions: write
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
     steps:
-      - name: Delete certs artifact
-        if: needs.plan.outputs.certs_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.certs_artifact_id }}"
+      - uses: actions/checkout@v6
 
-      - name: Delete plan artifact
-        if: needs.plan.outputs.tfplan_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.tfplan_artifact_id }}"
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: make tf-init
+        run: make tf-init
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: make init
+        run: make init
+
+      - name: make test-rucio-transfers
+        run: make test-rucio-transfers

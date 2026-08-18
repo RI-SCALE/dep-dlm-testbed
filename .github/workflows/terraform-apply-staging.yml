@@ -15,6 +15,18 @@ on:
         type: choice
         options: [managed, unmanaged]
         default: unmanaged
+      gitops_engine:
+        description: "GitOps engine to install"
+        required: true
+        type: choice
+        options: [argocd, flux]
+        default: argocd
+      deploy_depth:
+        description: "How far to progress after apply"
+        required: true
+        type: choice
+        options: [apply-only, gitops, e2e]
+        default: apply-only
 
 permissions:
   id-token: write
@@ -23,27 +35,26 @@ permissions:
   pull-requests: write
 
 jobs:
-  resolve-secrets:
-    runs-on: ubuntu-latest
-    outputs:
-      oidc_client_id: ${{ steps.select.outputs.oidc_client_id }}
-    steps:
-      - id: select
-        run: |
-          if [ "${{ inputs.scope_profile }}" = "ls-aai-dev" ]; then
-            echo "oidc_client_id=${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "oidc_client_id=${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}" >> "$GITHUB_OUTPUT"
-          fi
-
   terraform:
-    needs: resolve-secrets
     uses: ./.github/workflows/_terraform-apply.yml
     with:
       tf_env: staging
       environment_name: staging
       scope_profile: ${{ inputs.scope_profile }}
+    secrets:
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+
+  gitops:
+    needs: terraform
+    if: inputs.deploy_depth != 'apply-only'
+    uses: ./.github/workflows/_gitops-deploy.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_engine: ${{ inputs.gitops_engine }}
+      deploy_depth: ${{ inputs.deploy_depth }}
       token_mode: ${{ inputs.token_mode }}
     secrets:
-      OIDC_CLIENT_ID: ${{ needs.resolve-secrets.outputs.oidc_client_id }}
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
       OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

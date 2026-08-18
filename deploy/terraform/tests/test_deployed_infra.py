@@ -38,6 +38,7 @@ DB_CHECK_RETRIES = 1
 DB_CHECK_BACKOFF_S = 15
 GATEWAY_CHECK_RETRIES = 3
 GATEWAY_CHECK_BACKOFF_S = 20
+SKIP_GATEWAY_CHECKS = os.environ.get("SKIP_GATEWAY_CHECKS") == "1"
 
 
 @pytest.fixture(scope="session")
@@ -233,6 +234,10 @@ def _check_gateway_endpoint(scheme, ip, hostname, path, expected_status=200):
     raise last_error
 
 
+@pytest.mark.skipif(
+    SKIP_GATEWAY_CHECKS,
+    reason="SKIP_GATEWAY_CHECKS=1 — gitops engine not installed at this depth",
+)
 def test_rucio_server_gateway_reachable(tf_outputs):
     _check_gateway_endpoint(
         "http",
@@ -242,6 +247,10 @@ def test_rucio_server_gateway_reachable(tf_outputs):
     )
 
 
+@pytest.mark.skipif(
+    SKIP_GATEWAY_CHECKS,
+    reason="SKIP_GATEWAY_CHECKS=1 — gitops engine not installed at this depth",
+)
 def test_fts_gateway_reachable(tf_outputs):
     _check_gateway_endpoint(
         "http",
