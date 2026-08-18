@@ -20,6 +20,10 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
+  # Any Makefile-derivable profile works — destroy doesn't need the
+  # value correct, just resolvable, so Terraform's variable graph can
+  # build. "local" is not derivable and fails tf-destroy outright.
+  SCOPE_PROFILE: egi-dev
   # destroy only needs Terraform's variable graph to resolve, not the
   # real OIDC identity — these values never affect resource addresses,
   # only rendered secret payload content, which destroy doesn't diff.
