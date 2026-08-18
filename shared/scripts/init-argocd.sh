@@ -127,6 +127,14 @@ wait_for_core_tier() {
 apply_secrets_root() {
   log "Applying secrets root (dep-dlm-${GITOPS_ENV}-secrets)"
   kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-secrets")' "$APPLY_FILE")
+}
+
+# Applies the gateway root — rucio-server/fts Services must already exist
+# for HealthCheckPolicy/HTTPRoute to resolve meaningfully, so this runs
+# after bootstrap_rucio_db, not alongside apply_apps_root/apply_secrets_root.
+apply_gateway_root() {
+  log "Applying gateway root (dep-dlm-${GITOPS_ENV}-gateway)"
+  kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-gateway")' "$APPLY_FILE")
   [[ "$APPLY_FILE" != "$APP_OF_APPS" ]] && rm -f "$APPLY_FILE"
 }
 
@@ -180,6 +188,7 @@ main() {
   render_testbed_configmaps        # from common.sh
   seed_vault                       # from common.sh
   bootstrap_rucio_db               # from common.sh
+  apply_gateway_root
   report
 }
 

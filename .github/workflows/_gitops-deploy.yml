@@ -79,13 +79,13 @@ jobs:
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
 
-      - name: Uninstall existing gitops engine, if present
+      - name: Uninstall the other gitops engine, if present
         run: |
-          if kubectl get namespace argocd >/dev/null 2>&1; then
+          if [ "${{ inputs.gitops_engine }}" != "argocd" ] && kubectl get namespace argocd >/dev/null 2>&1; then
             echo "Existing ArgoCD installation detected — uninstalling"
             make argocd-uninstall
           fi
-          if kubectl get namespace flux-system >/dev/null 2>&1; then
+          if [ "${{ inputs.gitops_engine }}" != "flux" ] && kubectl get namespace flux-system >/dev/null 2>&1; then
             echo "Existing Flux installation detected — uninstalling"
             make flux-uninstall
           fi
