@@ -1,13 +1,20 @@
 name: Terraform apply (production)
 
-# workflow_dispatch ONLY, deliberately — unlike staging, production never
-# runs plan/apply automatically off a push or PR. Every apply against
-# production is a deliberate, manually-triggered action, still gated
-# behind the "production" GitHub Environment's own reviewer requirements
-# on top of that.
-
 on:
   workflow_dispatch:
+    inputs:
+      scope_profile:
+        description: "OIDC scope profile"
+        required: true
+        type: choice
+        options: [egi-dev, ls-aai-dev]
+        default: egi-dev
+      token_mode:
+        description: "Token exchange mode"
+        required: true
+        type: choice
+        options: [managed, unmanaged]
+        default: unmanaged
 
 permissions:
   id-token: write
@@ -16,12 +23,27 @@ permissions:
   pull-requests: write
 
 jobs:
+  resolve-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      oidc_client_id: ${{ steps.select.outputs.oidc_client_id }}
+    steps:
+      - id: select
+        run: |
+          if [ "${{ inputs.scope_profile }}" = "ls-aai-dev" ]; then
+            echo "oidc_client_id=${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "oidc_client_id=${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}" >> "$GITHUB_OUTPUT"
+          fi
+
   terraform:
+    needs: resolve-secrets
     uses: ./.github/workflows/_terraform-apply.yml
     with:
       tf_env: production
       environment_name: production
-      scope_profile: egi-dev
+      scope_profile: ${{ inputs.scope_profile }}
+      token_mode: ${{ inputs.token_mode }}
     secrets:
-      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
-      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+      OIDC_CLIENT_ID: ${{ needs.resolve-secrets.outputs.oidc_client_id }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

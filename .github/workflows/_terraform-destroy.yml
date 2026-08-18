@@ -15,23 +15,16 @@ on:
         description: "Value the human typed in the calling workflow's confirmation input — must exactly equal environment_name"
         required: true
         type: string
-      scope_profile:
-        description: "local | egi-dev | ls-aai-dev — same derivation as _terraform-apply.yml; tf-destroy needs the same OIDC vars tf-apply does"
-        required: false
-        type: string
-        default: egi-dev
-    secrets:
-      OIDC_CLIENT_ID:
-        required: true
-      OIDC_CLIENT_SECRET:
-        required: true
 
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
-  SCOPE_PROFILE: ${{ inputs.scope_profile }}
-  OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+  # destroy only needs Terraform's variable graph to resolve, not the
+  # real OIDC identity — these values never affect resource addresses,
+  # only rendered secret payload content, which destroy doesn't diff.
+  OIDC_CLIENT_ID: "unused-for-destroy"
+  OIDC_CLIENT_SECRET: "unused-for-destroy"
 
 jobs:
   destroy:
@@ -77,17 +70,5 @@ jobs:
       - name: make tf-init
         run: make tf-init
 
-      # Real resources go first, always — the bucket is state, not
-      # infrastructure. Deleting it before this would leave every GCP
-      # resource orphaned with no Terraform record of them.
-      #
-      # State-bucket deletion is NOT a step in this workflow — that bucket
-      # is tracked in deploy/terraform/bootstrap's state, not
-      # environments/<env>'s. Deleting it via raw gcloud from here would
-      # drift bootstrap's own state the same way the old in-environments/<env>
-      # networking did (see deploy/terraform/README.md's Teardown section).
-      # If you're tearing an environment down for good, that's a
-      # bootstrap-level, human-run operation (`gcloud projects delete`),
-      # not something this CI workflow performs.
       - name: make tf-destroy
         run: make tf-destroy AUTO_APPROVE=1

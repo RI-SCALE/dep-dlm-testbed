@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: egi-dev
+      token_mode:
+        description: "managed | unmanaged — passed through to make argocd-install for Vault/token-exchange seeding"
+        required: false
+        type: string
+        default: unmanaged
     secrets:
       OIDC_CLIENT_ID:
         required: true
@@ -27,6 +32,7 @@ env:
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
   SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
@@ -166,9 +172,57 @@ jobs:
       - name: make tf-apply
         run: make tf-apply AUTO_APPROVE=1
 
+  argocd-install:
+    name: argocd install
+    needs: apply
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+      GITOPS_ENV: ${{ inputs.tf_env }}
+      GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
+      GITOPS_REVISION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      # No certs artifact needed — argocd-install.sh seeds Vault/secrets
+      # from Terraform outputs and Secret Manager directly, not from
+      # local certs/ the way `make certs` produces for tf-apply.
+      - name: make tf-init
+        run: make tf-init
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: make argocd-install
+        run: make argocd-install
+
   smoke-test:
     name: smoke test
-    needs: apply
+    needs: argocd-install
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }} # same Environment-scoped vars as plan/apply (GCP_PROJECT_ID etc.) — no second approval prompt, GitHub gates this per workflow-run + environment, not per-job
     permissions:
