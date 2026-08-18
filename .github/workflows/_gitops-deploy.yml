@@ -109,6 +109,23 @@ jobs:
           kubectl -n $ns rollout status deploy/fts --timeout=300s
           kubectl -n $ns get pods
 
+      - name: Wait for Gateway to be Programmed
+        run: |
+          ns=dep-dlm-${{ inputs.tf_env }}
+          gw=dep-dlm-${{ inputs.tf_env }}-gateway
+          for i in $(seq 1 40); do
+            addr=$(kubectl -n "$ns" get gateway "$gw" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+            programmed=$(kubectl -n "$ns" get gateway "$gw" -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null)
+            echo "  [$i] address=${addr:-<none>} programmed=${programmed:-<none>}"
+            if [ "$programmed" = "True" ] && [ -n "$addr" ]; then
+              echo "Gateway is Programmed with address $addr"; exit 0
+            fi
+            sleep 15
+          done
+          echo "ERROR: Gateway did not become Programmed in time"
+          kubectl -n "$ns" describe gateway "$gw"
+          exit 1
+
       - name: Diagnostics on install failure
         if: failure()
         run: |
