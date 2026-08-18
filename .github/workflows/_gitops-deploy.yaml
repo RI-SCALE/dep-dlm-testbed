@@ -79,8 +79,48 @@ jobs:
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
 
+      - name: Uninstall existing gitops engine, if present
+        run: |
+          if kubectl get namespace argocd >/dev/null 2>&1; then
+            echo "Existing ArgoCD installation detected — uninstalling"
+            make argocd-uninstall
+          fi
+          if kubectl get namespace flux-system >/dev/null 2>&1; then
+            echo "Existing Flux installation detected — uninstalling"
+            make flux-uninstall
+          fi
+
       - name: make ${{ inputs.gitops_engine }}-install
         run: make ${{ inputs.gitops_engine }}-install
+
+      - name: Wait for ArgoCD Applications to become Healthy
+        if: inputs.gitops_engine == 'argocd'
+        uses: ./.github/actions/wait-for-argocd-healthy
+
+      - name: Wait for Flux Kustomizations/HelmReleases to be Ready
+        if: inputs.gitops_engine == 'flux'
+        uses: ./.github/actions/wait-for-flux-ready
+
+      - name: Verify workload pods are Running
+        run: |
+          ns=dep-dlm-${{ inputs.tf_env }}
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
+          kubectl -n $ns rollout status deploy/fts --timeout=300s
+          kubectl -n $ns get pods
+
+      - name: Diagnostics on install failure
+        if: failure()
+        run: |
+          if [ "${{ inputs.gitops_engine }}" = "argocd" ]; then
+            echo "=== Applications ==="; kubectl -n argocd get applications -o wide || true
+          else
+            echo "=== Kustomizations ==="; flux get kustomizations || true
+            echo "=== HelmReleases ==="; flux get helmreleases -A || true
+          fi
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ inputs.tf_env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ inputs.tf_env }} get events --sort-by=.lastTimestamp | tail -50 || true
 
   smoke-test-full:
     name: smoke test (full, incl. public endpoints)
