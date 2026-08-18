@@ -17,7 +17,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: refactor/testbed-secrets-classification
+    targetRevision: feat/staging-public-endpoint
     path: deploy/gitops/argocd/applicationsets
     directory:
       recurse: false
@@ -37,8 +37,26 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: refactor/testbed-secrets-classification
+    targetRevision: feat/staging-public-endpoint
     path: deploy/gitops/environments/production/secrets
+    kustomize: {}
+  destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dep-dlm-production-gateway
+  namespace: argocd
+  finalizers: [ resources-finalizer.argocd.argoproj.io ]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+    targetRevision: feat/staging-public-endpoint
+    path: deploy/gitops/environments/production/gateway
     kustomize: {}
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
   syncPolicy:

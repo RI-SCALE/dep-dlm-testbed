@@ -1,0 +1,220 @@
+name: _gitops-deploy
+
+on:
+  workflow_call:
+    inputs:
+      tf_env:
+        required: true
+        type: string
+      environment_name:
+        required: true
+        type: string
+      gitops_engine:
+        description: "argocd | flux"
+        required: false
+        type: string
+        default: argocd
+      deploy_depth:
+        description: "gitops (install + full smoke tests) | e2e (also seed + run e2e tests)"
+        required: false
+        type: string
+        default: gitops
+      token_mode:
+        description: "managed | unmanaged — passed through to make argocd-install/flux-install for Vault/token-exchange seeding"
+        required: false
+        type: string
+        default: unmanaged
+    secrets:
+      OIDC_CLIENT_ID:
+        required: true
+      OIDC_CLIENT_SECRET:
+        required: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_ENV: ${{ inputs.tf_env }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
+  GITOPS_ENV: ${{ inputs.tf_env }}
+  GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
+  OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+
+jobs:
+  install:
+    name: ${{ inputs.gitops_engine }} install
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+      GITOPS_REVISION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: make tf-init
+        run: make tf-init
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: Uninstall existing gitops engine, if present
+        run: |
+          if kubectl get namespace argocd >/dev/null 2>&1; then
+            echo "Existing ArgoCD installation detected — uninstalling"
+            make argocd-uninstall
+          fi
+          if kubectl get namespace flux-system >/dev/null 2>&1; then
+            echo "Existing Flux installation detected — uninstalling"
+            make flux-uninstall
+          fi
+
+      - name: make ${{ inputs.gitops_engine }}-install
+        run: make ${{ inputs.gitops_engine }}-install
+
+      - name: Wait for ArgoCD Applications to become Healthy
+        if: inputs.gitops_engine == 'argocd'
+        uses: ./.github/actions/wait-for-argocd-healthy
+
+      - name: Wait for Flux Kustomizations/HelmReleases to be Ready
+        if: inputs.gitops_engine == 'flux'
+        uses: ./.github/actions/wait-for-flux-ready
+
+      - name: Verify workload pods are Running
+        run: |
+          ns=dep-dlm-${{ inputs.tf_env }}
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
+          kubectl -n $ns rollout status deploy/fts --timeout=300s
+          kubectl -n $ns get pods
+
+      - name: Diagnostics on install failure
+        if: failure()
+        run: |
+          if [ "${{ inputs.gitops_engine }}" = "argocd" ]; then
+            echo "=== Applications ==="; kubectl -n argocd get applications -o wide || true
+          else
+            echo "=== Kustomizations ==="; flux get kustomizations || true
+            echo "=== HelmReleases ==="; flux get helmreleases -A || true
+          fi
+          echo "=== Pods ==="; kubectl -n dep-dlm-${{ inputs.tf_env }} get pods -o wide || true
+          echo "=== Events ==="
+          kubectl -n dep-dlm-${{ inputs.tf_env }} get events --sort-by=.lastTimestamp | tail -50 || true
+
+  smoke-test-full:
+    name: smoke test (full, incl. public endpoints)
+    needs: install
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: make tf-init
+        run: make tf-init
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: Install smoke test dependencies
+        run: |
+          pip install --break-system-packages \
+            pytest google-cloud-secret-manager requests
+
+      - name: make tf-smoke-test
+        run: make tf-smoke-test
+
+  seed-and-e2e:
+    name: seed + e2e tests
+    needs: smoke-test-full
+    if: inputs.deploy_depth == 'e2e'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: make tf-init
+        run: make tf-init
+
+      - name: Fetch kubeconfig
+        run: make tf-kubeconfig
+
+      - name: make init
+        run: make init
+
+      - name: make test-rucio-transfers
+        run: make test-rucio-transfers

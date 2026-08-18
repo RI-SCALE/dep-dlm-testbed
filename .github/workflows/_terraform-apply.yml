@@ -35,9 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
-      id-token: write   # required for WIF OIDC token exchange
+      id-token: write
       contents: read
-      pull-requests: write # to comment the plan on PRs
+      pull-requests: write
     env:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
@@ -62,18 +62,6 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      # Generated ONCE, here, and shared with apply via artifact below —
-      # NOT re-run in the apply job. generate-certs.sh produces fresh,
-      # non-deterministic random key material every invocation; plan and
-      # apply are separate jobs on separate runners, so calling `make
-      # certs` independently in each produces DIFFERENT bytes, which
-      # breaks apply ("Provider produced inconsistent final plan") since
-      # certs.tf's file() calls re-evaluate at apply time. Same certs,
-      # byte-for-byte, in both jobs is the fix.
-      #
-      # retention-days: 1 (the platform minimum) is a backstop only —
-      # the "cleanup" job below deletes this explicitly, on success or
-      # failure, since it contains real private key material.
       - name: Generate certificates
         run: make certs
 
@@ -94,11 +82,6 @@ jobs:
       - name: make tf-plan
         run: make tf-plan
 
-      # retention-days: 1 here too, same reasoning — a saved plan file's
-      # sensitive values are NOT redacted internally (sensitive = true
-      # only hides them from console output), so this holds real
-      # secrets (DB passwords, OIDC_CLIENT_SECRET) until "cleanup"
-      # deletes it explicitly.
       - name: Upload plan artifact
         id: upload-tfplan
         uses: actions/upload-artifact@v4
@@ -110,14 +93,9 @@ jobs:
   apply:
     name: apply
     needs: plan
-    # push re-added deliberately: staging's caller (terraform-staging.yml)
-    # is the only one with an `on: push:` trigger at all — production's
-    # caller only has workflow_dispatch, so this never fires push-triggered
-    # applies against production regardless of this condition living here
-    # in the shared workflow.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }} # GitHub Environment — add required reviewers here for a manual approval gate
+    environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
       contents: read
@@ -142,8 +120,6 @@ jobs:
         with:
           terraform_version: "1.15.8"
 
-      # Downloaded, not regenerated — must be byte-identical to what
-      # `plan` used, see that job's comment.
       - name: Download certs artifact
         uses: actions/download-artifact@v4
         with:
@@ -159,18 +135,14 @@ jobs:
           name: tfplan-${{ inputs.tf_env }}
           path: deploy/terraform/environments/${{ inputs.tf_env }}
 
-      # tf-apply uses the downloaded tfplan artifact automatically if
-      # present (see the Makefile target) — guarantees apply does
-      # precisely what was reviewed in `plan`, not whatever a fresh
-      # `terraform plan` would produce if state drifted in between.
       - name: make tf-apply
         run: make tf-apply AUTO_APPROVE=1
 
   smoke-test:
-    name: smoke test
+    name: smoke test (infra only)
     needs: apply
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }} # same Environment-scoped vars as plan/apply (GCP_PROJECT_ID etc.) — no second approval prompt, GitHub gates this per workflow-run + environment, not per-job
+    environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
       contents: read
@@ -182,6 +154,11 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+      # No gitops engine installed at this stage — public endpoint tests
+      # would fail deterministically, not flakily, so they're skipped
+      # here rather than allowed to fail. _gitops-deploy.yml's smoke-test
+      # job runs the full suite, including these, once an engine is up.
+      SKIP_GATEWAY_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
 
@@ -203,9 +180,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      # No certs/tfplan artifacts needed here — this job only reads
-      # existing state (terraform output) and queries the already-applied
-      # infrastructure directly, doesn't re-plan or re-apply anything.
       - name: make tf-init
         run: make tf-init
 
@@ -215,7 +189,7 @@ jobs:
       - name: Install smoke test dependencies
         run: |
           pip install --break-system-packages \
-            pytest google-cloud-secret-manager
+            pytest google-cloud-secret-manager requests
 
       - name: make tf-smoke-test
         run: make tf-smoke-test
@@ -223,10 +197,10 @@ jobs:
   cleanup:
     name: delete sensitive artifacts
     needs: [plan, apply]
-    if: always() # run whether plan/apply succeeded, failed, or apply was skipped
+    if: always()
     runs-on: ubuntu-latest
     permissions:
-      actions: write # required to delete artifacts via the REST API
+      actions: write
     steps:
       - name: Delete certs artifact
         if: needs.plan.outputs.certs_artifact_id != ''

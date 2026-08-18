@@ -369,14 +369,15 @@ fts:
       mountPath: /etc/fts3/fts3config
       subPath: fts3config
 
+    - name: secrets
+      mountPath: /etc/fts3/fts3restconfig
+      subPath: fts3restconfig
+
     # Scripts directory
     - name: scripts
       mountPath: /scripts
 
     # FTS configs (token-mode conditional for fts3restconfig)
-    - name: configs
-      mountPath: /etc/fts3/fts3restconfig
-      subPath: fts3restconfig
     - name: configs
       mountPath: /etc/gfal2.d/http_plugin.conf
       subPath: gfal2_http_plugin.conf

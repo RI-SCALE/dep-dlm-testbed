@@ -6,6 +6,10 @@ metadata:
     app: {{ include "fts.name" . }}
     instance: {{ include "fts.fullname" . }}
     release: {{ .Release.Name }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -13,6 +17,7 @@ spec:
       targetPort: rest
       protocol: TCP
       name: rest
+      appProtocol: HTTPS
     - port: {{ .Values.service.ports.monitoring }}
       targetPort: monitoring
       protocol: TCP

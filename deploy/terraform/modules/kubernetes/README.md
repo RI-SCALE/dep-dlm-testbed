@@ -17,6 +17,7 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
+| [google_compute_global_address.gateway](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_global_address) | resource |
 | [google_container_cluster.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster) | resource |
 | [google_service_account.eso](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 | [google_service_account_iam_member.eso_workload_identity](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
@@ -44,5 +45,8 @@ No modules.
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | API server endpoint (sensitive-adjacent — treat kubeconfig generation with care) |
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | Name of the GKE cluster |
 | <a name="output_eso_service_account_email"></a> [eso\_service\_account\_email](#output\_eso\_service\_account\_email) | GCP service account email ESO's k8s ServiceAccount impersonates |
+| <a name="output_fts_public_hostname"></a> [fts\_public\_hostname](#output\_fts\_public\_hostname) | Host header the public Gateway uses to route to fts. See rucio\_public\_hostname for the .example.com rationale. |
+| <a name="output_gateway_static_ip"></a> [gateway\_static\_ip](#output\_gateway\_static\_ip) | Reserved external IP for the public Gateway (rucio-server/fts). Referenced by the Gateway manifest's spec.addresses (NamedAddress) and by the reachability smoke test. |
+| <a name="output_rucio_public_hostname"></a> [rucio\_public\_hostname](#output\_rucio\_public\_hostname) | Host header the public Gateway uses to route to rucio-server. Not a real, DNS-registered domain — .example.com is RFC 2606-reserved for exactly this use, since no DNS record or registered RSE is required for this reachability check. |
 | <a name="output_workload_pool"></a> [workload\_pool](#output\_workload\_pool) | Workload Identity pool (<project>.svc.id.goog) |
 <!-- END_TF_DOCS -->

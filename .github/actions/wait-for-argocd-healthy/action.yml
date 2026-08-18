@@ -1,0 +1,21 @@
+name: Wait for ArgoCD Applications to become Healthy
+inputs:
+  namespace:
+    default: argocd
+  timeout_iterations:
+    default: "80"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        ns=${{ inputs.namespace }}
+        for i in $(seq 1 ${{ inputs.timeout_iterations }}); do
+          total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
+          healthy=$(kubectl -n $ns get applications -o custom-columns='NAME:.metadata.name,HS:.status.health.status' --no-headers 2>/dev/null | awk '$2=="Healthy"' | wc -l | tr -d ' ')
+          echo "  [$i] $healthy/$total Applications Healthy"
+          [ "$total" -gt 0 ] && [ "$healthy" = "$total" ] && { echo "All Applications Healthy"; exit 0; }
+          kubectl -n $ns get applications -o custom-columns='NAME:.metadata.name,HEALTH:.status.health.status,SYNC:.status.sync.status' --no-headers 2>/dev/null | awk '$2!="Healthy"' | sed 's/^/      not-healthy: /' || true
+          sleep 15
+        done
+        echo "ERROR: Applications did not all become Healthy in time"; kubectl -n $ns get applications; exit 1

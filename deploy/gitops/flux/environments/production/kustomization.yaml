@@ -17,8 +17,8 @@ configMapGenerator:
   # (redundant in-cluster MySQL, competes for GCE quota) and the
   # b96dc756.* cert items (which don't exist in staging's scoped-down
   # testbed-certs) stay referenced, crashing the FTS mount.
-  - { name: fts-overrides-values,           namespace: flux-system, files: [ fts.yaml=../../../environments/production/values/fts.yaml ] }
   - { name: rucio-daemons-overrides-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../environments/production/values/rucio-daemons.yaml ] }
+  - { name: fts-overrides-values,           namespace: flux-system, files: [ fts.yaml=../../../environments/production/values/fts.yaml ] }
 generatorOptions:
   disableNameSuffixHash: true
 patches:

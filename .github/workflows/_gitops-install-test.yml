@@ -93,39 +93,12 @@ jobs:
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
             GITOPS_REVISION="${{ github.ref_name }}"
 
-      - name: Wait for Applications to become Healthy
-        run: |
-          # Gate on Application HEALTH, not sync status — same reasoning as
-          # gitops-argocd.yml (sandbox): some apps stay permanently
-          # OutOfSync-but-Healthy (hook resources excluded from Argo's
-          # desired-state diff), that's expected, not a failure.
-          ns=argocd
-          for i in $(seq 1 80); do
-            total=$(kubectl -n $ns get applications -o name 2>/dev/null | wc -l | tr -d ' ')
-            healthy=$(kubectl -n $ns get applications \
-              -o custom-columns='NAME:.metadata.name,HS:.status.health.status' \
-              --no-headers 2>/dev/null | awk '$2=="Healthy"' | wc -l | tr -d ' ')
-            echo "  [$i] $healthy/$total Applications Healthy"
-            if [ "$total" -gt 0 ] && [ "$healthy" = "$total" ]; then
-              echo "All Applications Healthy"; exit 0
-            fi
-            kubectl -n $ns get applications \
-              -o custom-columns='NAME:.metadata.name,HEALTH:.status.health.status,SYNC:.status.sync.status' \
-              --no-headers 2>/dev/null | awk '$2!="Healthy"' | sed 's/^/      not-healthy: /' || true
-            sleep 15
-          done
-          echo "ERROR: Applications did not all become Healthy in time"
-          kubectl -n $ns get applications
-          exit 1
+      - name: Wait for ArgoCD Applications to become Healthy
+        uses: ./.github/actions/wait-for-argocd-healthy
 
       - name: Verify ArgoCD-managed workload pods are Running
         run: |
           ns=dep-dlm-${{ inputs.gitops_env }}
-          # rollout status polls for the Deployment to exist and converge in
-          # one call — unlike `kubectl wait -l`, which errors instantly if
-          # zero pods currently match the selector (the actual bug that
-          # broke this workflow's first run: ArgoCD's Application sync was
-          # still converging in the background when the old check ran).
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns rollout status deploy/fts --timeout=300s
@@ -154,44 +127,8 @@ jobs:
             GITOPS_REPO_URL="https://github.com/${{ github.repository }}.git" \
             GITOPS_REVISION="${{ github.ref_name }}"
 
-      - name: Wait for all Kustomizations to be Ready
-        run: |
-          ns=flux-system
-          for i in $(seq 1 60); do
-            total=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
-              -o name 2>/dev/null | grep dep-dlm | wc -l | tr -d ' ')
-            ready=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
-              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
-              | grep '^dep-dlm' | awk '$2=="True"' | wc -l | tr -d ' ')
-            echo "  [$i] $ready/$total dep-dlm Kustomizations Ready"
-            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
-              echo "All Kustomizations Ready"; break
-            fi
-            sleep 15
-            [ "$i" = 60 ] && { echo "ERROR: Kustomizations not Ready in time"; flux get kustomizations; exit 1; }
-          done
-
-      - name: Wait for all HelmReleases to be Ready
-        run: |
-          ns=flux-system
-          for i in $(seq 1 60); do
-            total=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
-              -o name 2>/dev/null | wc -l | tr -d ' ')
-            ready=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
-              -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
-              | awk '$2=="True"' | wc -l | tr -d ' ')
-            echo "  [$i] $ready/$total HelmReleases Ready"
-            if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
-              echo "All HelmReleases Ready"; exit 0
-            fi
-            kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
-              -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\t"}{.message}{end}{"\n"}{end}' 2>/dev/null \
-              | awk -F'\t' '$2!="True"' | sed 's/^/      pending: /' || true
-            sleep 15
-          done
-          echo "ERROR: HelmReleases did not all become Ready in time"
-          flux get helmreleases -A
-          exit 1
+      - name: Wait for Flux Kustomizations/HelmReleases to be Ready
+        uses: ./.github/actions/wait-for-flux-ready
 
       - name: Verify Flux-managed workload pods are Running
         run: |

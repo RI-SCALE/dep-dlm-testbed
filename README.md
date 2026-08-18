@@ -1,5 +1,18 @@
 # dep-dlm-testbed
 
+[![Lint](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/lint.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/lint.yml)
+[![EGI Check-In (dev)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/egi-dev.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/egi-dev.yml)
+[![LS AAI (dev)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/ls-aai-dev.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/ls-aai-dev.yml)
+[![Local](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.yml)
+[![Local (full)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml)
+[![GitOps (ArgoCD)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml)
+[![GitOps (Flux)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml)
+[![GitOps install test (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml)
+[![Terraform apply (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
+[![Terraform apply (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
+[![Terraform destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
+[![Terraform destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
+
 Self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`), with GitOps-based deployment (ArgoCD or Flux) across sandbox, staging and production environments.
 
 The testbed supports both managed and unmanaged token flows and integrates against external OIDC providers beyond the bundled Keycloak, validated end-to-end against EGI Check-In and LS AAI / Perun, as well as external storage backends including S3 (e.g. Copernicus Data Space). It can be further extended to validate data discovery, popularity and preparation services end-to-end.

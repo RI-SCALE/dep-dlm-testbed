@@ -1,13 +1,32 @@
 name: Terraform apply (production)
 
-# workflow_dispatch ONLY, deliberately — unlike staging, production never
-# runs plan/apply automatically off a push or PR. Every apply against
-# production is a deliberate, manually-triggered action, still gated
-# behind the "production" GitHub Environment's own reviewer requirements
-# on top of that.
-
 on:
   workflow_dispatch:
+    inputs:
+      scope_profile:
+        description: "OIDC scope profile"
+        required: true
+        type: choice
+        options: [egi-dev, ls-aai-dev]
+        default: egi-dev
+      token_mode:
+        description: "Token exchange mode"
+        required: true
+        type: choice
+        options: [managed, unmanaged]
+        default: unmanaged
+      gitops_engine:
+        description: "GitOps engine to install"
+        required: true
+        type: choice
+        options: [argocd, flux]
+        default: argocd
+      deploy_depth:
+        description: "How far to progress after apply"
+        required: true
+        type: choice
+        options: [apply-only, gitops, e2e]
+        default: apply-only
 
 permissions:
   id-token: write
@@ -21,7 +40,21 @@ jobs:
     with:
       tf_env: production
       environment_name: production
-      scope_profile: egi-dev
+      scope_profile: ${{ inputs.scope_profile }}
     secrets:
-      OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
-      OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+
+  gitops:
+    needs: terraform
+    if: inputs.deploy_depth != 'apply-only'
+    uses: ./.github/workflows/_gitops-deploy.yml
+    with:
+      tf_env: production
+      environment_name: production
+      gitops_engine: ${{ inputs.gitops_engine }}
+      deploy_depth: ${{ inputs.deploy_depth }}
+      token_mode: ${{ inputs.token_mode }}
+    secrets:
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

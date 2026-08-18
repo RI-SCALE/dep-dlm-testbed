@@ -65,7 +65,7 @@ generate_scripts_secret() {
   log "Materializing testbed-scripts from $bootstrap_script"
   kubectl create configmap testbed-scripts \
     --namespace "$K8S_NAMESPACE" \
-    --from-file="bootstrap-db.py=${bootstrap_script}" \
+    --from-file="rucio--bootstrap-db.py=${bootstrap_script}" \
     --dry-run=client -o yaml | kubectl apply -f -
 }
 

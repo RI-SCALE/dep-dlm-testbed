@@ -1,0 +1,51 @@
+name: Wait for Flux Kustomizations/HelmReleases to be Ready
+inputs:
+  namespace:
+    default: flux-system
+  timeout_iterations:
+    default: "60"
+runs:
+  using: composite
+  steps:
+    - name: Wait for all dep-dlm Kustomizations to be Ready
+      shell: bash
+      run: |
+        ns=${{ inputs.namespace }}
+        for i in $(seq 1 ${{ inputs.timeout_iterations }}); do
+          total=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+            -o name 2>/dev/null | grep dep-dlm | wc -l | tr -d ' ')
+          ready=$(kubectl -n $ns get kustomizations.kustomize.toolkit.fluxcd.io \
+            -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+            | grep '^dep-dlm' | awk '$2=="True"' | wc -l | tr -d ' ')
+          echo "  [$i] $ready/$total dep-dlm Kustomizations Ready"
+          if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+            echo "All Kustomizations Ready"; exit 0
+          fi
+          sleep 15
+          if [ "$i" = "${{ inputs.timeout_iterations }}" ]; then
+            echo "ERROR: Kustomizations not Ready in time"; flux get kustomizations; exit 1
+          fi
+        done
+
+    - name: Wait for all HelmReleases to be Ready
+      shell: bash
+      run: |
+        ns=${{ inputs.namespace }}
+        for i in $(seq 1 ${{ inputs.timeout_iterations }}); do
+          total=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+            -o name 2>/dev/null | wc -l | tr -d ' ')
+          ready=$(kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+            -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .status.conditions[?(@.type=="Ready")]}{.status}{end}{"\n"}{end}' 2>/dev/null \
+            | awk '$2=="True"' | wc -l | tr -d ' ')
+          echo "  [$i] $ready/$total HelmReleases Ready"
+          if [ "$total" -gt 0 ] && [ "$ready" = "$total" ]; then
+            echo "All HelmReleases Ready"; exit 0
+          fi
+          kubectl -n $ns get helmreleases.helm.toolkit.fluxcd.io \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\t"}{.message}{end}{"\n"}{end}' 2>/dev/null \
+            | awk -F'\t' '$2!="True"' | sed 's/^/      pending: /' || true
+          sleep 15
+        done
+        echo "ERROR: HelmReleases did not all become Ready in time"
+        flux get helmreleases -A
+        exit 1

@@ -52,3 +52,15 @@ spec:
   prune: true
   dependsOn:
     - { name: dep-dlm-staging-secrets }
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: { name: dep-dlm-staging-gateway, namespace: flux-system }
+spec:
+  interval: 5m
+  sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
+  path: ./deploy/gitops/environments/staging/gateway
+  prune: true
+  targetNamespace: dep-dlm-staging
+  dependsOn:
+    - { name: dep-dlm-staging }   # rucio-server/fts Services must exist for HTTPRoute's backendRefs to resolve
