@@ -1,5 +1,5 @@
 {{- $excludedDirs := list "rucio" }}
-{{- $excludedFiles := list "realm.json" "fts-activemq.conf" "fts3rest.conf" "managed.fts3restconfig" "unmanaged.fts3restconfig" "fts3config" }}
+{{- $excludedFiles := list "realm.json" "fts-activemq.conf" "fts3rest.conf" "managed.fts3restconfig" "unmanaged.fts3restconfig" "fts3config" "fts3restconfig" }}
 {{- $profile := .Values.global.scopeProfile }}
 {{- $tokenMode := .Values.global.tokenMode }}
 {{- if .Values.configs.create }}
@@ -41,13 +41,6 @@ data:
     {{- end }}
   {{- end }}
   {{- end }}
-  {{- /*
-    fts3restconfig: resolved once via tokenMode, emitted under a single
-    fixed key rather than two profile-named keys picked at mount time.
-  */}}
-  {{- $fts3restconfigFile := "unmanaged.fts3restconfig" }}
-  {{- if eq $tokenMode "managed" }}{{ $fts3restconfigFile = "managed.fts3restconfig" }}{{- end }}
-  {{- $_ := set $merged "fts3restconfig" (printf "files/configs/fts/%s" $fts3restconfigFile) }}
   {{- range $name, $path := $merged }}
   {{ $name }}: |-
 {{ $.Files.Get $path | indent 4 }}

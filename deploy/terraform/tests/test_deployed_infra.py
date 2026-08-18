@@ -32,7 +32,7 @@ TF_ENV = os.environ.get("TF_ENV", "staging")
 TF_DIR = f"deploy/terraform/environments/{TF_ENV}"
 EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
-    "secrets": {"server.cfg", "idpsecrets.json", "fts3config"},
+    "secrets": {"server.cfg", "idpsecrets.json", "fts3config", "fts3restconfig"},
 }
 DB_CHECK_RETRIES = 1
 DB_CHECK_BACKOFF_S = 15
