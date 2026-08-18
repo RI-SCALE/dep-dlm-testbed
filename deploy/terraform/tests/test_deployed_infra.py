@@ -24,12 +24,14 @@ import json
 import os
 import subprocess
 import time
+import uuid
 
 import pytest
 from google.cloud import secretmanager
 
 TF_ENV = os.environ.get("TF_ENV", "staging")
 TF_DIR = f"deploy/terraform/environments/{TF_ENV}"
+APP_NS = f"dep-dlm-{TF_ENV}"
 EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
     "secrets": {"server.cfg", "idpsecrets.json", "fts3config", "fts3restconfig"},
@@ -86,24 +88,67 @@ def test_rucio_cfg_points_at_rucio_database(tf_outputs, secret_client):
 # --- database connectivity (via kubectl, see module docstring) -----------
 
 
-def _run_db_check_pod_once(pod_name, image, *cmd_args):
-    # Clear any stale pod from a previous run whose cleanup didn't
-    # complete — `kubectl run` fails outright if the name already exists.
+def _run_db_check_pod_once(
+    pod_name,
+    image,
+    *cmd_args,
+    timeout_s=300,
+    cpu_request="100m",
+    memory_request="128Mi",
+):
+    # Delete and WAIT for any stale pod to actually be gone before
+    # creating a new one — --ignore-not-found only suppresses the error
+    # for an already-gone pod, it doesn't wait for one still Terminating,
+    # which could otherwise race a fresh kubectl run into AlreadyExists.
     subprocess.run(
-        ["kubectl", "delete", "pod", pod_name, "--ignore-not-found"],
+        [
+            "kubectl",
+            "delete",
+            "pod",
+            pod_name,
+            "-n",
+            APP_NS,
+            "--ignore-not-found",
+            "--wait=true",
+            "--timeout=60s",
+        ],
         capture_output=True,
     )
     try:
+        # Explicit low resource requests via --overrides (kubectl run has
+        # no --requests flag) — Autopilot's implicit default (500m/2Gi)
+        # was too heavy for a single one-shot SELECT 1 and repeatedly
+        # triggered cluster-autoscaler scale-up, which then hit
+        # zone-specific GCE capacity failures. Running in APP_NS (not
+        # "default") also helps the scheduler place into existing node
+        # headroom rather than needing fresh capacity at all, but isn't
+        # sufficient alone — the smaller request is what actually lets
+        # it fit without triggering scale-up in the first place.
+        overrides = {
+            "apiVersion": "v1",
+            "spec": {
+                "containers": [
+                    {
+                        "name": pod_name,
+                        "image": image,
+                        "command": list(cmd_args),
+                        "resources": {
+                            "requests": {"cpu": cpu_request, "memory": memory_request}
+                        },
+                    }
+                ]
+            },
+        }
         run = subprocess.run(
             [
                 "kubectl",
                 "run",
                 pod_name,
+                "-n",
+                APP_NS,
                 f"--image={image}",
                 "--restart=Never",
-                "--command",
-                "--",
-                *cmd_args,
+                f"--overrides={json.dumps(overrides)}",
             ],
             capture_output=True,
             text=True,
@@ -114,32 +159,62 @@ def _run_db_check_pod_once(pod_name, image, *cmd_args):
             [
                 "kubectl",
                 "wait",
+                "-n",
+                APP_NS,
                 "--for=jsonpath={.status.phase}=Succeeded",
                 f"pod/{pod_name}",
-                "--timeout=150s",
+                f"--timeout={timeout_s}s",
             ],
             capture_output=True,
             text=True,
         )
         logs = subprocess.run(
-            ["kubectl", "logs", pod_name], capture_output=True, text=True
+            ["kubectl", "logs", pod_name, "-n", APP_NS],
+            capture_output=True,
+            text=True,
         ).stdout
-        assert wait.returncode == 0, (
-            f"{pod_name} didn't reach Succeeded — logs:\n{logs}"
-        )
+
+        if wait.returncode != 0:
+            describe = subprocess.run(
+                ["kubectl", "describe", "pod", pod_name, "-n", APP_NS],
+                capture_output=True,
+                text=True,
+            ).stdout
+            raise AssertionError(
+                f"{pod_name} didn't reach Succeeded within {timeout_s}s "
+                f"(wait stderr: {wait.stderr.strip()})\n"
+                f"--- logs ---\n{logs or '<empty>'}\n"
+                f"--- describe (last 40 lines) ---\n"
+                + "\n".join(describe.splitlines()[-40:])
+            )
         return logs
     finally:
         subprocess.run(
-            ["kubectl", "delete", "pod", pod_name, "--ignore-not-found"],
+            [
+                "kubectl",
+                "delete",
+                "pod",
+                pod_name,
+                "-n",
+                APP_NS,
+                "--ignore-not-found",
+                "--wait=false",
+            ],
             capture_output=True,
         )
 
 
-def _run_db_check_pod(pod_name, image, *cmd_args):
+def _run_db_check_pod(pod_base_name, image, *cmd_args, timeout_s=300):
     last_error = None
     for attempt in range(1, DB_CHECK_RETRIES + 2):
+        # Unique name per attempt — avoids any residual collision with a
+        # not-yet-fully-cleaned-up pod from a previous attempt or a
+        # concurrent run, rather than relying solely on delete+wait above.
+        pod_name = f"{pod_base_name}-{uuid.uuid4().hex[:8]}"
         try:
-            return _run_db_check_pod_once(pod_name, image, *cmd_args)
+            return _run_db_check_pod_once(
+                pod_name, image, *cmd_args, timeout_s=timeout_s
+            )
         except AssertionError as e:
             last_error = e
             if attempt <= DB_CHECK_RETRIES:
