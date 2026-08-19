@@ -86,12 +86,13 @@ module "secrets" {
 module "validation_storage" {
   source = "../../modules/validation-storage"
 
-  project_id  = var.project_id
-  region      = var.region
-  zone        = "europe-west3-b" # -a has shown capacity issues
-  network_id  = var.network_id
-  subnet_id   = var.subnet_id
-  name_prefix = "dep-dlm-staging"
+  project_id            = var.project_id
+  region                = var.region
+  zone                  = "europe-west3-b" # -a has shown capacity issues
+  network_id            = var.network_id
+  subnet_id             = var.subnet_id
+  name_prefix           = "dep-dlm-staging"
+  terraform_ci_sa_email = "dep-dlm-terraform-ci@${var.project_id}.iam.gserviceaccount.com"
 
   # Confirm this matches your actual DNS setup before applying, this module does not create the record.
   hostname = "valstorage.dep-dlm-staging.example.com"

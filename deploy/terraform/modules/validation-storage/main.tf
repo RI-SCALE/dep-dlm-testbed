@@ -49,6 +49,18 @@ resource "google_project_iam_member" "monitoring" {
   member  = "serviceAccount:${google_service_account.this.email}"
 }
 
+# The CI identity creating this VM needs serviceAccountUser ON THIS SPECIFIC
+# service account to attach it at instance-creation time — project-level
+# roles alone (even iam.serviceAccountAdmin, which only covers managing the
+# SA itself, not using/attaching it) don't grant this. Same pattern
+# bootstrap/main.tf already uses for GKE Autopilot's compute SA
+# (terraform_ci_compute_sa_user).
+resource "google_service_account_iam_member" "ci_can_use_valstorage_sa" {
+  service_account_id = google_service_account.this.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.terraform_ci_sa_email}"
+}
+
 # --- Firewall ----------------------------------------------------------
 # Scoped to exactly the two service ports, tagged so it only ever applies
 # to this VM (not a blanket network-wide rule). SSH is intentionally NOT
