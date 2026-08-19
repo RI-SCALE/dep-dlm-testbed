@@ -89,3 +89,8 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "terraform_ci_sa_email" {
+  description = "Email of the Terraform CI service account that will create this module's VM — granted iam.serviceAccountUser on this module's own service account, required to attach it at instance-creation time."
+  type        = string
+}

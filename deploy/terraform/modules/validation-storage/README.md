@@ -24,6 +24,7 @@ No modules.
 | [google_project_iam_member.monitoring](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_secret_manager_secret_iam_member.certs_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_service_account.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
+| [google_service_account_iam_member.ci_can_use_valstorage_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 
 ## Inputs
 
@@ -37,6 +38,7 @@ No modules.
 | <a name="input_region"></a> [region](#input\_region) | GCP region for the static IP and any regional resources | `string` | n/a | yes |
 | <a name="input_repo_root"></a> [repo\_root](#input\_repo\_root) | Absolute path to the repo root (e.g. path.root's parent, or an<br/>explicit path), used to locate shared/config/{xrootd,teapot} and<br/>shared/scripts/xrootd/docker-entrypoint.sh at plan time — these<br/>static config files are embedded into the VM's startup script via<br/>file(), the same content sandbox's compose stack already mounts. | `string` | n/a | yes |
 | <a name="input_subnet_id"></a> [subnet\_id](#input\_subnet\_id) | Self-link or ID of the subnetwork to attach the VM(s) to | `string` | n/a | yes |
+| <a name="input_terraform_ci_sa_email"></a> [terraform\_ci\_sa\_email](#input\_terraform\_ci\_sa\_email) | Email of the Terraform CI service account that will create this module's VM — granted iam.serviceAccountUser on this module's own service account, required to attach it at instance-creation time. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Extra labels applied to all resources this module creates | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | GCE machine type for the validation-storage VM | `string` | `"e2-small"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | GCP zone for the VM(s). Defaults to europe-west3-b deliberately —<br/>europe-west3-a has shown repeated GCE scale-up/capacity failures<br/>during this project's own testing (see runbook notes); -b and -c<br/>have not. Override only if you've confirmed capacity in the target<br/>zone. | `string` | `"europe-west3-b"` | no |
