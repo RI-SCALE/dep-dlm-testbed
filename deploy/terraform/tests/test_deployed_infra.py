@@ -96,6 +96,14 @@ def _run_db_check_pod_once(
     cpu_request="100m",
     memory_request="128Mi",
 ):
+    # Ensure the namespace exists before targeting it — this test can run
+    # at the infra-only smoke-test stage (before any GitOps engine has
+    # created dep-dlm-<env>), so APP_NS may not exist yet. Idempotent:
+    # no-op (silently ignored) if the namespace is already there.
+    subprocess.run(
+        ["kubectl", "create", "namespace", APP_NS],
+        capture_output=True,
+    )
     # Delete and WAIT for any stale pod to actually be gone before
     # creating a new one — --ignore-not-found only suppresses the error
     # for an already-gone pod, it doesn't wait for one still Terminating,
