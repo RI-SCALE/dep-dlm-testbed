@@ -1,0 +1,86 @@
+services:
+  xrd3:
+    image: rucio/test-xrootd@sha256:27d212ec136d6d2ed7029fc445384053acb551805060cae554597a32e6361df4
+    hostname: xrd3
+    environment:
+      - XRDPORT=1094
+    ports:
+      - "1094:1094"
+    volumes:
+      - /etc/validation-storage/certs/xrd3cert.pem:/tmp/xrdcert.pem:ro
+      - /etc/validation-storage/certs/xrd3key.pem:/tmp/xrdkey.pem:ro
+      - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
+      - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+      - /etc/validation-storage/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - /etc/validation-storage/config/xrootd/authdb:/etc/xrootd/authdb:ro
+      - /etc/validation-storage/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - /etc/validation-storage/scripts/xrootd-docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+    restart: unless-stopped
+
+  xrd4:
+    image: rucio/test-xrootd@sha256:27d212ec136d6d2ed7029fc445384053acb551805060cae554597a32e6361df4
+    hostname: xrd4
+    environment:
+      - XRDPORT=1094
+    ports:
+      - "1095:1094"
+    volumes:
+      - /etc/validation-storage/certs/xrd4cert.pem:/tmp/xrdcert.pem:ro
+      - /etc/validation-storage/certs/xrd4key.pem:/tmp/xrdkey.pem:ro
+      - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
+      - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+      - /etc/validation-storage/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - /etc/validation-storage/config/xrootd/authdb:/etc/xrootd/authdb:ro
+      - /etc/validation-storage/config/xrootd/scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - /etc/validation-storage/scripts/xrootd-docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+    restart: unless-stopped
+
+  teapot1:
+    image: mgajekcern/teapot:latest
+    platform: linux/amd64
+    hostname: teapot1
+    ports:
+      - "8081:8081"
+    volumes:
+      - /etc/validation-storage/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
+      - /etc/validation-storage/certs/teapot1cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
+      - /etc/validation-storage/certs/teapot1key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
+      - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - /etc/validation-storage/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - teapot1-data:/data
+    restart: unless-stopped
+
+  teapot2:
+    image: mgajekcern/teapot:latest
+    platform: linux/amd64
+    hostname: teapot2
+    ports:
+      - "8082:8081"
+    volumes:
+      - /etc/validation-storage/config/teapot/config.ini:/etc/teapot/config.ini:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
+      - /etc/validation-storage/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
+      - /etc/validation-storage/certs/teapot2cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
+      - /etc/validation-storage/certs/teapot2key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
+      - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - /etc/validation-storage/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - teapot2-data:/data
+    restart: unless-stopped
+
+volumes:
+  teapot1-data:
+  teapot2-data:

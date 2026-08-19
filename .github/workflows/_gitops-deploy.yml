@@ -37,11 +37,19 @@ env:
   TOKEN_MODE: ${{ inputs.token_mode }}
   GITOPS_ENV: ${{ inputs.tf_env }}
   GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
+  GITOPS_REVISION: ${{ github.ref_name }}
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  install:
-    name: ${{ inputs.gitops_engine }} install
+  # Single job, deliberately — install/smoke-test/e2e used to be three
+  # separate jobs, each carrying its own `environment:` gate. GitHub
+  # Actions requires a fresh approval PER JOB against a protected
+  # Environment, so one logical, sequential pipeline was producing three
+  # separate approval prompts. Consolidating into one job with step-level
+  # `if:` conditions (gated on inputs.deploy_depth) keeps the exact same
+  # sequencing and skip behavior, but only asks for approval once.
+  deploy:
+    name: ${{ inputs.gitops_engine }} deploy (${{ inputs.deploy_depth }})
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -55,7 +63,6 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-      GITOPS_REVISION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v6
 
@@ -73,11 +80,17 @@ jobs:
         with:
           install_components: "gke-gcloud-auth-plugin"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: make tf-init
         run: make tf-init
 
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
+
+      # ── install (always runs) ────────────────────────────────────────
 
       - name: Uninstall the other gitops engine, if present
         run: |
@@ -139,48 +152,7 @@ jobs:
           echo "=== Events ==="
           kubectl -n dep-dlm-${{ inputs.tf_env }} get events --sort-by=.lastTimestamp | tail -50 || true
 
-  smoke-test-full:
-    name: smoke test (full, incl. public endpoints)
-    needs: install
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Fetch kubeconfig
-        run: make tf-kubeconfig
+      # ── smoke-test-full (always runs, once install succeeds) ──────────
 
       - name: Install smoke test dependencies
         run: |
@@ -190,48 +162,12 @@ jobs:
       - name: make tf-smoke-test
         run: make tf-smoke-test
 
-  seed-and-e2e:
-    name: seed + e2e tests
-    needs: smoke-test-full
-    if: inputs.deploy_depth == 'e2e'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Fetch kubeconfig
-        run: make tf-kubeconfig
+      # ── seed-and-e2e (only when deploy_depth == 'e2e') ─────────────────
 
       - name: make init
+        if: inputs.deploy_depth == 'e2e'
         run: make init
 
       - name: make test-rucio-transfers
+        if: inputs.deploy_depth == 'e2e'
         run: make test-rucio-transfers

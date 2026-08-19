@@ -312,24 +312,37 @@ def validate_rule(
 # ── XRootD filesystem seeding (via container exec) ────────────────────────
 
 
-def seed_xrd(svc: str, pfn: str) -> tuple[int, str]:
+def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
     """
-    Seed a test file into an XRootD container at the given PFN path.
-    Returns (size_bytes, adler32_hex).
-    """
-    local_path = pfn.split("//", 1)[-1].split("/", 1)[-1]
-    local_path = "/" + local_path
+    Seed a test file at the given PFN over the real xroot:// protocol
+    (xrdcp), rather than filesystem exec — works identically for
+    exec-reachable sandbox containers (xrd3/xrd4) and non-exec-reachable
+    external RSEs (e.g. validation-storage). `svc` is now only used for
+    logging, not as an exec target.
 
-    script = (
-        "set -e; "
-        f'mkdir -p "$(dirname {local_path})"; '
-        f'printf "rucio-test\\n" > {local_path}; '
-        f"chown xrootd:xrootd {local_path} 2>/dev/null || true"
-    )
-    svc_exec(svc, ["sh", "-c", script], user="root")
-    raw = svc_exec(svc, ["cat", local_path])
-    adler = "%08x" % (zlib.adler32(raw) & 0xFFFFFFFF)
-    return len(raw), adler
+    `token` is required if the RSE enforces SciTokens auth (all of this
+    testbed's XRootD RSEs do) — mint one via fetch_token_client_credentials/
+    fetch_token_password before calling, same pattern teapot_token already
+    uses.
+    """
+    content = b"rucio-test\n"
+    tmp_local = f"/tmp/{svc}-seed-{int(time.time())}"
+    with open(tmp_local, "wb") as f:
+        f.write(content)
+    try:
+        remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
+        remote_dir = remote_dir.rsplit("/", 1)[0]
+        auth_arg = [f"-OSauthz={token}"] if token else []
+        subprocess.run(
+            ["xrdfs", pfn.split("//")[2].split("/")[0], "mkdir", "-p", remote_dir]
+            + auth_arg,
+            check=False,  # tolerate "already exists"
+        )
+        subprocess.run(["xrdcp", "-f", tmp_local, pfn] + auth_arg, check=True)
+    finally:
+        os.remove(tmp_local)
+    adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
+    return len(content), adler
 
 
 def prepare_xrd_dest(svc: str, pfn: str) -> None:
@@ -343,17 +356,13 @@ def prepare_xrd_dest(svc: str, pfn: str) -> None:
 
 
 def seed_and_register_files(
-    client,
-    rse: str,
-    scope: str,
-    names: list[str],
-    seed_svc: str,
+    client, rse: str, scope: str, names: list[str], seed_svc: str, token: str = None
 ) -> list[dict]:
     """Seed files into an XRootD RSE and return Rucio replica dicts."""
     registered = []
     for name in names:
         pfn = compute_pfn(client, rse, scope, name)
-        size, adler32 = seed_xrd(seed_svc, pfn)
+        size, adler32 = seed_xrd(seed_svc, pfn, token=token)
         registered.append(
             {
                 "scope": scope,
@@ -585,3 +594,11 @@ def teapots_ready(teapot_token):
     webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token)
     webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token)
     return True
+
+
+@pytest.fixture(scope="session")
+def xrd3_write_token():
+    """Token scoped for writing to XRD3 — needed by seed_xrd now that it
+    writes over the real protocol (auth-enforced) instead of exec
+    (auth-bypassing)."""
+    return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("xrd3"))

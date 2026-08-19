@@ -30,8 +30,18 @@ env:
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  plan:
-    name: plan
+  # Single job, deliberately — plan/apply/smoke-test used to be three jobs,
+  # each carrying its own `environment:` gate, so a protected Environment
+  # with required reviewers produced three separate approval prompts for
+  # one sequential pipeline. AUTO_APPROVE=1 already makes `terraform apply`
+  # non-interactive, so the old split never actually let a reviewer inspect
+  # the plan before approving apply's gate — the approval happens before
+  # `plan` even runs either way. Consolidating loses nothing real and cuts
+  # three approvals down to one. Also drops the certs/plan artifact
+  # upload+download round-trip, since everything now shares one runner's
+  # filesystem instead of crossing job boundaries.
+  apply:
+    name: plan, apply & smoke test (infra only)
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -46,118 +56,10 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    outputs:
-      certs_artifact_id: ${{ steps.upload-certs.outputs.artifact-id }}
-      tfplan_artifact_id: ${{ steps.upload-tfplan.outputs.artifact-id }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: Generate certificates
-        run: make certs
-
-      - name: Upload certs artifact
-        id: upload-certs
-        uses: actions/upload-artifact@v4
-        with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-          retention-days: 1
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: make tf-validate
-        run: make tf-validate
-
-      - name: make tf-plan
-        run: make tf-plan
-
-      - name: Upload plan artifact
-        id: upload-tfplan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}/tfplan
-          retention-days: 1
-
-  apply:
-    name: apply
-    needs: plan
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: Download certs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Download plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}
-
-      - name: make tf-apply
-        run: make tf-apply AUTO_APPROVE=1
-
-  smoke-test:
-    name: smoke test (infra only)
-    needs: apply
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
       # No gitops engine installed at this stage — public endpoint tests
       # would fail deterministically, not flakily, so they're skipped
       # here rather than allowed to fail. _gitops-deploy.yml's smoke-test
-      # job runs the full suite, including these, once an engine is up.
+      # step runs the full suite, including these, once an engine is up.
       SKIP_GATEWAY_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
@@ -180,8 +82,29 @@ jobs:
         with:
           python-version: "3.12"
 
+      # ── plan ──────────────────────────────────────────────────────────
+
+      # No longer uploaded as an artifact — certs/ and tfplan stay on this
+      # runner's filesystem and feed straight into the apply/smoke-test
+      # steps below, since it's all one job now.
+      - name: Generate certificates
+        run: make certs
+
       - name: make tf-init
         run: make tf-init
+
+      - name: make tf-validate
+        run: make tf-validate
+
+      - name: make tf-plan
+        run: make tf-plan
+
+      # ── apply ─────────────────────────────────────────────────────────
+
+      - name: make tf-apply
+        run: make tf-apply AUTO_APPROVE=1
+
+      # ── smoke-test (infra only) ─────────────────────────────────────
 
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
@@ -194,26 +117,11 @@ jobs:
       - name: make tf-smoke-test
         run: make tf-smoke-test
 
-  cleanup:
-    name: delete sensitive artifacts
-    needs: [plan, apply]
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete certs artifact
-        if: needs.plan.outputs.certs_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.certs_artifact_id }}"
-
-      - name: Delete plan artifact
-        if: needs.plan.outputs.tfplan_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.tfplan_artifact_id }}"
+      # ── cleanup ──────────────────────────────────────────────────────
+      # certs/ contains real private key material and never leaves this
+      # runner (no artifact upload to delete) — GitHub tears down the
+      # runner's filesystem after the job regardless, but wipe it
+      # explicitly here too rather than relying solely on that.
+      - name: Remove local certs
+        if: always()
+        run: rm -rf certs/

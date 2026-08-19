@@ -82,3 +82,28 @@ module "secrets" {
   # rucio_host, site_name, fts3rest_log_level left at modules/secrets'
   # own defaults — override here only if staging needs to diverge.
 }
+
+module "validation_storage" {
+  source = "../../modules/validation-storage"
+
+  project_id  = var.project_id
+  region      = var.region
+  zone        = "europe-west3-b" # -a has shown capacity issues
+  network_id  = var.network_id
+  subnet_id   = var.subnet_id
+  name_prefix = "dep-dlm-staging"
+
+  # Confirm this matches your actual DNS setup before applying, this module does not create the record.
+  hostname = "valstorage.dep-dlm-staging.example.com"
+
+  certs_secret_id = module.secrets.secret_ids["certs"]
+
+  # Repo root — needed to embed shared/config/{xrootd,teapot} static
+  # config files into the VM's startup script at plan time.
+  repo_root = abspath("${path.module}/../../../..")
+
+  labels = {
+    environment = "staging"
+    component   = "validation-storage"
+  }
+}
