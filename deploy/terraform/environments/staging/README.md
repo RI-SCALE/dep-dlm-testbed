@@ -19,6 +19,7 @@ No providers.
 | <a name="module_kubernetes"></a> [kubernetes](#module\_kubernetes) | ../../modules/kubernetes | n/a |
 | <a name="module_rucio_database"></a> [rucio\_database](#module\_rucio\_database) | ../../modules/database-postgres | n/a |
 | <a name="module_secrets"></a> [secrets](#module\_secrets) | ../../modules/secrets | n/a |
+| <a name="module_validation_storage"></a> [validation\_storage](#module\_validation\_storage) | ../../modules/validation-storage | n/a |
 
 ## Resources
 
@@ -61,4 +62,10 @@ No resources.
 | <a name="output_rucio_db_password"></a> [rucio\_db\_password](#output\_rucio\_db\_password) | n/a |
 | <a name="output_rucio_public_hostname"></a> [rucio\_public\_hostname](#output\_rucio\_public\_hostname) | n/a |
 | <a name="output_secret_ids"></a> [secret\_ids](#output\_secret\_ids) | n/a |
+| <a name="output_validation_storage_hostname"></a> [validation\_storage\_hostname](#output\_validation\_storage\_hostname) | n/a |
+| <a name="output_validation_storage_ip"></a> [validation\_storage\_ip](#output\_validation\_storage\_ip) | n/a |
+| <a name="output_validation_storage_teapot1_pfn_root"></a> [validation\_storage\_teapot1\_pfn\_root](#output\_validation\_storage\_teapot1\_pfn\_root) | n/a |
+| <a name="output_validation_storage_teapot2_pfn_root"></a> [validation\_storage\_teapot2\_pfn\_root](#output\_validation\_storage\_teapot2\_pfn\_root) | n/a |
+| <a name="output_validation_storage_xrd3_pfn_root"></a> [validation\_storage\_xrd3\_pfn\_root](#output\_validation\_storage\_xrd3\_pfn\_root) | n/a |
+| <a name="output_validation_storage_xrd4_pfn_root"></a> [validation\_storage\_xrd4\_pfn\_root](#output\_validation\_storage\_xrd4\_pfn\_root) | n/a |
 <!-- END_TF_DOCS -->
