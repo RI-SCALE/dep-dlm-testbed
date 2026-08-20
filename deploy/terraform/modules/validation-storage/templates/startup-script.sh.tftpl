@@ -26,12 +26,12 @@ log() { echo "[validation-storage-startup] $*"; }
 # module README.
 log "Fetching certs from Secret Manager secret: $CERTS_SECRET_ID"
 ACCESS_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
-  | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+| python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
 
 curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
-  "https://secretmanager.googleapis.com/v1/$${CERTS_SECRET_ID}/versions/latest:access" \
-  | python3 -c "
+"https://secretmanager.googleapis.com/v1/$${CERTS_SECRET_ID}/versions/latest:access" \
+| python3 -c "
 import sys, json, base64
 payload = json.load(sys.stdin)
 data = json.loads(base64.b64decode(payload['payload']['data']).decode())
@@ -81,6 +81,8 @@ ${teapot_logback_xml}
 TEAPOTLOG_EOF
 
 # --- Compose file ----------------------------------------------------------
+# No "version:" key — that's a Compose V1-only relic and unnecessary (and
+# ignored/deprecated-warned-on) under the V2 CLI we run below.
 cat > "$BASE_DIR/docker-compose.yml" <<'COMPOSE_EOF'
 ${docker_compose_yml}
 COMPOSE_EOF
@@ -90,11 +92,16 @@ COMPOSE_EOF
 # are both noexec), so we run compose itself as a container instead —
 # this only needs the docker daemon to be reachable via its socket, which
 # is unaffected by noexec.
+#
+# docker/compose:latest is the frozen, unmaintained Compose V1 (Python)
+# image — it predates the "services.*.platform" key and rejects it as an
+# unknown option. docker:27-cli ships the real "docker compose" V2 plugin,
+# which understands the current schema (platform included).
 log "Starting xrd3/xrd4/teapot1/teapot2 via docker compose (containerized)"
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$BASE_DIR":"$BASE_DIR" \
   -w "$BASE_DIR" \
-  docker/compose:latest up -d
+  docker:27-cli docker compose up -d
 
 log "validation-storage startup complete — xrd3::1094 xrd4::1095 teapot1::8081 teapot2::8082"
