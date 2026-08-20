@@ -584,11 +584,11 @@ CONF"
 configure_validation_storage_rses() {
     local tf_dir="${TF_DIR:-deploy/terraform/environments/${TF_ENV:-staging}}"
     local val_hostname
-    val_hostname=$(terraform -chdir="$tf_dir" output -raw validation_storage_hostname 2>/dev/null) || {
+    val_hostname=$(terraform -chdir="$tf_dir" output -raw validation_storage_ip 2>/dev/null) || {
         echo "=== VALIDATION_STORAGE skipped (terraform output not available) ==="
         return 0
     }
-    [ -n "$val_hostname" ] || { echo "=== VALIDATION_STORAGE skipped (empty hostname) ==="; return 0; }
+    [ -n "$val_hostname" ] || { echo "=== VALIDATION_STORAGE skipped (empty IP) ==="; return 0; }
 
     echo "=== Configuring external validation-storage RSEs (${val_hostname}) ==="
 
