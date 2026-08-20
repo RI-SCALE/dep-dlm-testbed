@@ -7,6 +7,7 @@ export TESTBED_HOST_SOURCE ?= $(CURDIR)
 
 RUNTIME    ?= compose
 TOKEN_MODE ?= managed
+SCOPE_PROFILE ?= local
 DAEMON_MODE ?= direct
 SERVICES   ?=
 
@@ -58,8 +59,6 @@ TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV)
 TF_TARGET ?=
 TF_TARGET_FLAG := $(if $(TF_TARGET),-target=$(TF_TARGET),)
 
-# CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
-# defaults to interactive confirmation, same as running terraform directly.
 AUTO_APPROVE ?=
 ifeq ($(AUTO_APPROVE),1)
   TF_AUTO_APPROVE_FLAG := -auto-approve
@@ -67,33 +66,6 @@ else
   TF_AUTO_APPROVE_FLAG :=
 endif
 
-# Test env injection: only export OIDC_* overrides when targeting an
-# external IdP profile. Passing OIDC_ISSUER='' etc. unconditionally would
-# shadow conftest.py's os.environ.get(..., default) fallback for the local/
-# Keycloak path, since an empty string still counts as "set".
-ifeq ($(SCOPE_PROFILE),local)
-  TEST_OIDC_ENV :=
-else
-  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
-    OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
-    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
-    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
-endif
-
-SCOPE_PROFILE ?= local
-
-ifeq ($(SCOPE_PROFILE),local)
-  export CONFIG_PROFILE_DIR :=
-else
-  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
-endif
-
-# Derive OIDC_ISSUER/OIDC_CLIENT_ID from SCOPE_PROFILE for known profiles —
-# mirrors verify-idp-token's own case statement below, so CI/Terraform
-# only ever needs to carry the one value with no public, derivable
-# default: OIDC_CLIENT_SECRET. An explicit OIDC_ISSUER/OIDC_CLIENT_ID
-# (already set via env or command line) always wins — this only fills in
-# what's still empty.
 ifeq ($(OIDC_ISSUER),)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     OIDC_ISSUER := https://aai-dev.egi.eu/auth/realms/egi
@@ -109,29 +81,27 @@ ifeq ($(OIDC_CLIENT_ID),)
   endif
 endif
 
-# egi-dev's managed FTS token mode was found non-viable —
-# until the e2e tests get extended to check this properly
-# (separate branch/PR), default TOKEN_MODE to unmanaged specifically for
-# egi-dev so `make tf-apply SCOPE_PROFILE=egi-dev` alone doesn't silently
-# render a broken fts3config. origin==file means "still at the top-of-file
-# default, nobody overrode it" (origin==undefined would never match here,
-# since `TOKEN_MODE ?= managed` above already gave it origin "file") —
-# explicit TOKEN_MODE=... (command line or environment) always still wins.
+ifeq ($(SCOPE_PROFILE),local)
+  TEST_OIDC_ENV :=
+else
+  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+    OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
+    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+endif
+
+ifeq ($(SCOPE_PROFILE),local)
+  export CONFIG_PROFILE_DIR :=
+else
+  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
+endif
+
 ifeq ($(origin TOKEN_MODE),file)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     TOKEN_MODE := unmanaged
   endif
 endif
 
-# modules/secrets requires OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET.
-# OIDC_ISSUER/OIDC_CLIENT_ID are usually already filled in by the
-# SCOPE_PROFILE derivation above — this only fires for an unknown
-# SCOPE_PROFILE with no explicit override. OIDC_CLIENT_SECRET has no
-# derivable default (it's the one genuinely secret value) and always
-# needs this check. Fails loudly here rather than letting an empty
-# string silently pass through as TF_VAR_oidc_issuer="" — that would
-# make `terraform plan` "succeed" with broken rendered content instead
-# of failing clearly.
 define tf_require_oidc
 	@[ -n "$(OIDC_ISSUER)" ] && [ -n "$(OIDC_CLIENT_ID)" ] || \
 	  { echo "ERROR: OIDC_ISSUER/OIDC_CLIENT_ID couldn't be derived from SCOPE_PROFILE='$(SCOPE_PROFILE)'."; \
