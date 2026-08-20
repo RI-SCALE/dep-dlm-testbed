@@ -101,10 +101,7 @@ jobs:
       # already exists (i.e. every run except an environment's first-ever
       # apply, or one following a full teardown/recreate).
       - name: Reserve validation-storage static IP (targeted apply)
-        run: |
-          terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} apply \
-            -target=module.validation_storage.google_compute_address.this \
-            -auto-approve
+        run: make tf-apply AUTO_APPROVE=1 TF_TARGET=module.validation_storage.google_compute_address.this
 
       - name: Read validation-storage IP
         id: valstorage_ip

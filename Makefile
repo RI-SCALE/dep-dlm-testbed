@@ -51,6 +51,13 @@ TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
+# Optional -target for a partial/targeted apply -- e.g. reserving
+# validation-storage's static IP before certs (which need that IP baked
+# into their SAN) can be generated, ahead of the full apply. Empty by
+# default, so ordinary `make tf-apply` behaves exactly as before.
+TF_TARGET ?=
+TF_TARGET_FLAG := $(if $(TF_TARGET),-target=$(TF_TARGET),)
+
 # CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
 # defaults to interactive confirmation, same as running terraform directly.
 AUTO_APPROVE ?=
@@ -432,7 +439,7 @@ tf-plan: ## Plan Terraform changes for TF_ENV
 .PHONY: tf-apply
 tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
-	@if [ -f $(TF_DIR)/tfplan ]; then \
+	@if [ -z "$(TF_TARGET)" ] && [ -f $(TF_DIR)/tfplan ]; then \
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
 	else \
 	  $(TF_RESOLVE_ENV); \
@@ -447,7 +454,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
 	  TF_VAR_token_mode="$(TOKEN_MODE)" \
-	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG); \
+	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
 
 .PHONY: tf-destroy
