@@ -595,7 +595,7 @@ configure_validation_storage_rses() {
     # XRootD side — two RSEs, ports 1094/1095 (see module outputs
     # xrd3_pfn_root/xrd4_pfn_root)
     local rse port
-    for rse_port in "EXT_XRD3:1094" "EXT_XRD4:1095"; do
+    for rse_port in "XRD3:1094" "XRD4:1095"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
@@ -605,11 +605,11 @@ configure_validation_storage_rses() {
             --impl rucio.rse.protocols.gfal.Default \
             --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance EXT_XRD3 EXT_XRD4 --distance 1 || true
-    ra rse add-distance EXT_XRD4 EXT_XRD3 --distance 1 || true
+    ra rse add-distance XRD3 XRD4 --distance 1 || true
+    ra rse add-distance XRD4 XRD3 --distance 1 || true
 
     # Teapot/WebDAV side — ports 8081/8082
-    for rse_port in "EXT_TEAPOT1:8081" "EXT_TEAPOT2:8082"; do
+    for rse_port in "TEAPOT1:8081" "TEAPOT2:8082"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
@@ -619,23 +619,12 @@ configure_validation_storage_rses() {
             --impl rucio.rse.protocols.gfal.Default \
             --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance EXT_TEAPOT1 EXT_TEAPOT2 --distance 1 || true
-    ra rse add-distance EXT_TEAPOT2 EXT_TEAPOT1 --distance 1 || true
-
-    # Pair against the EXISTING sandbox RSEs too — no need for a second
-    # VM, real external network path is already exercised via these RSEs.
-    for rse in XRD3 XRD4; do
-        ra rse add-distance EXT_XRD3 "$rse" --distance 1 || true
-        ra rse add-distance "$rse" EXT_XRD3 --distance 1 || true
-    done
-    for rse in TEAPOT1 TEAPOT2; do
-        ra rse add-distance EXT_TEAPOT1 "$rse" --distance 1 || true
-        ra rse add-distance "$rse" EXT_TEAPOT1 --distance 1 || true
-    done
+    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
+    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
 
     local acct
     for acct in root ddmlab randomaccount; do
-        for rse in EXT_XRD3 EXT_XRD4 EXT_TEAPOT1 EXT_TEAPOT2; do
+        for rse in XRD3 XRD4 TEAPOT1 TEAPOT2; do
             ra account set-limits "$acct" "$rse" -1 || true
         done
     done
@@ -835,17 +824,27 @@ verify_token_exchange() {
 main() {
     wait_for_infrastructure
     setup_accounts_and_identities
-    if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
-        grant_token_exchange
-        seed_subject_tokens
+
+    if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
+        # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2 containers/pods,
+        # Copernicus S3 source RSE, FTS S3 cloud_storage config, and
+        # in-cluster ruciodb session-token maintenance — none of these
+        # exist or apply once GITOPS_ENV points at a real Terraform-managed
+        # environment (staging/production), where Postgres is Cloud SQL
+        # and the only storage target is validation-storage.
+        if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
+            grant_token_exchange
+            seed_subject_tokens
+        fi
+        configure_rses
+        configure_s3_source_rse
+        configure_fts_cloud_storage
+        cleanup_session_tokens
     fi
-    configure_rses
-    configure_s3_source_rse
-    configure_fts_cloud_storage
+
     configure_validation_storage_rses
     setup_scopes_and_quotas
     setup_fts_oidc_provider
-    cleanup_session_tokens
 
     echo -e "\n=== Initialization Complete ==="
 }
