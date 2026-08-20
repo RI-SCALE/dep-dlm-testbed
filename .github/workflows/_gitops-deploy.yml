@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: gitops
+      scope_profile:
+        description: "egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile. Without this, make init/test-rucio-transfers silently fall back to SCOPE_PROFILE=local's in-cluster Keycloak assumption, which doesn't exist on a real external-AAI deployment."
+        required: false
+        type: string
+        default: egi-dev
       token_mode:
         description: "managed | unmanaged — passed through to make argocd-install/flux-install for Vault/token-exchange seeding"
         required: false
@@ -34,10 +39,11 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
-  TOKEN_MODE: ${{ inputs.token_mode }}
   GITOPS_ENV: ${{ inputs.tf_env }}
   GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
   GITOPS_REVISION: ${{ github.ref_name }}
+  SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
