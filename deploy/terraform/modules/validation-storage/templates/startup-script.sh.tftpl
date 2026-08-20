@@ -16,6 +16,14 @@ CERTS_DIR="$BASE_DIR/certs"
 CONFIG_DIR="$BASE_DIR/config"
 SCRIPTS_DIR="$BASE_DIR/scripts"
 
+# Wipe before recreating: COS persists /etc/validation-storage across
+# reboots, but this script re-provisions everything under it from scratch
+# every boot. A prior failed run (e.g. Docker auto-creating an empty
+# directory at a bind-mount source path that didn't exist yet) can leave
+# stray directories where a file is now expected — rm -rf here guarantees
+# every subsequent write starts from a clean slate rather than colliding
+# with leftover state.
+rm -rf "$CERTS_DIR" "$CONFIG_DIR" "$SCRIPTS_DIR"
 mkdir -p "$CERTS_DIR" "$CONFIG_DIR/xrootd" "$CONFIG_DIR/teapot" "$SCRIPTS_DIR"
 
 log() { echo "[validation-storage-startup] $*"; }
