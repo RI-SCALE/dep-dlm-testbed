@@ -12,5 +12,15 @@ resource "google_secret_manager_secret_version" "certs" {
     "tls_ca_bundle.pem"       = file("${local.certs_dir}/tls_ca_bundle.pem")
     "5fca1cb1.0"              = file("${local.certs_dir}/rucio_ca.pem") # same bytes as rucio_ca.pem, hash-named
     "5fca1cb1.signing_policy" = file("${local.certs_dir}/5fca1cb1.signing_policy")
+
+    # Per-service certs consumed by docker-compose.yml's
+    "xrd3cert.pem"    = file("${local.certs_dir}/xrd3cert.pem")
+    "xrd3key.pem"     = file("${local.certs_dir}/xrd3key.pem")
+    "xrd4cert.pem"    = file("${local.certs_dir}/xrd4cert.pem")
+    "xrd4key.pem"     = file("${local.certs_dir}/xrd4key.pem")
+    "teapot1cert.pem" = file("${local.certs_dir}/teapot1cert.pem")
+    "teapot1key.pem"  = file("${local.certs_dir}/teapot1key.pem")
+    "teapot2cert.pem" = file("${local.certs_dir}/teapot2cert.pem")
+    "teapot2key.pem"  = file("${local.certs_dir}/teapot2key.pem")
   })
 }
