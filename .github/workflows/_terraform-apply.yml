@@ -30,16 +30,6 @@ env:
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  # Single job, deliberately — plan/apply/smoke-test used to be three jobs,
-  # each carrying its own `environment:` gate, so a protected Environment
-  # with required reviewers produced three separate approval prompts for
-  # one sequential pipeline. AUTO_APPROVE=1 already makes `terraform apply`
-  # non-interactive, so the old split never actually let a reviewer inspect
-  # the plan before approving apply's gate — the approval happens before
-  # `plan` even runs either way. Consolidating loses nothing real and cuts
-  # three approvals down to one. Also drops the certs/plan artifact
-  # upload+download round-trip, since everything now shares one runner's
-  # filesystem instead of crossing job boundaries.
   apply:
     name: plan, apply & smoke test (infra only)
     runs-on: ubuntu-latest
@@ -56,10 +46,6 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-      # No gitops engine installed at this stage — public endpoint tests
-      # would fail deterministically, not flakily, so they're skipped
-      # here rather than allowed to fail. _gitops-deploy.yml's smoke-test
-      # step runs the full suite, including these, once an engine is up.
       SKIP_GATEWAY_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
@@ -82,24 +68,30 @@ jobs:
         with:
           python-version: "3.12"
 
-      # ── init ────────────────────────────────────────────────────────
-      # Moved ahead of cert generation: the targeted apply below (and the
-      # `terraform output` read after it) both need an initialized
-      # backend/state, which cert generation now depends on transitively.
-
       - name: make tf-init
         run: make tf-init
 
-      # ── reserve validation-storage's static IP first ─────────────────
-      # validation-storage's xrd3/xrd4/teapot1/teapot2 certs need the
-      # VM's public IP baked into their SAN (see generate-certs.sh's
+      # ── generate certs (pass 1, no external SAN yet) ──────────────────
+      # Even with -target, Terraform evaluates every resource's arguments
+      # while building the plan graph -- including module.secrets' file()
+      # calls -- regardless of which resources are actually targeted for
+      # apply. certs/ has to exist on disk before ANY terraform
+      # plan/apply runs, including the targeted one below, or these
+      # file() lookups fail outright. This first pass has no
+      # VALSTORAGE_EXTERNAL_SAN (the IP doesn't exist yet); it exists
+      # only so the upcoming targeted apply has files to read.
+      - name: Generate certificates (pass 1, no external SAN)
+        run: make certs
+
+      # ── reserve validation-storage's static IP ────────────────────────
+      # validation-storage's xrd3/xrd4/teapot1/teapot2 certs need the VM's
+      # public IP baked into their SAN (see generate-certs.sh's
       # VALSTORAGE_EXTERNAL_SAN) so external TLS clients can verify them
-      # — but that IP only exists once google_compute_address.this is
+      # -- but that IP only exists once google_compute_address.this is
       # actually created. -target applies just that one resource so the
-      # IP is available before certs are generated, without doing a full
-      # apply twice. Idempotent: a no-op on every run after the address
-      # already exists (i.e. every run except an environment's first-ever
-      # apply, or one following a full teardown/recreate).
+      # IP is available before certs are regenerated with it, without
+      # doing a full apply twice. Idempotent on every run after the
+      # address already exists.
       - name: Reserve validation-storage static IP (targeted apply)
         run: make tf-apply AUTO_APPROVE=1 TF_TARGET=module.validation_storage.google_compute_address.this
 
@@ -112,10 +104,11 @@ jobs:
 
       # ── plan ──────────────────────────────────────────────────────────
 
-      # No longer uploaded as an artifact — certs/ and tfplan stay on this
-      # runner's filesystem and feed straight into the apply/smoke-test
-      # steps below, since it's all one job now.
-      - name: Generate certificates
+      # Pass 2: regenerate with the real IP now baked into the four
+      # external services' SANs. Overwrites pass 1's placeholder certs --
+      # these are the ones that actually get uploaded to Secret Manager
+      # by the full apply below.
+      - name: Generate certificates (pass 2, with external SAN)
         env:
           VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }}
         run: make certs
@@ -145,10 +138,6 @@ jobs:
         run: make tf-smoke-test
 
       # ── cleanup ──────────────────────────────────────────────────────
-      # certs/ contains real private key material and never leaves this
-      # runner (no artifact upload to delete) — GitHub tears down the
-      # runner's filesystem after the job regardless, but wipe it
-      # explicitly here too rather than relying solely on that.
       - name: Remove local certs
         if: always()
         run: rm -rf certs/
