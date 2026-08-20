@@ -64,6 +64,9 @@ jobs:
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
 
+      RUNTIME: k8s
+      K8S_NAMESPACE: dep-dlm-${{ inputs.tf_env }}
+
       SKIP_VALIDATION_STORAGE_CHECKS: "1"
       SKIP_DB_CHECKS: "1"
     steps:
