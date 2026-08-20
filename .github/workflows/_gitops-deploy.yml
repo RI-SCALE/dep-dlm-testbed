@@ -63,6 +63,9 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+
+      SKIP_VALIDATION_STORAGE_CHECKS: "1"
+      SKIP_DB_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
 

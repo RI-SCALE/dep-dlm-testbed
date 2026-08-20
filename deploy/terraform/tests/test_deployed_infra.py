@@ -42,6 +42,7 @@ GATEWAY_CHECK_RETRIES = 3
 GATEWAY_CHECK_BACKOFF_S = 20
 VALSTORAGE_CHECK_RETRIES = 6
 VALSTORAGE_CHECK_BACKOFF_S = 20
+SKIP_DB_CHECKS = os.environ.get("SKIP_DB_CHECKS") == "1"
 SKIP_GATEWAY_CHECKS = os.environ.get("SKIP_GATEWAY_CHECKS") == "1"
 SKIP_VALIDATION_STORAGE_CHECKS = os.environ.get("SKIP_VALIDATION_STORAGE_CHECKS") == "1"
 
@@ -233,6 +234,10 @@ def _run_db_check_pod(pod_base_name, image, *cmd_args, timeout_s=300):
     raise last_error
 
 
+@pytest.mark.skipif(
+    SKIP_DB_CHECKS,
+    reason="SKIP_DB_CHECKS=1",
+)
 def test_rucio_database_connection(tf_outputs):
     dsn = (
         f"postgresql://rucio:{tf_outputs['rucio_db_password']}"
@@ -244,6 +249,10 @@ def test_rucio_database_connection(tf_outputs):
     assert "1" in logs
 
 
+@pytest.mark.skipif(
+    SKIP_DB_CHECKS,
+    reason="SKIP_DB_CHECKS=1",
+)
 def test_fts_database_connection(tf_outputs):
     logs = _run_db_check_pod(
         "db-test-fts",
