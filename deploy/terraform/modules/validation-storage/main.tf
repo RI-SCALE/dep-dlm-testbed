@@ -49,6 +49,7 @@ resource "google_project_iam_member" "monitoring" {
   member  = "serviceAccount:${google_service_account.this.email}"
 }
 
+
 # The CI identity creating this VM needs serviceAccountUser ON THIS SPECIFIC
 # service account to attach it at instance-creation time — project-level
 # roles alone (even iam.serviceAccountAdmin, which only covers managing the
@@ -63,10 +64,7 @@ resource "google_service_account_iam_member" "ci_can_use_valstorage_sa" {
 
 # --- Firewall ----------------------------------------------------------
 # Scoped to exactly the two service ports, tagged so it only ever applies
-# to this VM (not a blanket network-wide rule). SSH is intentionally NOT
-# opened here — use `gcloud compute ssh` via IAP tunneling (Terraform
-# doesn't need to open port 22 for that) if shell access is ever needed.
-
+# to this VM (not a blanket network-wide rule).
 resource "google_compute_firewall" "validation_storage_ingress" {
   name    = "${var.name_prefix}-validation-storage-ingress"
   project = var.project_id
@@ -78,6 +76,29 @@ resource "google_compute_firewall" "validation_storage_ingress" {
   }
 
   source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["${var.name_prefix}-validation-storage"]
+}
+
+# SSH via IAP tunneling still requires a firewall rule — IAP proxies the
+# connection, it doesn't bypass firewall enforcement. 35.235.240.0/20 is
+# Google's fixed, published CIDR block reserved exclusively for IAP's TCP
+# forwarding proxy: traffic can only originate from there if it came
+# through IAP itself (which independently enforces IAM permissions, e.g.
+# roles/iap.tunnelResourceAccessor, before proxying). This is NOT the same
+# as opening 22 to 0.0.0.0/0 — kept as a separate rule from the ingress
+# rule above specifically so SSH never inherits that rule's public
+# source_ranges.
+resource "google_compute_firewall" "validation_storage_iap_ssh" {
+  name    = "${var.name_prefix}-validation-storage-iap-ssh"
+  project = var.project_id
+  network = var.network_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["35.235.240.0/20"]
   target_tags   = ["${var.name_prefix}-validation-storage"]
 }
 
@@ -111,6 +132,13 @@ resource "google_compute_instance" "this" {
   }
 
   metadata = {
+    # startup-script MUST be an executable shell script — the compose YAML
+    # is NOT used as metadata directly, it's embedded as a string and
+    # written to disk BY the startup script (which then runs `docker
+    # compose up`). Static XRootD/Teapot config is read from this repo's
+    # existing shared/config files at plan time via file() and embedded
+    # the same way, so this module doesn't need a second file-delivery
+    # mechanism for config that's already git-tracked.
     startup-script = templatefile("${path.module}/templates/startup-script.sh.tftpl", {
       certs_secret_id         = var.certs_secret_id
       docker_compose_yml      = file("${path.module}/templates/docker-compose.yml.tftpl")
