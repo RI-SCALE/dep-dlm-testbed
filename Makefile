@@ -195,6 +195,7 @@ certs: ## Generate CA and host certificates
 
 .PHONY: init
 init: ## Init testbed accounts, RSEs, OIDC seed
+	$(TEST_OIDC_ENV) \
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
