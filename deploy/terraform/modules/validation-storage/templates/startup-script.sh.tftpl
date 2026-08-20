@@ -106,10 +106,17 @@ COMPOSE_EOF
 # unknown option. docker:27-cli ships the real "docker compose" V2 plugin,
 # which understands the current schema (platform included).
 log "Starting xrd3/xrd4/teapot1/teapot2 via docker compose (containerized)"
+# --force-recreate: bind-mount type (file vs directory) is fixed at
+# container-creation time. If a host path was a directory when a
+# container was first created (e.g. Docker auto-vivifying an empty dir at
+# a then-missing cert path) and is now a real file, `up -d` alone won't
+# pick that up — the compose file itself hasn't changed, so compose has
+# no diff to recreate on. Forcing recreation every boot guarantees the
+# mount table is rebuilt against whatever's actually on disk right now.
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$BASE_DIR":"$BASE_DIR" \
   -w "$BASE_DIR" \
-  docker:27-cli docker compose up -d
+  docker:27-cli docker compose up -d --force-recreate --remove-orphans
 
 log "validation-storage startup complete — xrd3::1094 xrd4::1095 teapot1::8081 teapot2::8082"
