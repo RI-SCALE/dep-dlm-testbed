@@ -40,7 +40,10 @@ DB_CHECK_RETRIES = 1
 DB_CHECK_BACKOFF_S = 15
 GATEWAY_CHECK_RETRIES = 3
 GATEWAY_CHECK_BACKOFF_S = 20
+VALSTORAGE_CHECK_RETRIES = 6
+VALSTORAGE_CHECK_BACKOFF_S = 20
 SKIP_GATEWAY_CHECKS = os.environ.get("SKIP_GATEWAY_CHECKS") == "1"
+SKIP_VALIDATION_STORAGE_CHECKS = os.environ.get("SKIP_VALIDATION_STORAGE_CHECKS") == "1"
 
 
 @pytest.fixture(scope="session")
@@ -341,3 +344,76 @@ def test_fts_gateway_reachable(tf_outputs):
         tf_outputs["fts_public_hostname"],
         "/whoami",
     )
+
+
+# --- validation-storage endpoint reachability ------------------------------
+
+
+def _check_xrootd_endpoint(hostname, port, timeout_s=10):
+    """XRootD has no HTTP handshake to curl — a raw TCP connect is the
+    right-level check here (confirms the container is up and listening),
+    not a protocol-level probe. Auth/protocol correctness is exercised by
+    the real seed_xrd()-based e2e tests, not this smoke check."""
+    import socket
+
+    last_error = None
+    for attempt in range(1, VALSTORAGE_CHECK_RETRIES + 2):
+        try:
+            with socket.create_connection((hostname, port), timeout=timeout_s):
+                return
+        except OSError as e:
+            last_error = e
+            if attempt <= VALSTORAGE_CHECK_RETRIES:
+                time.sleep(VALSTORAGE_CHECK_BACKOFF_S)
+    raise AssertionError(
+        f"{hostname}:{port} (xrootd) not reachable after "
+        f"{VALSTORAGE_CHECK_RETRIES + 1} attempts: {last_error}"
+    )
+
+
+def _check_teapot_endpoint(hostname, port, timeout_s=10):
+    import requests
+
+    url = f"https://{hostname}:{port}/"
+    last_error = None
+    for attempt in range(1, VALSTORAGE_CHECK_RETRIES + 2):
+        try:
+            resp = requests.get(url, timeout=timeout_s, verify=False)
+            # Any response at all (even 401/403 — Teapot legitimately
+            # rejects unauthenticated root requests) proves the service
+            # is up and terminating TLS; this isn't testing auth.
+            return resp
+        except requests.RequestException as e:
+            last_error = e
+            if attempt <= VALSTORAGE_CHECK_RETRIES:
+                time.sleep(VALSTORAGE_CHECK_BACKOFF_S)
+    raise AssertionError(
+        f"{hostname}:{port} (teapot) not reachable after "
+        f"{VALSTORAGE_CHECK_RETRIES + 1} attempts: {last_error}"
+    )
+
+
+@pytest.mark.skipif(
+    SKIP_VALIDATION_STORAGE_CHECKS,
+    reason="SKIP_VALIDATION_STORAGE_CHECKS=1",
+)
+@pytest.mark.parametrize(
+    "output_key,port",
+    [("validation_storage_ip", 1094), ("validation_storage_ip", 1095)],
+    ids=["xrd3", "xrd4"],
+)
+def test_validation_storage_xrootd_reachable(tf_outputs, output_key, port):
+    _check_xrootd_endpoint(tf_outputs[output_key], port)
+
+
+@pytest.mark.skipif(
+    SKIP_VALIDATION_STORAGE_CHECKS,
+    reason="SKIP_VALIDATION_STORAGE_CHECKS=1",
+)
+@pytest.mark.parametrize(
+    "output_key,port",
+    [("validation_storage_ip", 8081), ("validation_storage_ip", 8082)],
+    ids=["teapot1", "teapot2"],
+)
+def test_validation_storage_teapot_reachable(tf_outputs, output_key, port):
+    _check_teapot_endpoint(tf_outputs[output_key], port)
