@@ -1,4 +1,4 @@
-name: Terraform apply (staging)
+name: Deploy (staging)
 
 on:
   workflow_dispatch:

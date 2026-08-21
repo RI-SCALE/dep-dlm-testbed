@@ -8,10 +8,10 @@
 [![GitOps (ArgoCD)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml)
 [![GitOps (Flux)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml)
 [![GitOps install test (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml)
-[![Terraform apply (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
-[![Terraform apply (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
-[![Terraform destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
-[![Terraform destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
+[![Deploy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
+[![Deploy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
+[![Destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
+[![Destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
 
 This repository serves as the experimental validation environment for the DEP DLM architecture. It is intended to validate architectural assumptions, integration patterns, and deployment and operational procedures across identity providers, storage systems, and deployment environments; validated patterns may subsequently be promoted into production-focused repositories.
 
