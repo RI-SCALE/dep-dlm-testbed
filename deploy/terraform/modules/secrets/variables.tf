@@ -78,6 +78,12 @@ variable "oidc_expected_scope" {
   default     = "openid offline_access storage.read:/ storage.modify:/"
 }
 
+variable "oidc_client_account" {
+  description = "Rucio account oidc-client.cfg authenticates as for interactive CLI use (rucio whoami/upload/download). Distinct from rucio.cfg's [client] account (root, used for internal bootstrap/admin calls)."
+  type        = string
+  default     = "randomaccount"
+}
+
 variable "token_mode" {
   description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string
