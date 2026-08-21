@@ -79,8 +79,8 @@ module "secrets" {
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
   token_mode             = var.token_mode
-  # rucio_host, site_name, fts3rest_log_level left at modules/secrets'
-  # own defaults — override here only if staging needs to diverge.
+
+  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
 }
 
 module "validation_storage" {
