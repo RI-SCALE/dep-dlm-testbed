@@ -74,4 +74,6 @@ module "secrets" {
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
   token_mode             = var.token_mode
+
+  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
 }

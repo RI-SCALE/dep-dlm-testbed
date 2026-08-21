@@ -133,6 +133,8 @@ jobs:
       - name: Restart rucio-server and daemons to pick up latest secrets
         run: |
           ns=dep-dlm-${{ inputs.tf_env }}
+          kubectl -n "$ns" annotate externalsecret testbed-secrets \
+            force-sync="$(date +%s)" --overwrite
           kubectl -n "$ns" get deploy/rucio-server >/dev/null 2>&1 && \
             kubectl -n "$ns" rollout restart deploy/rucio-server || true
           for d in conveyor-submitter conveyor-poller conveyor-finisher \
