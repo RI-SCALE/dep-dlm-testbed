@@ -14,9 +14,10 @@ resource "google_secret_manager_secret_version" "secrets" {
       rucio_db_password = var.rucio_db_password
     })
     "idpsecrets.json" = templatefile("${path.module}/templates/idpsecrets.json.tftpl", {
-      oidc_issuer        = var.oidc_issuer
-      oidc_client_id     = var.oidc_client_id
-      oidc_client_secret = var.oidc_client_secret
+      oidc_issuer           = var.oidc_issuer
+      oidc_client_id        = var.oidc_client_id
+      oidc_client_secret    = var.oidc_client_secret
+      rucio_public_hostname = var.rucio_host
     })
     "fts3restconfig" = templatefile("${path.module}/templates/fts3restconfig.tftpl", {
       site_name                = var.site_name
