@@ -413,7 +413,7 @@ tf-plan: ## Plan Terraform changes for TF_ENV
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	$(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
+	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
@@ -434,7 +434,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	  $(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
+	  TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
 	  TF_VAR_token_mode="$(TOKEN_MODE)" \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
@@ -453,7 +453,7 @@ tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). 
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	$(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
+	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 
