@@ -36,9 +36,9 @@ OIDC_ISSUER           ?=
 OIDC_TOKEN_URL        ?=
 OIDC_CLIENT_ID        ?=
 OIDC_CLIENT_SECRET    ?=
-OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
+OIDC_EXPECTED_SCOPE   ?=
 
 # Terraform
 #
@@ -87,7 +87,7 @@ else
   TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
     OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
     OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
-    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+    OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
 endif
 
 ifeq ($(SCOPE_PROFILE),local)
@@ -402,6 +402,7 @@ tf-plan: ## Plan Terraform changes for TF_ENV
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	$(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
@@ -422,6 +423,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	  $(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
 	  TF_VAR_token_mode="$(TOKEN_MODE)" \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
@@ -440,6 +442,7 @@ tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). 
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	$(if $(OIDC_EXPECTED_SCOPE),TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)") \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 

@@ -9,6 +9,7 @@ resource "google_secret_manager_secret_version" "secrets" {
       bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
       oidc_issuer            = var.oidc_issuer
       oidc_token_strategy    = var.token_mode == "managed" ? "exchange" : "client_credentials"
+      oidc_expected_scope    = var.oidc_expected_scope
     })
     "alembic.ini" = templatefile("${path.module}/templates/alembic.ini.tftpl", {
       rucio_db_host     = var.rucio_db_host

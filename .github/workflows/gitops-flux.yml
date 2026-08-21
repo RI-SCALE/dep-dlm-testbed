@@ -62,7 +62,7 @@ jobs:
           ''
         }}
       OIDC_GRANT_TYPE: ${{ matrix.scope_profile != 'local' && 'client_credentials' || '' }}
-      OIDC_STORAGE_SCOPE: >-
+      OIDC_EXPECTED_SCOPE: >-
         ${{
           matrix.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
           matrix.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||

@@ -73,6 +73,7 @@ module "secrets" {
   oidc_issuer            = var.oidc_issuer
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
+  oidc_expected_scope    = var.oidc_expected_scope
   token_mode             = var.token_mode
 
   rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
