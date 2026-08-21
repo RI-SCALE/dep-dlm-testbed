@@ -1,4 +1,4 @@
-name: Terraform destroy (staging)
+name: Destroy (staging)
 
 # Manual-only, on purpose — this is the one place in environments/<env>'s
 # CI where destructive resource deletion lives, kept out of
