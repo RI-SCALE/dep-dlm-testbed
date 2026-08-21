@@ -126,12 +126,32 @@ jobs:
         if: inputs.gitops_engine == 'flux'
         uses: ./.github/actions/wait-for-flux-ready
 
+      # rucio-server and the daemons (conveyor-*, judge-*, reaper) all read
+      # rucio.cfg/idpsecrets.json once at startup — a Terraform-driven
+      # secret change won't reach already-running processes without a
+      # restart.
+      - name: Restart rucio-server and daemons to pick up latest secrets
+        run: |
+          ns=dep-dlm-${{ inputs.tf_env }}
+          kubectl -n "$ns" get deploy/rucio-server >/dev/null 2>&1 && \
+            kubectl -n "$ns" rollout restart deploy/rucio-server || true
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n "$ns" get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
+              kubectl -n "$ns" rollout restart deploy/rucio-daemons-$d
+          done
+
       - name: Verify workload pods are Running
         run: |
           ns=dep-dlm-${{ inputs.tf_env }}
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns rollout status deploy/fts --timeout=300s
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n $ns get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
+              kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s
+          done
           kubectl -n $ns get pods
 
       - name: Wait for Gateway to be Programmed
