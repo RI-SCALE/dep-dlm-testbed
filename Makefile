@@ -73,11 +73,20 @@ ifeq ($(OIDC_ISSUER),)
     OIDC_ISSUER := https://login.aai.lifescience-ri.eu/oidc/
   endif
 endif
+
 ifeq ($(OIDC_CLIENT_ID),)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     OIDC_CLIENT_ID := 699e9e29-29e8-4220-8863-5306d8a7feb8
   else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
     OIDC_CLIENT_ID := 4ff05c0b-1d83-42b7-a00a-8bd162df4165
+  endif
+endif
+
+ifeq ($(OIDC_EXPECTED_SCOPE),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_EXPECTED_SCOPE := openid profile eduperson_entitlement offline_access read:/ write:/
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_EXPECTED_SCOPE := openid profile eduperson_entitlement offline_access
   endif
 endif
 
