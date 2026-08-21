@@ -77,8 +77,8 @@ OIDC_GRANT_TYPE = (
     os.environ.get("OIDC_GRANT_TYPE") or "password"
 )  # password | client_credentials
 
-OIDC_STORAGE_SCOPE = (
-    os.environ.get("OIDC_STORAGE_SCOPE") or "openid storage.read:/ storage.modify:/"
+OIDC_EXPECTED_SCOPE = (
+    os.environ.get("OIDC_EXPECTED_SCOPE") or "openid storage.read:/ storage.modify:/"
 )
 OIDC_TEAPOT_AUD_SCOPE = (
     os.environ.get("OIDC_TEAPOT_AUD_SCOPE") or "aud:teapot1 aud:teapot2"
@@ -558,7 +558,7 @@ def _mint(scope: str, resource: str = None) -> str:
 
 @pytest.fixture(scope="session")
 def oidc_token():
-    return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("xrd4"))
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd4"))
 
 
 @pytest.fixture(scope="session")
@@ -574,10 +574,10 @@ def teapot_token():
             OIDC_TOKEN_URL,
             OIDC_CLIENT_ID,
             OIDC_CLIENT_SECRET,
-            scope=OIDC_STORAGE_SCOPE,
+            scope=OIDC_EXPECTED_SCOPE,
             resource=[_rse_resource("teapot1"), _rse_resource("teapot2")],
         )
-    scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
+    scope = " ".join(filter(None, [OIDC_EXPECTED_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
         OIDC_TOKEN_URL,
         OIDC_CLIENT_ID,
@@ -601,4 +601,4 @@ def xrd3_write_token():
     """Token scoped for writing to XRD3 — needed by seed_xrd now that it
     writes over the real protocol (auth-enforced) instead of exec
     (auth-bypassing)."""
-    return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("xrd3"))
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd3"))

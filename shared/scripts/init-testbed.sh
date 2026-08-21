@@ -270,7 +270,7 @@ seed_subject_tokens() {
 
     _exec rucio-server env \
         SEED_ACCOUNTS="$accounts_csv" \
-        OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
+        OIDC_SEED_SCOPE="${OIDC_EXPECTED_SCOPE:-$OIDC_SEED_SCOPE}" \
         OIDC_TOKEN_URL="$token_url" \
         OIDC_GRANT_MODE="$grant_mode" \
         OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
@@ -525,10 +525,10 @@ configure_fts_cloud_storage() {
             OIDC_TOKEN_URL="$OIDC_TOKEN_URL" \
             OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
             OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
-            OIDC_STORAGE_SCOPE="${OIDC_STORAGE_SCOPE:-openid}" \
+            OIDC_EXPECTED_SCOPE="${OIDC_EXPECTED_SCOPE:-openid}" \
             python3 -c "
 import urllib.request, urllib.parse, json, base64, os
-data = urllib.parse.urlencode({'grant_type':'client_credentials','scope':os.environ['OIDC_STORAGE_SCOPE']}).encode()
+data = urllib.parse.urlencode({'grant_type':'client_credentials','scope':os.environ['OIDC_EXPECTED_SCOPE']}).encode()
 auth = base64.b64encode(f\"{os.environ['OIDC_CLIENT_ID']}:{os.environ['OIDC_CLIENT_SECRET']}\".encode()).decode()
 req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'], data=data, headers={'Authorization': f'Basic {auth}'})
 tok = json.loads(urllib.request.urlopen(req).read())['access_token']

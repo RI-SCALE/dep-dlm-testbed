@@ -64,6 +64,12 @@ variable "oidc_client_secret" {
   sensitive   = true
 }
 
+variable "oidc_expected_scope" {
+  description = "Passed through to module.secrets — see that module's variable description."
+  type        = string
+  default     = "openid offline_access storage.read:/ storage.modify:/"
+}
+
 variable "token_mode" {
   description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string

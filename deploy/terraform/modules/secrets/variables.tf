@@ -72,6 +72,12 @@ variable "oidc_client_secret" {
   sensitive   = true
 }
 
+variable "oidc_expected_scope" {
+  description = "Space-separated scope string rucio.cfg's [oidc] expected_scope validates incoming tokens against. Must match what idpsecrets.json's capabilities.scope_map actually produces for this issuer (e.g. EGI: 'storage.read:/ storage.modify:/' if scope_map keys are used as-is, or 'read:/ write:/' if scope_map remaps them — check the issuer's idpsecrets.json before overriding). Differs per OIDC profile the same way oidc_issuer does."
+  type        = string
+  default     = "openid offline_access storage.read:/ storage.modify:/"
+}
+
 variable "token_mode" {
   description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string
