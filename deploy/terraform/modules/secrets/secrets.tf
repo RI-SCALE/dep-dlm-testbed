@@ -5,6 +5,7 @@ resource "google_secret_manager_secret_version" "secrets" {
       rucio_db_host          = var.rucio_db_host
       rucio_db_password      = var.rucio_db_password
       rucio_host             = var.rucio_host
+      rucio_internal_host    = "http://localhost"
       bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
       oidc_issuer            = var.oidc_issuer
       oidc_token_strategy    = var.token_mode == "managed" ? "exchange" : "client_credentials"
