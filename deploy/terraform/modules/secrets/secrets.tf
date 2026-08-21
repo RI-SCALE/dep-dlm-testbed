@@ -21,6 +21,12 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_client_secret    = var.oidc_client_secret
       rucio_public_hostname = var.rucio_host
     })
+    "oidc-client.cfg" = templatefile("${path.module}/templates/oidc-client.cfg.tftpl", {
+      rucio_host          = var.rucio_host
+      oidc_issuer         = var.oidc_issuer
+      oidc_expected_scope = var.oidc_expected_scope
+      oidc_client_account = var.oidc_client_account
+    })
     "fts3restconfig" = templatefile("${path.module}/templates/fts3restconfig.tftpl", {
       site_name                = var.site_name
       fts_db_host              = var.fts_db_host
