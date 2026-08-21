@@ -44,7 +44,32 @@ jobs:
       GITOPS_ENV: ${{ inputs.gitops_env }}
       SCOPE_PROFILE: ${{ inputs.scope_profile }}
       TOKEN_MODE: ${{ inputs.token_mode }}
-      OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+      OIDC_ISSUER: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
+          inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/' ||
+          ''
+        }}
+      OIDC_TOKEN_URL: >-
+        ${{
+          inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/token' ||
+          ''
+        }}
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_ID || '' }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_SECRET || '' }}
+      OIDC_GRANT_TYPE: ${{ inputs.scope_profile != 'local' && 'client_credentials' || 'password' }}
+      OIDC_EXPECTED_SCOPE: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
+          inputs.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
+          ''
+        }}
+      OIDC_IDENTITY_SUB: >-
+        ${{
+          inputs.scope_profile == 'egi-dev' && 'aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu' ||
+          inputs.scope_profile == 'ls-aai-dev' && '28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu' ||
+          ''
+        }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_REGION: ${{ vars.GCP_REGION }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
