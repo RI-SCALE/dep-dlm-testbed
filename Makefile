@@ -90,6 +90,35 @@ ifeq ($(OIDC_EXPECTED_SCOPE),)
   endif
 endif
 
+# Passed to module.validation_storage
+ifeq ($(OIDC_ISSUER_NAME),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_ISSUER_NAME := egi-checkin-dev
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_ISSUER_NAME := lsaai-dev
+  endif
+endif
+
+# LS AAI restricts Teapot tokens to these audiences; EGI/Keycloak don't use
+# audience restriction here, hence empty for every other profile.
+ifeq ($(TEAPOT_AUDIENCES),)
+  ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    TEAPOT_AUDIENCES := ["https://teapot1.example.org/","https://teapot2.example.org/"]
+  else
+    TEAPOT_AUDIENCES := []
+  endif
+endif
+
+ifeq ($(TEAPOT_EXTRA_SUBS),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    TEAPOT_EXTRA_SUBS := ["0f842730-ebfb-4de6-bcbb-3a44aab5a467@egi.eu","aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu"]
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    TEAPOT_EXTRA_SUBS := ["4ff05c0b-1d83-42b7-a00a-8bd162df4165","28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu"]
+  else
+    TEAPOT_EXTRA_SUBS := []
+  endif
+endif
+
 ifeq ($(SCOPE_PROFILE),local)
   TEST_OIDC_ENV :=
 else
@@ -169,10 +198,14 @@ ifeq ($(GITOPS_ENV),staging)
     -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro \
-	-v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
+    -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
     mgajekcern/rucio-client-docker-kubectl:latest
-
+  # Prefixed into each test recipe's bash -c string below (empty for
+  # sandbox, where the compose/helm rucio-client image already has
+  # pytest baked in). boto3 deliberately skipped — not needed by
+  # test_rucio_transfers.py; add it back here if test-copernicus-transfers
+  # is run this way too.
   STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
 else ifeq ($(RUNTIME),k8s)
   EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
@@ -394,7 +427,7 @@ test-rucio-deletion: ## Rucio E2E deletion test
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
 
 ## Terraform
 
@@ -452,6 +485,9 @@ tf-plan: ## Plan Terraform changes for TF_ENV
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
 	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
+	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
@@ -474,6 +510,9 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
 	  TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
+	  TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	  TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	  TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
 	  TF_VAR_token_mode="$(TOKEN_MODE)" \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
@@ -494,6 +533,9 @@ tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). 
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
 	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
+	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 
@@ -524,10 +566,12 @@ tf-import: ## Import an existing GCP resource into TF_ENV's state. Usage: make t
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_userpass_password="secret" \
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
 	TF_VAR_token_mode="$(TOKEN_MODE)" \
 	  $(TERRAFORM) import -no-color "$(RESOURCE)" "$(ID)"
 

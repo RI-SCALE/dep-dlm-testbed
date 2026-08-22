@@ -85,3 +85,26 @@ variable "token_mode" {
     error_message = "token_mode must be 'managed' or 'unmanaged'."
   }
 }
+
+variable "oidc_issuer_name" {
+  description = "Short label for var.oidc_issuer (e.g. 'egi-checkin-dev', 'lsaai-dev') — passed to module.validation_storage."
+  type        = string
+}
+
+variable "teapot_idp_name" {
+  description = "IdP display name for Teapot's STORAGE_AREA_1 (per your egi-dev/ls-aai-dev samples, both use 'egi' — override if that's not intentional)."
+  type        = string
+  default     = "egi"
+}
+
+variable "teapot_audiences" {
+  description = "Teapot audience restriction list (LS AAI profile only)."
+  type        = list(string)
+  default     = []
+}
+
+variable "teapot_extra_subs" {
+  description = "Extra subs mapped to the local 'teapot' user — this environment's client_credentials sub plus any interactively-registered human sub, per SCOPE_PROFILE."
+  type        = list(string)
+  default     = []
+}

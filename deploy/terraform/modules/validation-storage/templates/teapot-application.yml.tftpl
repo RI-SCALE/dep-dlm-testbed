@@ -1,0 +1,29 @@
+oauth:
+  enable-oidc: true
+  issuers:
+    - name: ${oidc_issuer_name}
+      issuer: "${oidc_issuer}"
+%{ if length(teapot_audiences) > 0 ~}
+      audiences:
+%{ for aud in teapot_audiences ~}
+        - ${aud}
+%{ endfor ~}
+%{ endif ~}
+
+storm:
+  authz:
+    policies:
+      - sa: data
+        actions: [all]
+        effect: permit
+        description: "Grant full access to ${oidc_issuer_name} tokens"
+        paths: ["/**"]
+        principals:
+          - type: jwt-issuer
+            params: { iss: "${oidc_issuer}" }
+      - sa: data
+        actions: [all]
+        effect: deny
+        paths: ["/**"]
+        principals:
+          - type: anyone

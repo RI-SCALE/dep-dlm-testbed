@@ -90,19 +90,21 @@ module "validation_storage" {
 
   project_id            = var.project_id
   region                = var.region
-  zone                  = "europe-west3-b" # -a has shown capacity issues
+  zone                  = "europe-west3-b"
   network_id            = var.network_id
   subnet_id             = var.subnet_id
   name_prefix           = "dep-dlm-staging"
   terraform_ci_sa_email = "dep-dlm-terraform-ci@${var.project_id}.iam.gserviceaccount.com"
 
-  # Confirm this matches your actual DNS setup before applying, this module does not create the record.
-  hostname = "valstorage.dep-dlm-staging.example.com"
-
+  hostname        = "valstorage.dep-dlm-staging.example.com"
   certs_secret_id = module.secrets.secret_ids["certs"]
 
-  # Repo root — needed to embed shared/config/{xrootd,teapot} static
-  # config files into the VM's startup script at plan time.
+  oidc_issuer       = var.oidc_issuer
+  oidc_issuer_name  = var.oidc_issuer_name
+  teapot_idp_name   = var.teapot_idp_name
+  teapot_audiences  = var.teapot_audiences
+  teapot_extra_subs = var.teapot_extra_subs
+
   repo_root = abspath("${path.module}/../../../..")
 
   labels = {

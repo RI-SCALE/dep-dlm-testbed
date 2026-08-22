@@ -132,25 +132,33 @@ resource "google_compute_instance" "this" {
   }
 
   metadata = {
-    # startup-script MUST be an executable shell script — the compose YAML
-    # is NOT used as metadata directly, it's embedded as a string and
-    # written to disk BY the startup script (which then runs `docker
-    # compose up`). Static XRootD/Teapot config is read from this repo's
-    # existing shared/config files at plan time via file() and embedded
-    # the same way, so this module doesn't need a second file-delivery
-    # mechanism for config that's already git-tracked.
     startup-script = templatefile("${path.module}/templates/startup-script.sh.tftpl", {
-      certs_secret_id         = var.certs_secret_id
-      docker_compose_yml      = file("${path.module}/templates/docker-compose.yml.tftpl")
-      xrdrucio_scitokens_cfg  = file("${var.repo_root}/shared/config/xrootd/xrdrucio-scitokens.cfg")
-      xrootd_authdb           = file("${var.repo_root}/shared/config/xrootd/authdb")
-      xrootd_scitokens_conf   = file("${var.repo_root}/shared/config/xrootd/scitokens.conf")
-      xrootd_entrypoint_sh    = file("${var.repo_root}/shared/scripts/xrootd/docker-entrypoint.sh")
-      teapot_config_ini       = file("${var.repo_root}/shared/config/teapot/config.ini")
-      teapot_application_yml  = file("${var.repo_root}/shared/config/teapot/application.yml")
-      teapot_data_properties  = file("${var.repo_root}/shared/config/teapot/data.properties")
-      teapot_user_mapping_csv = file("${var.repo_root}/shared/config/teapot/user-mapping.csv")
-      teapot_logback_xml      = file("${var.repo_root}/shared/config/teapot/logback.xml")
+      certs_secret_id        = var.certs_secret_id
+      docker_compose_yml     = file("${path.module}/templates/docker-compose.yml.tftpl")
+      xrdrucio_scitokens_cfg = file("${var.repo_root}/shared/config/xrootd/xrdrucio-scitokens.cfg")
+      xrootd_authdb          = file("${var.repo_root}/shared/config/xrootd/authdb")
+      xrootd_scitokens_conf = templatefile("${path.module}/templates/xrootd-scitokens.conf.tftpl", {
+        oidc_issuer      = var.oidc_issuer
+        oidc_issuer_name = var.oidc_issuer_name
+      })
+      xrootd_entrypoint_sh = file("${var.repo_root}/shared/scripts/xrootd/docker-entrypoint.sh")
+      teapot_config_ini = templatefile("${path.module}/templates/teapot-config.ini.tftpl", {
+        oidc_issuer      = var.oidc_issuer
+        teapot_idp_name  = var.teapot_idp_name
+        teapot_audiences = var.teapot_audiences
+      })
+      teapot_application_yml = templatefile("${path.module}/templates/teapot-application.yml.tftpl", {
+        oidc_issuer      = var.oidc_issuer
+        oidc_issuer_name = var.oidc_issuer_name
+        teapot_audiences = var.teapot_audiences
+      })
+      teapot_data_properties = templatefile("${path.module}/templates/teapot-data-properties.tftpl", {
+        oidc_issuer = var.oidc_issuer
+      })
+      teapot_user_mapping_csv = trimspace(templatefile("${path.module}/templates/teapot-user-mapping.csv.tftpl", {
+        teapot_extra_subs = var.teapot_extra_subs
+      }))
+      teapot_logback_xml = file("${var.repo_root}/shared/config/teapot/logback.xml")
     })
   }
 

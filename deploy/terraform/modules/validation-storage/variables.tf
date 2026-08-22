@@ -94,3 +94,31 @@ variable "terraform_ci_sa_email" {
   description = "Email of the Terraform CI service account that will create this module's VM — granted iam.serviceAccountUser on this module's own service account, required to attach it at instance-creation time."
   type        = string
 }
+
+variable "oidc_issuer" {
+  description = "External OIDC issuer URL trusted by Teapot/XRootD alongside the internal Keycloak issuer — must match var.oidc_issuer passed to module.secrets."
+  type        = string
+}
+
+variable "oidc_issuer_name" {
+  description = "Short label for this issuer, used as the YAML/section key in Teapot's application.yml and XRootD's scitokens.conf (e.g. 'keycloak-rucio', 'egi-checkin-dev', 'lsaai-dev'). No spaces — used as a bracketed section header in scitokens.conf."
+  type        = string
+}
+
+variable "teapot_idp_name" {
+  description = "IdP_name_1 value in Teapot's STORAGE_AREA_1 config."
+  type        = string
+  default     = "rucio"
+}
+
+variable "teapot_audiences" {
+  description = "Optional list of audience URIs Teapot restricts this issuer's tokens to (LS AAI profile only — EGI/Keycloak leave this empty)."
+  type        = list(string)
+  default     = []
+}
+
+variable "teapot_extra_subs" {
+  description = "Additional 'sub' claims (beyond the two fixed teapot client UUIDs) mapped to the local 'teapot' user in user-mapping.csv — profile-specific client/human subs."
+  type        = list(string)
+  default     = []
+}
