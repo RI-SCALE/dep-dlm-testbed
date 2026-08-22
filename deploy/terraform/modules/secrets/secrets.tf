@@ -27,6 +27,12 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_expected_scope = var.oidc_expected_scope
       oidc_client_account = var.oidc_client_account
     })
+    "userpass-client.cfg" = templatefile("${path.module}/templates/userpass-client.cfg.tftpl", {
+      rucio_host        = var.rucio_host
+      userpass_username = var.userpass_username
+      userpass_password = var.userpass_password
+      userpass_account  = var.userpass_account
+    })
     "fts3restconfig" = templatefile("${path.module}/templates/fts3restconfig.tftpl", {
       site_name                = var.site_name
       fts_db_host              = var.fts_db_host
