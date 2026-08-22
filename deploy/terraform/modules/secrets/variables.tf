@@ -84,6 +84,19 @@ variable "oidc_client_account" {
   default     = "randomaccount"
 }
 
+variable "userpass_username" {
+  type    = string
+  default = "ddmlab"
+}
+variable "userpass_account" {
+  type    = string
+  default = "ddmlab"
+}
+variable "userpass_password" {
+  type      = string
+  sensitive = true
+}
+
 variable "token_mode" {
   description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string
