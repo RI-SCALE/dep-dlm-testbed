@@ -75,6 +75,7 @@ module "secrets" {
   fts_db_password   = module.fts_database.fts_db_password
 
   bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
+  userpass_password      = var.userpass_password
   oidc_issuer            = var.oidc_issuer
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
