@@ -249,6 +249,13 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
 
+.PHONY: cleanup
+cleanup: ## Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
+	$(TEST_OIDC_ENV) \
+	RUNTIME=$(RUNTIME) \
+	K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	./shared/scripts/cleanup-testbed.sh
+
 ## IdP token verification
 
 .PHONY: verify-idp-token
