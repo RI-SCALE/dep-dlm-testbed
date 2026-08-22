@@ -138,10 +138,46 @@ endif
 
 # Runtime-specific execution wrappers
 
-ifeq ($(RUNTIME),k8s)
-EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+# Terraform outputs needed to wire DNS + Teapot ports for the ephemeral
+# staging container. $(shell ...) only actually runs when a variable that
+# uses this macro is expanded (i.e. inside a staging test recipe), not on
+# every `make` invocation — but it does still require tf-init/tf-apply to
+# have already populated state, same precondition test-rucio-transfers
+# always had for GITOPS_ENV=staging.
+define staging_tf_output
+$(shell terraform -chdir=$(TF_DIR) output -raw $(1) 2>/dev/null)
+endef
+
+export TESTBED_HOST_HOME ?= $(HOME)
+
+ifeq ($(GITOPS_ENV),staging)
+  override RUNTIME := k8s
+  # No long-running rucio-client pod exists in a real Terraform-managed
+  # environment (sandbox-only convenience container)
+  EXEC_RUCIO = docker run --rm -i \
+    --network host \
+    --add-host $(call staging_tf_output,rucio_public_hostname):$(call staging_tf_output,gateway_static_ip) \
+    --add-host $(call staging_tf_output,fts_public_hostname):$(call staging_tf_output,gateway_static_ip) \
+    --add-host $(call staging_tf_output,validation_storage_hostname):$(call staging_tf_output,validation_storage_ip) \
+    -e REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/tls_ca_bundle.pem \
+    -e RUNTIME=k8s \
+    -e K8S_NAMESPACE=$(K8S_NAMESPACE) \
+    -e DAEMON_MODE=$(DAEMON_MODE) \
+    -e TEAPOT1_URL=https://$(call staging_tf_output,validation_storage_ip):8081 \
+    -e TEAPOT2_URL=https://$(call staging_tf_output,validation_storage_ip):8082 \
+    -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro \
+	-v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
+    -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
+    mgajekcern/rucio-client-docker-kubectl:latest
+
+  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
+else ifeq ($(RUNTIME),k8s)
+  EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
 else
-EXEC_RUCIO := docker exec compose-rucio-client-1
+  EXEC_RUCIO := docker exec compose-rucio-client-1
 endif
 
 ## Help
@@ -339,7 +375,7 @@ helm-template: ## Render manifests without installing
 ## Tests
 
 test-rucio-transfers: ## Rucio E2E transfer test
-	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
@@ -349,15 +385,16 @@ test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
 		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		$(STAGING_PIP_INSTALL) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 tests/probe_teapot_auth.py -v"
 
 ## Terraform
 
@@ -410,6 +447,7 @@ tf-plan: ## Plan Terraform changes for TF_ENV
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_userpass_password="secret" \
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
@@ -431,6 +469,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	  TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	  TF_VAR_bootstrap_userpass_pwd="secret" \
+	  TF_VAR_userpass_password="secret" \
 	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
@@ -450,6 +489,7 @@ tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). 
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_userpass_password="secret" \
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
@@ -484,6 +524,7 @@ tf-import: ## Import an existing GCP resource into TF_ENV's state. Usage: make t
 	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
 	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
 	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_userpass_password="secret" \
 	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
 	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
 	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
