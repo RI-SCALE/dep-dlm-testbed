@@ -221,12 +221,13 @@ ifeq ($(GITOPS_ENV),staging)
     -e RUNTIME=k8s \
     -e K8S_NAMESPACE=$(K8S_NAMESPACE) \
     -e DAEMON_MODE=$(DAEMON_MODE) \
-    -e TEAPOT1_URL=https://$(call staging_tf_output,validation_storage_ip):8081 \
-    -e TEAPOT2_URL=https://$(call staging_tf_output,validation_storage_ip):8082 \
+    -e TEAPOT1_URL=https://$(call staging_tf_output,validation_storage_hostname):8081 \
+    -e TEAPOT2_URL=https://$(call staging_tf_output,validation_storage_hostname):8082 \
     -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro \
+	-v $(TESTBED_HOST_SOURCE)/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro \
     -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
     mgajekcern/rucio-client-docker-kubectl:latest
@@ -464,11 +465,11 @@ test-rucio-deletion: ## Rucio E2E deletion test
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_ip) pytest /tests/probe_teapot.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_hostname) pytest /tests/probe_teapot.py -v"
 
 .PHONY: probe-xrootd
 probe-xrootd: ## XRootD probe with SciTokens
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_ip) pytest /tests/probe_xrootd.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_hostname) pytest /tests/probe_xrootd.py -v"
 
 ## Terraform
 
@@ -563,6 +564,14 @@ tf-force-unlock: ## Force-unlock TF_ENV's state after a stale/abandoned lock. Us
 	@[ -n "$(LOCK_ID)" ] || \
 	  { echo "ERROR: usage: make tf-force-unlock LOCK_ID=<lock id from the error message>"; exit 1; }
 	$(TERRAFORM) force-unlock $(if $(filter 1,$(AUTO_APPROVE)),-force) $(LOCK_ID)
+
+.PHONY: certs-sync
+certs-sync: ## Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-certs" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json,base64; d=json.load(sys.stdin); [open(f'certs/{k}','w').write(v) for k,v in d.items()]"
 
 ## Cleanup
 

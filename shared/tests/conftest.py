@@ -90,6 +90,8 @@ OIDC_TEAPOT_AUD_SCOPE = (
 # under the password grant it's never even passed to the token request.
 OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX") or ".example.org"
 
+XRDFS_TRANSIENT_ERR = "resource temporarily unavailable"
+
 
 def _rse_resource(name: str) -> str:
     """Map a bare RSE name to the URI form EGI expects as resource=."""
@@ -312,6 +314,57 @@ def validate_rule(
 # ── XRootD protocol-based seeding / dest-prep ──────────────────────────────
 
 
+def _xrdfs_run(
+    args: list, retries: int = 3, backoff: float = 3.0, **kwargs
+) -> subprocess.CompletedProcess:
+    """subprocess.run(["xrdfs", *args], ...) with retry-on-transient-TLS-error."""
+    out = None
+    for attempt in range(1, retries + 1):
+        out = subprocess.run(["xrdfs", *args], **kwargs)
+        stderr = out.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        stderr = stderr or ""
+        if out.returncode == 0 or XRDFS_TRANSIENT_ERR not in stderr.lower():
+            return out
+        if attempt < retries:
+            log.info(
+                "  [%d/%d] transient xrdfs TLS error, retrying in %ss...",
+                attempt,
+                retries,
+                backoff,
+            )
+            time.sleep(backoff)
+    return out
+
+
+def _xrdcp_run(
+    args: list, retries: int = 3, backoff: float = 3.0, **kwargs
+) -> subprocess.CompletedProcess:
+    """subprocess.run(["xrdcp", *args], ...) with the same transient-TLS
+    retry as _xrdfs_run. xrdcp is normally called with check=True, so its
+    failure mode is CalledProcessError rather than a returncode — this
+    catches that specifically instead of inspecting .returncode."""
+    for attempt in range(1, retries + 1):
+        try:
+            return subprocess.run(["xrdcp", *args], **kwargs)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(errors="replace")
+            stderr = stderr or ""
+            if attempt < retries and XRDFS_TRANSIENT_ERR in stderr.lower():
+                log.info(
+                    "  [%d/%d] transient xrdcp TLS error, retrying in %ss...",
+                    attempt,
+                    retries,
+                    backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise
+
+
 def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
     """
     Seed a test file at the given PFN over the real xroot:// protocol
@@ -325,13 +378,11 @@ def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
         remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
         remote_dir = remote_dir.rsplit("/", 1)[0]
         auth_arg = [f"-OSauthz={token}"] if token else []
-        subprocess.run(
-            ["xrdfs", pfn.split("//")[1].split("/")[0], "mkdir"]
-            + auth_arg
-            + ["-p", remote_dir],
+        _xrdfs_run(
+            [pfn.split("//")[1].split("/")[0], "mkdir"] + auth_arg + ["-p", remote_dir],
             check=False,  # tolerate "already exists"
         )
-        subprocess.run(["xrdcp", "-f", tmp_local, pfn] + auth_arg, check=True)
+        _xrdcp_run(["-f", tmp_local, pfn] + auth_arg, check=True)
     finally:
         os.remove(tmp_local)
     adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
@@ -355,8 +406,8 @@ def prepare_xrd_dest(pfn: str, token: str = None) -> None:
     remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
     remote_dir = remote_dir.rsplit("/", 1)[0]
     auth_arg = [f"-OSauthz={token}"] if token else []
-    result = subprocess.run(
-        ["xrdfs", host, "mkdir"] + auth_arg + ["-p", remote_dir],
+    result = _xrdfs_run(
+        [host, "mkdir"] + auth_arg + ["-p", remote_dir],
         capture_output=True,
     )
     # tolerate "already exists"; surface anything else

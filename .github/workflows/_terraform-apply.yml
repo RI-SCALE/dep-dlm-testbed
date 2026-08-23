@@ -133,7 +133,7 @@ jobs:
       # by the full apply below.
       - name: Generate certificates (pass 2, with external SAN)
         env:
-          VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }}
+          VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }},valstorage.${{ inputs.tf_env }}.dep-dlm.example.com
         run: make certs
 
       - name: make tf-validate

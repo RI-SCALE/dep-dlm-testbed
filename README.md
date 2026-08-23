@@ -219,6 +219,7 @@ Tests
   test-copernicus-transfers Rucio E2E transfer test with Copernicus data
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
+  probe-xrootd         XRootD probe with SciTokens
 
 Terraform
   tf-fmt               Format Terraform files
@@ -234,7 +235,8 @@ Terraform
   tf-kubeconfig        Fetch kubectl credentials for TF_ENV's cluster
   tf-smoke-test        Run smoke tests against TF_ENV. Run tf-kubeconfig first.
   tf-import            Import an existing GCP resource into TF_ENV's state. Usage: make tf-import RESOURCE=module.rucio_database.google_sql_database_instance.this ID=dep-dlm-staging-e52e0d90/dep-dlm-staging-pg
-  tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running againstTF_ENV first — see the Lock Info 'Who' field.
+  tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running against TF_ENV first — see the Lock Info 'Who' field.
+  certs-sync           Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
 
 Cleanup
   clean                Remove certs, volumes, Terraform/Python/Helm artifacts

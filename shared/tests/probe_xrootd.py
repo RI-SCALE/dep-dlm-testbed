@@ -20,8 +20,6 @@ is treated as real and not retried.
 import base64
 import json
 import os
-import subprocess
-import time
 
 import pytest
 
@@ -34,6 +32,7 @@ from conftest import (
     OIDC_USERNAME,
     OIDC_PASSWORD,
     _rse_resource,
+    _xrdfs_run,
     fetch_token_client_credentials,
     fetch_token_password,
     prepare_xrd_dest,
@@ -47,31 +46,6 @@ pytestmark = pytest.mark.skipif(
 # name -> port, matching modules/validation-storage's outputs
 XRD_TARGETS = {"xrd3": 1094, "xrd4": 1095}
 PROBE_PATH = "/data"
-
-_TRANSIENT = "resource temporarily unavailable"
-
-
-def _xrdfs(
-    args: list, retries: int = 3, backoff: float = 3.0
-) -> subprocess.CompletedProcess:
-    """Run xrdfs, retrying only on the transient TLS-handshake failure
-    documented above — any other error is returned immediately so a
-    real failure isn't masked by blind retrying."""
-    out = None
-    for attempt in range(1, retries + 1):
-        out = subprocess.run(
-            ["xrdfs", *args], capture_output=True, text=True, timeout=15
-        )
-        if out.returncode == 0:
-            return out
-        if _TRANSIENT not in out.stderr.lower():
-            return out
-        if attempt < retries:
-            print(
-                f"  [{attempt}/{retries}] transient TLS error, retrying in {backoff}s..."
-            )
-            time.sleep(backoff)
-    return out
 
 
 def _mint(name: str) -> str:
@@ -96,7 +70,12 @@ def _mint(name: str) -> str:
 @pytest.mark.parametrize("name,port", XRD_TARGETS.items())
 def test_xrootd_reachable(name, port):
     host = f"{VALIDATION_STORAGE_HOST}:{port}"
-    out = _xrdfs([host, "query", "config", "bind_max"])
+    out = _xrdfs_run(
+        [host, "query", "config", "bind_max"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
     assert out.returncode == 0, out.stderr.strip()
 
 
@@ -109,7 +88,12 @@ def test_xrootd_authenticated_list(name, port):
     c = json.loads(base64.urlsafe_b64decode(payload))
     print(f"  token aud={c.get('aud')!r} sub={c.get('sub')!r}")
 
-    out = _xrdfs([host, "ls", f"-OSauthz={token}", PROBE_PATH])
+    out = _xrdfs_run(
+        [host, "ls", f"-OSauthz={token}", PROBE_PATH],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
     assert out.returncode == 0, out.stderr.strip()
     entries = [line for line in out.stdout.splitlines() if line.strip()]
     print(f"  {len(entries)} entrie(s) under {PROBE_PATH}")
