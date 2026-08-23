@@ -626,7 +626,7 @@ async def _get_proc(cmd):
             ):
                 logger.debug("PID for the started storm-webdav server found: %d", pid)
                 return proc
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     raise RuntimeError("process with full command " + cmd + "does not exist.")
 
@@ -1047,7 +1047,7 @@ async def storm_webdav_state(
                     if state[user] == "STARTING":
                         state[user] = "NOT RUNNING"
                     async with app.state.state_lock:
-                        app.state.session_state.pop(user)
+                        app.state.session_state.pop(user, None)
                         await save_session_state()
                     logger.debug("The unresponsive webdav instance is removed.")
                     return None, -1, user
