@@ -51,12 +51,15 @@ services:
       - /etc/validation-storage/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - /etc/validation-storage/certs/teapot1cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
       - /etc/validation-storage/certs/teapot1key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - /etc/validation-storage/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
+      - /etc/validation-storage/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
       - /etc/validation-storage/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - /etc/validation-storage/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot1-data:/data
     restart: unless-stopped
 
@@ -72,12 +75,15 @@ services:
       - /etc/validation-storage/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - /etc/validation-storage/certs/teapot2cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
       - /etc/validation-storage/certs/teapot2key.pem:/var/lib/teapot/webdav/teapot.key:ro
+      - /etc/validation-storage/certs/storm-webdav-localhostcert.pem:/etc/storm/webdav/localhost.crt:ro
+      - /etc/validation-storage/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
       - /etc/validation-storage/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - /etc/validation-storage/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot2-data:/data
     restart: unless-stopped
 

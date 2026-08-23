@@ -15,6 +15,7 @@ BASE_DIR=/etc/validation-storage
 CERTS_DIR="$BASE_DIR/certs"
 CONFIG_DIR="$BASE_DIR/config"
 SCRIPTS_DIR="$BASE_DIR/scripts"
+PATCHES_DIR="$BASE_DIR/patches"
 
 # Wipe before recreating: COS persists /etc/validation-storage across
 # reboots, but this script re-provisions everything under it from scratch
@@ -23,8 +24,8 @@ SCRIPTS_DIR="$BASE_DIR/scripts"
 # stray directories where a file is now expected — rm -rf here guarantees
 # every subsequent write starts from a clean slate rather than colliding
 # with leftover state.
-rm -rf "$CERTS_DIR" "$CONFIG_DIR" "$SCRIPTS_DIR"
-mkdir -p "$CERTS_DIR" "$CONFIG_DIR/xrootd" "$CONFIG_DIR/teapot" "$SCRIPTS_DIR"
+rm -rf "$CERTS_DIR" "$CONFIG_DIR" "$SCRIPTS_DIR" "$PATCHES_DIR"
+mkdir -p "$CERTS_DIR" "$CONFIG_DIR/xrootd" "$CONFIG_DIR/teapot" "$SCRIPTS_DIR" "$PATCHES_DIR"
 
 log() { echo "[validation-storage-startup] $*"; }
 
@@ -87,6 +88,11 @@ TEAPOTMAP_EOF
 cat > "$CONFIG_DIR/teapot/logback.xml" <<'TEAPOTLOG_EOF'
 ${teapot_logback_xml}
 TEAPOTLOG_EOF
+
+mkdir -p "$PATCHES_DIR/teapot"
+cat > "$PATCHES_DIR/teapot/teapot.py" <<'TEAPOTPY_EOF'
+${teapot_patch_py}
+TEAPOTPY_EOF
 
 # --- Compose file ----------------------------------------------------------
 # No "version:" key — that's a Compose V1-only relic and unnecessary (and

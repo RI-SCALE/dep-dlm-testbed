@@ -159,6 +159,7 @@ resource "google_compute_instance" "this" {
         teapot_extra_subs = var.teapot_extra_subs
       }))
       teapot_logback_xml = file("${var.repo_root}/shared/config/teapot/logback.xml")
+      teapot_patch_py    = file("${var.repo_root}/shared/patches/teapot/teapot.py")
     })
   }
 
