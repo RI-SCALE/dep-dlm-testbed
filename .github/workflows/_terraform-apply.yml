@@ -83,6 +83,29 @@ jobs:
       - name: Generate certificates (pass 1, no external SAN)
         run: make certs
 
+      # ── self-heal: import the static IP if a prior run created it in
+      #    GCP but didn't get to record it in Terraform state (e.g. a
+      #    cancelled/failed job between resource creation and state
+      #    write) — without this, every subsequent run 409s forever.
+      - name: Import validation-storage IP if orphaned
+        run: |
+          ADDR_NAME="dep-dlm-${{ inputs.tf_env }}-validation-storage-ip"
+          if terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} state list \
+              | grep -qx 'module.validation_storage.google_compute_address.this'; then
+            echo "Already tracked in state — nothing to do."
+            exit 0
+          fi
+          if gcloud compute addresses describe "$ADDR_NAME" \
+              --region="${{ vars.GCP_REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            echo "Address exists in GCP but not in state — importing."
+            make tf-import \
+              RESOURCE=module.validation_storage.google_compute_address.this \
+              ID="projects/${{ vars.GCP_PROJECT_ID }}/regions/${{ vars.GCP_REGION }}/addresses/$ADDR_NAME"
+          else
+            echo "Address doesn't exist yet — normal first-run case, tf-apply will create it."
+          fi
+
       # ── reserve validation-storage's static IP ────────────────────────
       # validation-storage's xrd3/xrd4/teapot1/teapot2 certs need the VM's
       # public IP baked into their SAN (see generate-certs.sh's

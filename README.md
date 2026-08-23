@@ -190,6 +190,7 @@ Help
 Setup
   certs                Generate CA and host certificates
   init                 Init testbed accounts, RSEs, OIDC seed
+  cleanup              Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
 
 IdP token verification
   verify-idp-token     Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.

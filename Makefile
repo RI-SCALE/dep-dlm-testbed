@@ -52,6 +52,34 @@ TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
+# Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
+# import — previously duplicated across all four targets, which is how
+# userpass_password ended up present in three of them and silently
+# missing from the fourth (tf-import) until CI's self-heal step hit it.
+# Must be expanded inside the same shell invocation as $(TF_RESOLVE_ENV)
+# (relies on its exported $$GCP_PROJECT_ID etc.), so always use as:
+#   @$(TF_RESOLVE_ENV); \
+#   $(TF_VARS) \
+#     $(TERRAFORM) <verb> ...
+define TF_VARS
+TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	TF_VAR_region="$$GCP_REGION" \
+	TF_VAR_network_id="$$TF_NETWORK_ID" \
+	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_userpass_password="secret" \
+	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
+	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
+	TF_VAR_token_mode="$(TOKEN_MODE)"
+endef
+
 # Optional -target for a partial/targeted apply -- e.g. reserving
 # validation-storage's static IP before certs (which need that IP baked
 # into their SAN) can be generated, ahead of the full apply. Empty by
@@ -480,22 +508,7 @@ tf-docs: ## Generate Terraform reference docs. Needs terraform-docs.
 tf-plan: ## Plan Terraform changes for TF_ENV
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_userpass_password="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
-	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
-	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
-	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
 .PHONY: tf-apply
@@ -505,22 +518,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
 	else \
 	  $(TF_RESOLVE_ENV); \
-	  TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	  TF_VAR_region="$$GCP_REGION" \
-	  TF_VAR_network_id="$$TF_NETWORK_ID" \
-	  TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	  TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	  TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	  TF_VAR_bootstrap_userpass_pwd="secret" \
-	  TF_VAR_userpass_password="secret" \
-	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	  TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
-	  TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
-	  TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
-	  TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	  TF_VAR_token_mode="$(TOKEN_MODE)" \
+	  $(TF_VARS) \
 	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
 
@@ -528,22 +526,7 @@ tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_userpass_password="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
-	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
-	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
-	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 
 .PHONY: tf-output
@@ -566,20 +549,7 @@ tf-import: ## Import an existing GCP resource into TF_ENV's state. Usage: make t
 	@[ -n "$(RESOURCE)" ] && [ -n "$(ID)" ] || \
 	  { echo "ERROR: usage: make tf-import RESOURCE=<terraform address> ID=<cloud resource id>"; exit 1; }
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
-	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
-	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) import -no-color "$(RESOURCE)" "$(ID)"
 
 .PHONY: tf-force-unlock
