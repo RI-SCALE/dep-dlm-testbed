@@ -125,6 +125,13 @@ jobs:
             output -raw validation_storage_ip)
           echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
+      - name: Read validation-storage hostname
+        id: valstorage_hostname
+        run: |
+          HOSTNAME=$(terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} \
+            output -raw validation_storage_hostname)
+          echo "hostname=$HOSTNAME" >> "$GITHUB_OUTPUT"
+
       # ── plan ──────────────────────────────────────────────────────────
 
       # Pass 2: regenerate with the real IP now baked into the four
@@ -133,7 +140,7 @@ jobs:
       # by the full apply below.
       - name: Generate certificates (pass 2, with external SAN)
         env:
-          VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }},valstorage.${{ inputs.tf_env }}.dep-dlm.example.com
+          VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }},${{ steps.valstorage_hostname.outputs.hostname }}
         run: make certs
 
       - name: make tf-validate
