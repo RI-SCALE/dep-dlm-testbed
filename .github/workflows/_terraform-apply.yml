@@ -147,6 +147,21 @@ jobs:
       - name: make tf-apply
         run: make tf-apply AUTO_APPROVE=1
 
+      # ── reset validation-storage so it re-pulls certs/config ──────────
+      # Terraform apply only *uploads* new secret versions to GSM; the VM's
+      # startup-script (which wipes/re-populates $CONFIG_DIR and pulls
+      # fresh cert bytes) only runs at boot — metadata-only updates don't
+      # re-trigger it. Without an explicit reset, cert/config fixes land
+      # in Secret Manager but never reach the running instance.
+      - name: Reset validation-storage instance
+        if: inputs.tf_env == 'staging'
+        run: |
+          gcloud compute instances reset "dep-dlm-${{ inputs.tf_env }}-validation-storage" \
+            --zone="${{ vars.GCP_ZONE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}"
+          # give the startup-script + container stack time to come back
+          sleep 15
+
       # ── smoke-test (infra only) ─────────────────────────────────────
 
       - name: Fetch kubeconfig
