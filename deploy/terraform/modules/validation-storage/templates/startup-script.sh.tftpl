@@ -50,6 +50,7 @@ for key, val in data.items():
 "
 chmod 600 "$CERTS_DIR"/*key.pem 2>/dev/null || true
 chmod 644 "$CERTS_DIR"/*cert.pem "$CERTS_DIR"/rucio_ca.pem "$CERTS_DIR"/tls_ca_bundle.pem "$CERTS_DIR"/5fca1cb1.0 2>/dev/null || true
+chmod 644 "$CERTS_DIR/storm-webdav-localhostkey.pem" 2>/dev/null || true
 
 # --- Static config (embedded at plan time via Terraform file()) ----------
 cat > "$CONFIG_DIR/xrootd/xrdrucio-scitokens.cfg" <<'XRDCFG_EOF'
