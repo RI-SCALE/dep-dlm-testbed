@@ -42,8 +42,8 @@ K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
 
 # ── Service constants ─────────────────────────────────────────────────────
 
-TEAPOT1_URL = "https://teapot1:8081"
-TEAPOT2_URL = "https://teapot2:8081"
+TEAPOT1_URL = os.environ.get("TEAPOT1_URL") or "https://teapot1:8081"
+TEAPOT2_URL = os.environ.get("TEAPOT2_URL") or "https://teapot2:8081"
 
 # Rucio client config (userpass, single instance)
 CFG_RUCIO = "/opt/rucio/etc/rucio.cfg"
@@ -309,21 +309,13 @@ def validate_rule(
     )
 
 
-# ── XRootD filesystem seeding (via container exec) ────────────────────────
+# ── XRootD protocol-based seeding / dest-prep ──────────────────────────────
 
 
 def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
     """
     Seed a test file at the given PFN over the real xroot:// protocol
-    (xrdcp), rather than filesystem exec — works identically for
-    exec-reachable sandbox containers (xrd3/xrd4) and non-exec-reachable
-    external RSEs (e.g. validation-storage). `svc` is now only used for
-    logging, not as an exec target.
-
-    `token` is required if the RSE enforces SciTokens auth (all of this
-    testbed's XRootD RSEs do) — mint one via fetch_token_client_credentials/
-    fetch_token_password before calling, same pattern teapot_token already
-    uses.
+    (xrdcp). `svc` is only used for logging, not as an exec target.
     """
     content = b"rucio-test\n"
     tmp_local = f"/tmp/{svc}-seed-{int(time.time())}"
@@ -334,8 +326,9 @@ def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
         remote_dir = remote_dir.rsplit("/", 1)[0]
         auth_arg = [f"-OSauthz={token}"] if token else []
         subprocess.run(
-            ["xrdfs", pfn.split("//")[2].split("/")[0], "mkdir", "-p", remote_dir]
-            + auth_arg,
+            ["xrdfs", pfn.split("//")[1].split("/")[0], "mkdir"]
+            + auth_arg
+            + ["-p", remote_dir],
             check=False,  # tolerate "already exists"
         )
         subprocess.run(["xrdcp", "-f", tmp_local, pfn] + auth_arg, check=True)
@@ -345,14 +338,33 @@ def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
     return len(content), adler
 
 
-def prepare_xrd_dest(svc: str, pfn: str) -> None:
-    """Pre-create the destination directory on an XRootD container."""
-    local_path = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-    script = (
-        f'mkdir -p "$(dirname {local_path})" && '
-        f'chown xrootd:xrootd "$(dirname {local_path})" 2>/dev/null || true'
+def prepare_xrd_dest(pfn: str, token: str = None) -> None:
+    """
+    Pre-create the destination directory on an XRootD endpoint over the
+    real xroot:// protocol (xrdfs mkdir -p) — mirrors seed_xrd's own
+    mkdir step. `token` is required if the target RSE enforces SciTokens
+    auth (all of this testbed's XRootD RSEs do); omitting it against
+    validation-storage will fail rather than silently bypass auth, unlike
+    the old exec+chown approach.
+
+    NOTE: signature changed from the previous (svc, pfn) exec-based form —
+    `svc` is gone (the host is derived from the PFN itself, same as
+    seed_xrd), and `token` is new. Callers must be updated accordingly.
+    """
+    host = pfn.split("//")[1].split("/")[0]
+    remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
+    remote_dir = remote_dir.rsplit("/", 1)[0]
+    auth_arg = [f"-OSauthz={token}"] if token else []
+    result = subprocess.run(
+        ["xrdfs", host, "mkdir"] + auth_arg + ["-p", remote_dir],
+        capture_output=True,
     )
-    svc_exec(svc, ["sh", "-c", script], user="root")
+    # tolerate "already exists"; surface anything else
+    if result.returncode != 0 and b"exist" not in result.stderr.lower():
+        raise RuntimeError(
+            f"prepare_xrd_dest failed for {remote_dir} on {host}: "
+            f"{result.stderr.decode(errors='replace')}"
+        )
 
 
 def seed_and_register_files(
@@ -377,12 +389,12 @@ def seed_and_register_files(
 
 
 def prepare_xrd_dest_files(
-    client, rse: str, svc: str, scope: str, names: list[str]
+    client, rse: str, scope: str, names: list[str], token: str = None
 ) -> None:
     """Pre-create destination directories on an XRootD RSE for a list of DIDs."""
     for name in names:
         pfn = compute_pfn(client, rse, scope, name)
-        prepare_xrd_dest(svc, pfn)
+        prepare_xrd_dest(pfn, token=token)
 
 
 # ── Keycloak token helpers ────────────────────────────────────────────────
@@ -502,15 +514,23 @@ def webdav_warm_up(
     retries: int = 6,
     interval: int = 10,
 ) -> None:
-    """
-    Trigger Teapot's per-user Storm-WebDAV JVM cold start via PROPFIND.
-    Blocks until HTTP 207 or raises AssertionError.
-    The JVM cold start typically takes 20-40s.
-    """
     log.info("=== Warming up %s Storm-WebDAV instance ===", label)
     resp = None
+    last_exc = None
     for attempt in range(1, retries + 1):
-        resp = webdav_propfind(f"{base_url}{path}", token)
+        try:
+            resp = webdav_propfind(f"{base_url}{path}", token)
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            log.info(
+                "  [%d] %s request failed (%s) — retrying in %ds",
+                attempt,
+                label,
+                e.__class__.__name__,
+                interval,
+            )
+            time.sleep(interval)
+            continue
         if resp.status_code == 207:
             log.info("  ✓ %s Storm-WebDAV ready (HTTP 207)", label)
             return
@@ -524,7 +544,8 @@ def webdav_warm_up(
         time.sleep(interval)
     raise AssertionError(
         f"{label} warm-up failed after {retries} attempts "
-        f"(last HTTP {resp.status_code if resp else 'N/A'})"
+        f"(last HTTP {resp.status_code if resp else 'N/A'}"
+        f"{', last error: ' + str(last_exc) if last_exc else ''})"
     )
 
 
@@ -598,7 +619,15 @@ def teapots_ready(teapot_token):
 
 @pytest.fixture(scope="session")
 def xrd3_write_token():
-    """Token scoped for writing to XRD3 — needed by seed_xrd now that it
-    writes over the real protocol (auth-enforced) instead of exec
-    (auth-bypassing)."""
+    """Token scoped for writing to XRD3 — needed by seed_xrd/prepare_xrd_dest
+    now that both write over the real protocol (auth-enforced) instead of
+    exec (auth-bypassing)."""
     return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd3"))
+
+
+@pytest.fixture(scope="session")
+def xrd4_write_token():
+    """Token scoped for writing to XRD4 — destination side of XRD3→XRD4
+    transfers and the dataset tests; needed now that prepare_xrd_dest is
+    protocol-based (auth-enforced) instead of exec-based."""
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd4"))

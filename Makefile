@@ -213,6 +213,7 @@ ifeq ($(GITOPS_ENV),staging)
   # environment (sandbox-only convenience container)
   EXEC_RUCIO = docker run --rm -i \
     --network host \
+	--cap-add=SYS_ADMIN \
     --add-host $(call staging_tf_output,rucio_public_hostname):$(call staging_tf_output,gateway_static_ip) \
     --add-host $(call staging_tf_output,fts_public_hostname):$(call staging_tf_output,gateway_static_ip) \
     --add-host $(call staging_tf_output,validation_storage_hostname):$(call staging_tf_output,validation_storage_ip) \
@@ -454,15 +455,20 @@ test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 		RUNTIME=$(RUNTIME) \
 		K8S_NAMESPACE=$(K8S_NAMESPACE) \
 		$(STAGING_PIP_INSTALL) \
+		$(TEST_OIDC_ENV) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_ip) pytest /tests/probe_teapot.py -v"
+
+.PHONY: probe-xrootd
+probe-xrootd: ## XRootD probe with SciTokens
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_ip) pytest /tests/probe_xrootd.py -v"
 
 ## Terraform
 
