@@ -220,6 +220,7 @@ ifeq ($(GITOPS_ENV),staging)
     -e REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/tls_ca_bundle.pem \
     -e RUNTIME=k8s \
     -e K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	-e KUBECONFIG=/root/.kube/config \
     -e DAEMON_MODE=$(DAEMON_MODE) \
     -e TEAPOT1_URL=https://$(call staging_tf_output,validation_storage_hostname):8081 \
     -e TEAPOT2_URL=https://$(call staging_tf_output,validation_storage_hostname):8082 \
@@ -230,6 +231,7 @@ ifeq ($(GITOPS_ENV),staging)
 	-v $(TESTBED_HOST_SOURCE)/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro \
     -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
+	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
     mgajekcern/rucio-client-docker-kubectl:latest
   # Prefixed into each test recipe's bash -c string below (empty for
   # sandbox, where the compose/helm rucio-client image already has
@@ -537,7 +539,24 @@ tf-output: ## Show Terraform outputs for TF_ENV
 tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 	@$(TF_RESOLVE_ENV); \
 	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"; \
+	mkdir -p $(CURDIR)/.kube; \
+	CLUSTER_NAME=$$($(TERRAFORM) output -raw cluster_name); \
+	CLUSTER_ENDPOINT=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --format='value(endpoint)'); \
+	CLUSTER_CA=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --format='value(masterAuth.clusterCaCertificate)'); \
+	ACCESS_TOKEN=$$(gcloud auth print-access-token); \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-cluster gke \
+	  --server="https://$$CLUSTER_ENDPOINT" \
+	  --certificate-authority=<(echo "$$CLUSTER_CA" | base64 -d) --embed-certs=true; \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-credentials gke-token \
+	  --token="$$ACCESS_TOKEN"; \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-context gke \
+	  --cluster=gke --user=gke-token --namespace=$(K8S_NAMESPACE); \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) use-context gke
 
 .PHONY: tf-smoke-test
 tf-smoke-test: ## Run smoke tests against TF_ENV. Run tf-kubeconfig first.

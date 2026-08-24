@@ -16,3 +16,5 @@ envs/*.env
 clustersecretstore.yaml
 shared/config/rucio/egi-dev/idpsecrets.json
 shared/config/rucio/ls-aai-dev/idpsecrets.json
+.kube
+

@@ -601,6 +601,8 @@ configure_validation_storage_rses() {
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
+        ra rse set-attribute --rse "$rse" --key oidc_support --value True
+        ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
@@ -615,6 +617,8 @@ configure_validation_storage_rses() {
         ra rse add "$rse" || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
+        ra rse set-attribute --rse "$rse" --key oidc_support --value True
+        ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix / \
             --impl rucio.rse.protocols.gfal.Default \
