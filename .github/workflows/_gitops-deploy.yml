@@ -154,18 +154,21 @@ jobs:
       # rucio-server and the daemons (conveyor-*, judge-*, reaper) all read
       # rucio.cfg/idpsecrets.json once at startup — a Terraform-driven
       # secret change won't reach already-running processes without a
-      # restart.
-      - name: Restart rucio-server and daemons to pick up latest secrets
+      # restart. fts reads env vars (e.g. VALSTORAGE_IP) from testbed-secrets the
+      # same way — same restart requirement.
+      - name: Restart rucio-server, daemons, and fts to pick up latest secrets
         run: |
           ns=dep-dlm-${{ inputs.tf_env }}
           kubectl -n "$ns" annotate externalsecret testbed-secrets \
             force-sync="$(date +%s)" --overwrite
           kubectl -n "$ns" get deploy/rucio-server >/dev/null 2>&1 && \
             kubectl -n "$ns" rollout restart deploy/rucio-server || true
+          kubectl -n "$ns" get deploy/fts >/dev/null 2>&1 && \
+            kubectl -n "$ns" rollout restart deploy/fts || true
           for d in conveyor-submitter conveyor-poller conveyor-finisher \
                    judge-evaluator judge-cleaner reaper; do
             kubectl -n "$ns" get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
-              kubectl -n "$ns" rollout restart deploy/rucio-daemons-$d
+              kubectl -n "$ns" rollout restart deploy/rucio-daemons-$d || true
           done
 
       - name: Verify workload pods are Running
