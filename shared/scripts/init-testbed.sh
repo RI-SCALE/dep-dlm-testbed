@@ -437,7 +437,7 @@ configure_rses() {
         ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance XRD3 XRD4 --distance 1 || true
     ra rse add-distance XRD4 XRD3 --distance 1 || true
@@ -458,12 +458,12 @@ configure_rses() {
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
 
         ra rse add-protocol "$rse" --scheme https \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
@@ -494,7 +494,7 @@ configure_s3_source_rse() {
         --hostname "${s3_endpoint}" --port 443 \
         --prefix "/${s3_bucket}" \
         --impl rucio.rse.protocols.gfal.Default \
-        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
+        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
 
     ra rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1 || true
     ra rse add-distance COPERNICUS_S3 XRD4    --distance 1 || true
@@ -583,13 +583,14 @@ CONF"
 # ── External validation-storage RSEs (see modules/validation-storage) ────
 configure_validation_storage_rses() {
     local tf_dir="${TF_DIR:-deploy/terraform/environments/${TF_ENV:-staging}}"
-    local val_hostname
-    val_hostname=$(terraform -chdir="$tf_dir" output -raw validation_storage_ip 2>/dev/null) || {
+    local val_ip
+    val_ip=$(terraform -chdir="$tf_dir" output -raw validation_storage_ip 2>/dev/null) || {
         echo "=== VALIDATION_STORAGE skipped (terraform output not available) ==="
         return 0
     }
-    [ -n "$val_hostname" ] || { echo "=== VALIDATION_STORAGE skipped (empty IP) ==="; return 0; }
+    [ -n "$val_ip" ] || { echo "=== VALIDATION_STORAGE skipped (empty IP) ==="; return 0; }
 
+    local val_hostname="valstorage.dep-dlm-${TF_ENV:-staging}.example.com"
     echo "=== Configuring external validation-storage RSEs (${val_hostname}) ==="
 
     # XRootD side — two RSEs, ports 1094/1095 (see module outputs
@@ -603,7 +604,7 @@ configure_validation_storage_rses() {
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance XRD3 XRD4 --distance 1 || true
     ra rse add-distance XRD4 XRD3 --distance 1 || true
@@ -617,7 +618,7 @@ configure_validation_storage_rses() {
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix / \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true

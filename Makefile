@@ -279,13 +279,6 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
 
-.PHONY: cleanup
-cleanup: ## Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
-	$(TEST_OIDC_ENV) \
-	RUNTIME=$(RUNTIME) \
-	K8S_NAMESPACE=$(K8S_NAMESPACE) \
-	./shared/scripts/cleanup-testbed.sh
-
 ## IdP token verification
 
 .PHONY: verify-idp-token
@@ -575,8 +568,8 @@ certs-sync: ## Fetch current certs from Secret Manager (matches what's deployed 
 
 ## Cleanup
 
-.PHONY: clean
-clean: ## Remove certs, volumes, Terraform/Python/Helm artifacts
+.PHONY: clear-artifacts
+clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
@@ -593,3 +586,10 @@ clean: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem), compose volumes,"
 	@echo ".terraform/tfplan/crash.log (preserved .terraform.lock.hcl), __pycache__/.pytest_cache, and Helm chart .tgz deps"
 	@echo "(NOT touched: envs/*.env — this holds real configured credentials, not regenerable artifacts)"
+
+.PHONY: cleanup
+cleanup: ## Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
+	$(TEST_OIDC_ENV) \
+	RUNTIME=$(RUNTIME) \
+	K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	./shared/scripts/cleanup-testbed.sh
