@@ -48,5 +48,6 @@ resource "google_secret_manager_secret_version" "secrets" {
     "docker-entrypoint.sh" = templatefile("${path.module}/templates/fts3-docker-entrypoint.sh.tftpl", {
       fts_db_host = var.fts_db_host
     })
+    "valstorage-ip" = var.storage_ip
   })
 }

@@ -76,6 +76,7 @@ module "secrets" {
   oidc_client_secret     = var.oidc_client_secret
   oidc_expected_scope    = var.oidc_expected_scope
   token_mode             = var.token_mode
+  storage_ip             = module.validation_storage.external_ip
 
   rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
 }

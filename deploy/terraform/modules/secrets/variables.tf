@@ -123,3 +123,13 @@ variable "fts_db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "storage_ip" {
+  description = "External IP address of the validation-storage GCE instance, used to populate FTS's hostAliases so it can resolve valstorage.dep-dlm-<env>.example.com without a real DNS record."
+  type        = string
+
+  validation {
+    condition     = can(cidrhost("${var.storage_ip}/32", 0))
+    error_message = "storage_ip must be a valid IPv4 address."
+  }
+}
