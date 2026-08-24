@@ -125,12 +125,10 @@ jobs:
             output -raw validation_storage_ip)
           echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-      - name: Read validation-storage hostname
+      - name: Compute validation-storage hostname
         id: valstorage_hostname
         run: |
-          HOSTNAME=$(terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} \
-            output -raw validation_storage_hostname)
-          echo "hostname=$HOSTNAME" >> "$GITHUB_OUTPUT"
+          echo "hostname=valstorage.dep-dlm-${{ inputs.tf_env }}.example.com" >> "$GITHUB_OUTPUT"
 
       # ── plan ──────────────────────────────────────────────────────────
 
