@@ -42,8 +42,13 @@ K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
 
 # ── Service constants ─────────────────────────────────────────────────────
 
-TEAPOT1_URL = os.environ.get("TEAPOT1_URL") or "https://teapot1:8081"
-TEAPOT2_URL = os.environ.get("TEAPOT2_URL") or "https://teapot2:8081"
+VALSTORAGE_HOST = os.environ.get("VALIDATION_STORAGE_HOST")
+TEAPOT1_URL = os.environ.get("TEAPOT1_URL") or (
+    f"https://{VALSTORAGE_HOST}:8081" if VALSTORAGE_HOST else "https://teapot1:8081"
+)
+TEAPOT2_URL = os.environ.get("TEAPOT2_URL") or (
+    f"https://{VALSTORAGE_HOST}:8082" if VALSTORAGE_HOST else "https://teapot2:8081"
+)
 
 # Rucio client config (userpass, single instance)
 CFG_RUCIO = "/opt/rucio/etc/rucio.cfg"

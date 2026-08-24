@@ -35,7 +35,6 @@ from conftest import (
     _xrdfs_run,
     fetch_token_client_credentials,
     fetch_token_password,
-    prepare_xrd_dest,
 )
 
 VALIDATION_STORAGE_HOST = os.environ.get("VALIDATION_STORAGE_HOST")
@@ -101,14 +100,14 @@ def test_xrootd_authenticated_list(name, port):
 
 @pytest.mark.parametrize("name,port", XRD_TARGETS.items())
 def test_xrootd_prepare_dest(name, port):
-    """Reuses conftest's own prepare_xrd_dest — the exact function the
-    real e2e tests call — as the definitive write-capability check,
-    not just an authenticated list. Single slash between authority and
-    path, matching the shape compute_pfn() actually produces (NOT
-    Terraform's pfn_root outputs, which use a double slash) — see
-    module docstring; conftest's own host-parsing needs to handle both
-    (see the split("//")[1] fix landed alongside this file)."""
+    """Native xrdfs mkdir — tests the root:// / native SciTokens path,
+    as distinct from test_xrootd_http_prepare_dest's HTTP path below."""
     host = f"{VALIDATION_STORAGE_HOST}:{port}"
     token = _mint(name)
-    pfn = f"root://{host}{PROBE_PATH}/probe-{name}-liveness"
-    prepare_xrd_dest(pfn, token=token)
+    out = _xrdfs_run(
+        [host, "mkdir", f"-OSauthz={token}", "-p", f"{PROBE_PATH}/probe-{name}-dir"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert out.returncode == 0 or "exist" in out.stderr.lower(), out.stderr.strip()
