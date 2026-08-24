@@ -366,55 +366,39 @@ def _xrdcp_run(
 
 
 def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
-    """
-    Seed a test file at the given PFN over the real xroot:// protocol
-    (xrdcp). `svc` is only used for logging, not as an exec target.
-    """
+    """Seed a test file at the given PFN over HTTP/WebDAV (XRootD's
+    libXrdHttp), matching how FTS itself performs the real transfer.
+    `svc` is only used for logging."""
     content = b"rucio-test\n"
-    tmp_local = f"/tmp/{svc}-seed-{int(time.time())}"
-    with open(tmp_local, "wb") as f:
-        f.write(content)
-    try:
-        remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-        remote_dir = remote_dir.rsplit("/", 1)[0]
-        auth_arg = [f"-OSauthz={token}"] if token else []
-        _xrdfs_run(
-            [pfn.split("//")[1].split("/")[0], "mkdir"] + auth_arg + ["-p", remote_dir],
-            check=False,  # tolerate "already exists"
-        )
-        _xrdcp_run(["-f", tmp_local, pfn] + auth_arg, check=True)
-    finally:
-        os.remove(tmp_local)
+    url = pfn.replace(
+        "davs://", "https://", 1
+    )  # XRootD's HTTP listener speaks TLS on the same port
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.put(url, data=content, headers=headers, verify=False, timeout=30)
+    resp.raise_for_status()
+
+    # Read back to confirm the write actually landed, rather than trusting
+    # a 2xx status alone.
+    check = requests.get(url, headers=headers, verify=False, timeout=30)
+    check.raise_for_status()
+    if check.content != content:
+        raise RuntimeError(f"seed_xrd: readback mismatch at {url}")
+
     adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
     return len(content), adler
 
 
 def prepare_xrd_dest(pfn: str, token: str = None) -> None:
-    """
-    Pre-create the destination directory on an XRootD endpoint over the
-    real xroot:// protocol (xrdfs mkdir -p) — mirrors seed_xrd's own
-    mkdir step. `token` is required if the target RSE enforces SciTokens
-    auth (all of this testbed's XRootD RSEs do); omitting it against
-    validation-storage will fail rather than silently bypass auth, unlike
-    the old exec+chown approach.
-
-    NOTE: signature changed from the previous (svc, pfn) exec-based form —
-    `svc` is gone (the host is derived from the PFN itself, same as
-    seed_xrd), and `token` is new. Callers must be updated accordingly.
-    """
-    host = pfn.split("//")[1].split("/")[0]
-    remote_dir = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-    remote_dir = remote_dir.rsplit("/", 1)[0]
-    auth_arg = [f"-OSauthz={token}"] if token else []
-    result = _xrdfs_run(
-        [host, "mkdir"] + auth_arg + ["-p", remote_dir],
-        capture_output=True,
+    """Pre-create the destination directory via HTTP MKCOL, matching seed_xrd."""
+    remote_dir_url = pfn.replace("davs://", "https://", 1).rsplit("/", 1)[0]
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.request(
+        "MKCOL", remote_dir_url, headers=headers, verify=False, timeout=30
     )
-    # tolerate "already exists"; surface anything else
-    if result.returncode != 0 and b"exist" not in result.stderr.lower():
+    # 201 = created, 405/409 = already exists — both fine; anything else is real
+    if resp.status_code not in (201, 405, 409):
         raise RuntimeError(
-            f"prepare_xrd_dest failed for {remote_dir} on {host}: "
-            f"{result.stderr.decode(errors='replace')}"
+            f"prepare_xrd_dest failed for {remote_dir_url}: HTTP {resp.status_code} {resp.text}"
         )
 
 

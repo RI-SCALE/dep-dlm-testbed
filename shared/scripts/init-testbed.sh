@@ -866,7 +866,9 @@ main() {
         cleanup_session_tokens
     fi
 
-    configure_validation_storage_rses
+    if [ "${GITOPS_ENV:-sandbox}" != "sandbox" ]; then
+        configure_validation_storage_rses
+    fi
     setup_scopes_and_quotas
     setup_fts_oidc_provider
 
