@@ -593,16 +593,27 @@ configure_validation_storage_rses() {
     local val_hostname="valstorage.dep-dlm-${TF_ENV:-staging}.example.com"
     echo "=== Configuring external validation-storage RSEs (${val_hostname}) ==="
 
+    local resource_param
+    resource_param=$(_cap "client_credentials.resource_param" "false")
+
     # XRootD side — two RSEs, ports 1094/1095 (see module outputs
     # xrd3_pfn_root/xrd4_pfn_root)
     local rse port
     for rse_port in "XRD3:1094" "XRD4:1095"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
+        local host
+        host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
         ra rse add "$rse" || true
+        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
+        if [ "$resource_param" = "true" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        fi
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
@@ -614,11 +625,19 @@ configure_validation_storage_rses() {
     # Teapot/WebDAV side — ports 8081/8082
     for rse_port in "TEAPOT1:8081" "TEAPOT2:8082"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
+        local instance
+        instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
         ra rse add "$rse" || true
+        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
+        if [ "$resource_param" = "true" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${instance}"
+        fi
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix / \
             --impl rucio.rse.protocols.gfal.Default \
