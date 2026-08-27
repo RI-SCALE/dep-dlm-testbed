@@ -6,9 +6,7 @@ image:
 
 fullnameOverride: rucio-client
 
-env:
-  - name: REQUESTS_CA_BUNDLE
-    value: /etc/pki/tls/certs/ca-bundle.crt
+env: []
 
 volumes: []
 volumeMounts: []

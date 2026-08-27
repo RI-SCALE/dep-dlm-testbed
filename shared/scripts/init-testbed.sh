@@ -729,6 +729,10 @@ setup_scopes_and_quotas() {
 
 # ── Token-exchange grant (merged from grant-token-exchange.sh) ────
 grant_token_exchange() {
+    if [ "${SCOPE_PROFILE:-local}" != "local" ]; then
+        echo "  ✗ grant_token_exchange requires SCOPE_PROFILE=local (local Keycloak) — got '${SCOPE_PROFILE}'" >&2
+        return 0
+    fi
     echo "=== Granting token-exchange permissions ==="
 
     _kc config credentials \
@@ -857,7 +861,9 @@ main() {
         # environment (staging/production), where Postgres is Cloud SQL
         # and the only storage target is validation-storage.
         if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
-            grant_token_exchange
+            if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
+                grant_token_exchange
+            fi
             seed_subject_tokens
         fi
         configure_rses

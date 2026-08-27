@@ -584,6 +584,10 @@ xrd4:
   enabled: true
   fullnameOverride: rucio-client
 
+  env:
+    - name: REQUESTS_CA_BUNDLE
+      value: /etc/pki/tls/certs/ca-bundle.crt
+
   volumes:
     - name: certs
       secret:

@@ -1,12 +1,11 @@
 """
 probe_xrootd.py — pytest-native reachability + SciTokens-auth probe for
-XRD3/XRD4 on the validation-storage VM. Shells out to `xrdfs` (no
-first-class XRootD Python client available) but reuses conftest.py's
-own token-minting helpers, and reuses prepare_xrd_dest itself as the
-definitive "can we actually write here" check.
+XRD3/XRD4. Shells out to `xrdfs` (no first-class XRootD Python client
+available) but reuses conftest.py's own token-minting helpers, and
+reuses prepare_xrd_dest itself as the definitive "can we actually write
+here" check.
 
 Run via: pytest /tests/probe_xrootd.py -v
-(needs VALIDATION_STORAGE_HOST set)
 
 NOTE on retries: this environment has been observed with very low
 kernel entropy (~256, vs. thousands on a healthy host — check via
@@ -38,12 +37,13 @@ from conftest import (
 )
 
 VALIDATION_STORAGE_HOST = os.environ.get("VALIDATION_STORAGE_HOST")
-pytestmark = pytest.mark.skipif(
-    not VALIDATION_STORAGE_HOST, reason="VALIDATION_STORAGE_HOST not set"
+XRD_TARGETS = (
+    {"xrd3": (VALIDATION_STORAGE_HOST, 1094), "xrd4": (VALIDATION_STORAGE_HOST, 1095)}
+    if VALIDATION_STORAGE_HOST
+    else {"xrd3": ("xrd3", 1094), "xrd4": ("xrd4", 1094)}
 )
-
-# name -> port, matching modules/validation-storage's outputs
-XRD_TARGETS = {"xrd3": 1094, "xrd4": 1095}
+XRD_PARAMS = list(XRD_TARGETS.items())
+XRD_IDS = [f"{name}-{hostport[0]}:{hostport[1]}" for name, hostport in XRD_PARAMS]
 PROBE_PATH = "/data"
 
 
@@ -66,9 +66,10 @@ def _mint(name: str) -> str:
     )
 
 
-@pytest.mark.parametrize("name,port", XRD_TARGETS.items())
-def test_xrootd_reachable(name, port):
-    host = f"{VALIDATION_STORAGE_HOST}:{port}"
+@pytest.mark.parametrize("name,hostport", XRD_PARAMS, ids=XRD_IDS)
+def test_xrootd_reachable(name, hostport):
+    hostname, port = hostport
+    host = f"{hostname}:{port}"
     out = _xrdfs_run(
         [host, "query", "config", "bind_max"],
         capture_output=True,
@@ -78,9 +79,10 @@ def test_xrootd_reachable(name, port):
     assert out.returncode == 0, out.stderr.strip()
 
 
-@pytest.mark.parametrize("name,port", XRD_TARGETS.items())
-def test_xrootd_authenticated_list(name, port):
-    host = f"{VALIDATION_STORAGE_HOST}:{port}"
+@pytest.mark.parametrize("name,hostport", XRD_PARAMS, ids=XRD_IDS)
+def test_xrootd_authenticated_list(name, hostport):
+    hostname, port = hostport
+    host = f"{hostname}:{port}"
     token = _mint(name)
     payload = token.split(".")[1]
     payload += "=" * (-len(payload) % 4)
@@ -98,11 +100,12 @@ def test_xrootd_authenticated_list(name, port):
     print(f"  {len(entries)} entrie(s) under {PROBE_PATH}")
 
 
-@pytest.mark.parametrize("name,port", XRD_TARGETS.items())
-def test_xrootd_prepare_dest(name, port):
+@pytest.mark.parametrize("name,hostport", XRD_PARAMS, ids=XRD_IDS)
+def test_xrootd_prepare_dest(name, hostport):
     """Native xrdfs mkdir — tests the root:// / native SciTokens path,
-    as distinct from test_xrootd_http_prepare_dest's HTTP path below."""
-    host = f"{VALIDATION_STORAGE_HOST}:{port}"
+    as distinct from an HTTP-based prepare-dest path."""
+    hostname, port = hostport
+    host = f"{hostname}:{port}"
     token = _mint(name)
     out = _xrdfs_run(
         [host, "mkdir", f"-OSauthz={token}", "-p", f"{PROBE_PATH}/probe-{name}-dir"],
