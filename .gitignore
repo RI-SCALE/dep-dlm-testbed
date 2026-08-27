@@ -14,3 +14,5 @@ __pycache__
 envs/*.env
 !envs/*.env.example
 clustersecretstore.yaml
+shared/config/rucio/egi-dev/idpsecrets.json
+shared/config/rucio/ls-aai-dev/idpsecrets.json
