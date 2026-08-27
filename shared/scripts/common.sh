@@ -121,7 +121,9 @@ seed_vault() {
       --revision "${REVISION:-main}" \
       --flow "$FLOW" \
       --scope-profile "$SCOPE_PROFILE" \
-      --vault-timeout "$CORE_WAIT_TIMEOUT"
+      --vault-timeout "$CORE_WAIT_TIMEOUT" \
+      --oidc-client-id "$OIDC_CLIENT_ID" \
+      --oidc-client-secret "$OIDC_CLIENT_SECRET"
   elif [[ "$SEED" -eq 0 ]]; then
     log "Skipping Vault seeding (--no-seed)"
   fi

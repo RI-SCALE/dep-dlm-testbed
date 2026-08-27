@@ -11,6 +11,12 @@ FLOW="${FLOW:-managed}"
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 REPO_URL="${REPO_URL:-}"
 REVISION="${REVISION:-}"
+# Only required when SCOPE_PROFILE != local — validate_args enforces this.
+# Substituted straight into the rendered Job YAML by apply_seed_job's
+# envsubst call, same trust level already accepted for these values in
+# e2e.yml — this Job is applied imperatively, never committed.
+OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}"
+OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}"
 VAULT_WAIT_TIMEOUT="${VAULT_WAIT_TIMEOUT:-600s}"
 JOB_WAIT_TIMEOUT="${JOB_WAIT_TIMEOUT:-300s}"
 # HashiCorp's vault Helm chart labels the server pod app.kubernetes.io/name=vault,
@@ -22,15 +28,17 @@ TMPL="${SCRIPT_DIR}/k8s/vault-seed-job.yaml.tmpl"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --namespace)      K8S_NAMESPACE="$2"; shift 2 ;;
-    --repo-url)       REPO_URL="$2"; shift 2 ;;
-    --revision)       REVISION="$2"; shift 2 ;;
-    --flow)           FLOW="$2"; shift 2 ;;
-    --scope-profile)  SCOPE_PROFILE="$2"; shift 2 ;;
-    --timeout)        VAULT_WAIT_TIMEOUT="$2"; JOB_WAIT_TIMEOUT="$2"; shift 2 ;;
-    --vault-timeout)  VAULT_WAIT_TIMEOUT="$2"; shift 2 ;;
-    --job-timeout)    JOB_WAIT_TIMEOUT="$2"; shift 2 ;;
-    -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --namespace)          K8S_NAMESPACE="$2"; shift 2 ;;
+    --repo-url)           REPO_URL="$2"; shift 2 ;;
+    --revision)            REVISION="$2"; shift 2 ;;
+    --flow)                FLOW="$2"; shift 2 ;;
+    --scope-profile)       SCOPE_PROFILE="$2"; shift 2 ;;
+    --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
+    --oidc-client-secret)  OIDC_CLIENT_SECRET="$2"; shift 2 ;;
+    --timeout)             VAULT_WAIT_TIMEOUT="$2"; JOB_WAIT_TIMEOUT="$2"; shift 2 ;;
+    --vault-timeout)       VAULT_WAIT_TIMEOUT="$2"; shift 2 ;;
+    --job-timeout)         JOB_WAIT_TIMEOUT="$2"; shift 2 ;;
+    -h|--help)              grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,6 +49,10 @@ validate_args() {
   [[ -n "$REPO_URL" ]] || die "--repo-url (or \$REPO_URL) is required"
   [[ -n "$REVISION" ]] || die "--revision (or \$REVISION) is required"
   case "$FLOW" in managed|unmanaged) ;; *) die "--flow must be 'managed' or 'unmanaged', got '$FLOW'" ;; esac
+  if [[ "$SCOPE_PROFILE" != "local" ]]; then
+    [[ -n "$OIDC_CLIENT_ID" && -n "$OIDC_CLIENT_SECRET" ]] \
+      || die "--oidc-client-id/--oidc-client-secret (or \$OIDC_CLIENT_ID/\$OIDC_CLIENT_SECRET) are required for SCOPE_PROFILE=${SCOPE_PROFILE} — only 'local' ships committed, non-secret idpsecrets.json values."
+  fi
 }
 
 preflight() {
@@ -75,7 +87,7 @@ wait_for_vault_ready() {
     || die "vault pod not Ready within ${VAULT_WAIT_TIMEOUT} (label: ${VAULT_POD_LABEL}) — check: kubectl -n ${K8S_NAMESPACE} describe pod -l ${VAULT_POD_LABEL}"
 }
 
-# Renders + applies the one-shot seed Job. Only these five vars are
+# Renders + applies the one-shot seed Job. Only these seven vars are
 # substituted — everything else in the template (${CFG}, ${PDIR}, and the
 # container-runtime ${FLOW}/${SCOPE_PROFILE} reads) is left untouched for
 # the container's own shell to evaluate.
@@ -89,7 +101,8 @@ apply_seed_job() {
   # template's header comment for the full rationale.
   K8S_NAMESPACE="$K8S_NAMESPACE" FLOW="$FLOW" SCOPE_PROFILE="$SCOPE_PROFILE" \
   REPO_URL="$REPO_URL" REVISION="$REVISION" \
-    envsubst '${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION}' < "$TMPL" \
+  OIDC_CLIENT_ID="$OIDC_CLIENT_ID" OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
+    envsubst '${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION} ${OIDC_CLIENT_ID} ${OIDC_CLIENT_SECRET}' < "$TMPL" \
     | kubectl -n "$K8S_NAMESPACE" apply -f -
 }
 

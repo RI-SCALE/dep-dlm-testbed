@@ -279,6 +279,7 @@ endif
 
 .PHONY: argocd-install
 argocd-install: ## Install ArgoCD, bootstrap GITOPS_ENV
+	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
 	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
@@ -307,6 +308,7 @@ argocd-uninstall: ## Remove ArgoCD apps and resources
 
 .PHONY: flux-install
 flux-install: ## Install Flux, bootstrap GITOPS_ENV
+	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
 	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \

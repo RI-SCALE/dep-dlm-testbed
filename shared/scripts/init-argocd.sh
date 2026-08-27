@@ -21,6 +21,9 @@ CORE_WAIT_TIMEOUT="${CORE_WAIT_TIMEOUT:-600s}"
 WAIT=1
 SEED=1
 
+OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}"
+OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-url)       REPO_URL="$2"; shift 2 ;;
@@ -31,6 +34,8 @@ while [[ $# -gt 0 ]]; do
     --timeout)        CORE_WAIT_TIMEOUT="$2"; shift 2 ;;
     --no-wait)        WAIT=0; shift ;;
     --no-seed)        SEED=0; shift ;;
+    --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
+    --oidc-client-secret)  OIDC_CLIENT_SECRET="$2"; shift 2 ;;
     -h|--help)        grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -133,6 +138,10 @@ apply_secrets_root() {
 # for HealthCheckPolicy/HTTPRoute to resolve meaningfully, so this runs
 # after bootstrap_rucio_db, not alongside apply_apps_root/apply_secrets_root.
 apply_gateway_root() {
+  if [[ "$GITOPS_ENV" == "sandbox" ]]; then
+    log "No gateway root for sandbox — skipping (staging/production only)"
+    return 0
+  fi
   log "Applying gateway root (dep-dlm-${GITOPS_ENV}-gateway)"
   kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-gateway")' "$APPLY_FILE")
   [[ "$APPLY_FILE" != "$APP_OF_APPS" ]] && rm -f "$APPLY_FILE"

@@ -19,6 +19,9 @@ CORE_WAIT_TIMEOUT="${CORE_WAIT_TIMEOUT:-600s}"
 WAIT=1
 SEED=1
 
+OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-}"
+OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-}"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)            GITOPS_ENV="$2"; shift 2 ;;
@@ -29,6 +32,8 @@ while [[ $# -gt 0 ]]; do
     --timeout)        CORE_WAIT_TIMEOUT="$2"; shift 2 ;;
     --no-wait)        WAIT=0; shift ;;
     --no-seed)        SEED=0; shift ;;
+    --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
+    --oidc-client-secret)  OIDC_CLIENT_SECRET="$2"; shift 2 ;;
     -h|--help)        grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac

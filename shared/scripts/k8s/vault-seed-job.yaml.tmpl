@@ -7,14 +7,22 @@
 # script flags instead of values baked into a committed, Argo-PreSync-hooked
 # manifest that had to be hand-edited and recommitted to change.
 #
-# Only ${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION} are
-# substituted by seed-vault.sh (it calls envsubst with an explicit variable
-# list) — every other $VAR below (${CFG}, ${PDIR}, ${FLOW} as read INSIDE the
-# container's own shell, etc.) is evaluated at container runtime, not by the
-# host-side envsubst pass. Do not add new ${...} host placeholders here
-# without also adding them to that explicit list in seed-vault.sh, or they'll
-# either get silently substituted with an empty string or leak through
-# unresolved.
+# ${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION}
+# ${OIDC_CLIENT_ID} ${OIDC_CLIENT_SECRET} are substituted by seed-vault.sh (it
+# calls envsubst with an explicit variable list) — every other $VAR below
+# (${CFG}, ${PDIR}, ${FLOW} as read INSIDE the container's own shell, etc.)
+# is evaluated at container runtime, not by the host-side envsubst pass. Do
+# not add new ${...} host placeholders here without also adding them to that
+# explicit list in seed-vault.sh, or they'll either get silently substituted
+# with an empty string or leak through unresolved.
+#
+# OIDC_CLIENT_ID/OIDC_CLIENT_SECRET are real credentials for egi-dev/
+# ls-aai-dev, substituted the same way as everything else above — this job
+# is applied imperatively (never committed as a live manifest), matching the
+# trust level already accepted for these same values in e2e.yml. Only
+# `shared/config/rucio/<profile>/idpsecrets.json.example` is git-tracked;
+# the real idpsecrets.json is gitignored, so it doesn't exist in the fresh
+# clone below until rendered from the .example + these two values.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -60,6 +68,8 @@ spec:
             - { name: VAULT_TOKEN,   value: "root" }     # sandbox dev token
             - { name: FLOW,          value: "${FLOW}" }
             - { name: SCOPE_PROFILE, value: "${SCOPE_PROFILE}" }
+            - { name: OIDC_CLIENT_ID,     value: "${OIDC_CLIENT_ID}" }
+            - { name: OIDC_CLIENT_SECRET, value: "${OIDC_CLIENT_SECRET}" }
           command: ["/bin/sh","-c"]
           args:
             - |
@@ -70,6 +80,20 @@ spec:
 
               PDIR=""
               [ "$SCOPE_PROFILE" != "local" ] && PDIR="${SCOPE_PROFILE}/"
+
+              # Only .example is git-tracked for egi-dev/ls-aai-dev — render
+              # the real idpsecrets.json from it before vault kv put reads
+              # it below. "local" ships a committed idpsecrets.json with
+              # fixed, non-secret Keycloak test values and needs none of
+              # this.
+              if [ -n "$PDIR" ]; then
+                cp "shared/config/rucio/${PDIR}idpsecrets.json.example" \
+                   "shared/config/rucio/${PDIR}idpsecrets.json"
+                sed -i \
+                  -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
+                  -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \
+                  "shared/config/rucio/${PDIR}idpsecrets.json"
+              fi
 
               # Trust-anchor names (5fca1cb1.*, b96dc756.*) are the new+old
               # openssl hashes of the COMMITTED CA, so they are deterministic
