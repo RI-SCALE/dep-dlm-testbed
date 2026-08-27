@@ -54,7 +54,7 @@ to do below:
 
 | Directory | Files to add under `<profile>/` |
 |---|---|
-| `shared/config/rucio/` | `idpsecrets.json`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the new IdP supports RFC 8693 token-exchange with `resource=` — see runbook 02's caveat before assuming it does) |
+| `shared/config/rucio/` | `idpsecrets.json.example`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the new IdP supports RFC 8693 token-exchange with `resource=` — see runbook 02's caveat before assuming it does) |
 | `shared/config/fts/` | `fts3config`, `managed.fts3restconfig`, `unmanaged.fts3restconfig` |
 | `shared/config/teapot/` | `config.ini`, `application.yml`, `data.properties`, `user-mapping.csv` |
 | `shared/config/xrootd/` | `scitokens.conf` |
@@ -75,11 +75,28 @@ token in step 0.
 
 ## 2. `idpsecrets.json` — do not commit real secrets
 
-The checked-in file must keep `<valid client id>` / `<valid client secret>`
-placeholders (same convention as `shared/config/rucio/egi-dev/idpsecrets.json`).
-`.gitignore` does **not** exclude `*.json`, so this file *is* tracked —
-real credentials go in only on the machine/cluster running the test, and are
-re-seeded via Vault or `helm --set`, never committed.
+The tracked artifact is `idpsecrets.json.example`, keeping `<valid client
+id>` / `<valid client secret>` placeholders (same convention as
+`shared/config/rucio/egi-dev/idpsecrets.json.example`). The real
+`idpsecrets.json` for each profile is gitignored — create it locally from
+the example before filling in real values:
+
+```bash
+cp shared/config/rucio/<profile>/idpsecrets.json.example \
+   shared/config/rucio/<profile>/idpsecrets.json
+```
+
+**The current `.gitignore` lists each profile's real `idpsecrets.json`
+individually** (`shared/config/rucio/egi-dev/idpsecrets.json`,
+`shared/config/rucio/ls-aai-dev/idpsecrets.json`) rather than as a glob —
+a new profile's real file is **not** covered automatically. Add a line for
+`<profile>` to `.gitignore` as part of this checklist (see §4), or switch
+the existing entries to a single `shared/config/rucio/*/idpsecrets.json`
+glob so future profiles are covered without a `.gitignore` edit.
+
+Real credentials go into the copied `idpsecrets.json` only on the
+machine/cluster running the test, and are re-seeded via Vault or `helm
+--set`, never committed.
 
 If the new IdP's registered scope set doesn't include anything matching the
 WLCG-default literal `"fts"`, or has no WLCG-style path-scoped concept at
@@ -120,6 +137,11 @@ A few places do need a one-line addition:
   the `{{- range $profile := list "egi-dev" }}` loop is currently hardcoded
   per profile; add `"<profile>"` to that list so its per-profile ConfigMap
   actually renders.
+- `.gitignore` — add
+  `shared/config/rucio/<profile>/idpsecrets.json` (or switch the existing
+  per-profile entries to the `shared/config/rucio/*/idpsecrets.json` glob
+  mentioned in §2) so the new profile's real secrets file is never
+  accidentally tracked.
 - `deploy/gitops/environments/sandbox/secrets/seed-job.yaml` — **this one is
   not runtime-configurable.** Its own header comment states `SCOPE_PROFILE`
   is static: "there is no CLI flag or kustomize patch wired up to override
@@ -137,7 +159,10 @@ A few places do need a one-line addition:
   `scope_profile: <profile>` and `token_modes` appropriately (start with
   `["unmanaged"]` unless you've confirmed the IdP supports `resource=` on
   `token-exchange` *and* accepts FTS's internal refresh-token exchange
-  under managed mode).
+  under managed mode). Also copy the `cp idpsecrets.json.example
+  idpsecrets.json` step that precedes the `sed` substitution in
+  `egi-dev.yml`/`ls-aai-dev.yml` — without it there's no real file for
+  `sed -i` to edit.
 
 Everything else — `Makefile`'s `CONFIG_PROFILE_DIR` derivation, the seed-job's
 `$PDIR` computation *once `SCOPE_PROFILE` above is set*, `init-testbed.sh`'s
@@ -157,12 +182,14 @@ upload) with `RUCIO_CONFIG` pointed at
 - [ ] Decoded a token from the new IdP: noted `iss` trailing slash, checked `typ` for `at+jwt`
 - [ ] `shared/config/{rucio,fts,teapot,xrootd}/<profile>/*` created from egi-dev templates
 - [ ] `user-mapping.csv` has rows for both the client's own `client_credentials` sub and (later) real tester subs
-- [ ] `idpsecrets.json` has placeholders only, real values injected out-of-band
+- [ ] `idpsecrets.json.example` has placeholders only (tracked)
+- [ ] Real `idpsecrets.json` created via `cp idpsecrets.json.example idpsecrets.json`, filled with real values, and gitignored — not committed
+- [ ] `.gitignore` covers the new profile's real `idpsecrets.json` (per-profile line, or the `shared/config/rucio/*/idpsecrets.json` glob)
 - [ ] `fts_client_scope`/`scope_map`/`drop_scopes` set if the IdP's scope set doesn't match WLCG defaults
 - [ ] Combined CA bundle built if the new issuer isn't system-trusted
 - [ ] `<profile>` added to `configs-cm.yaml`'s per-profile ConfigMap loop
 - [ ] `Makefile`'s `TEST_OIDC_ENV` (incl. `OIDC_TOKEN_URL`) and `verify-idp-token` target updated
 - [ ] (gitops runtime only) `seed-job.yaml`'s `SCOPE_PROFILE` env edited and committed
-- [ ] (Optional) new CI workflow copied from `egi-dev.yml`/`ls-aai-dev.yml`
+- [ ] (Optional) new CI workflow copied from `egi-dev.yml`/`ls-aai-dev.yml`, including its `cp idpsecrets.json.example idpsecrets.json` step
 - [ ] If `typ: at+jwt`, confirmed Storm-WebDAV ≥1.13.0 in `Dockerfile.teapot`
 - [ ] Runbook 02's Verification steps all pass under the new profile

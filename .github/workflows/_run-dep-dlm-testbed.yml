@@ -105,6 +105,7 @@ jobs:
       - name: Render idpsecrets.json from secrets
         if: inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev'
         run: |
+          cp shared/config/rucio/${SCOPE_PROFILE}/idpsecrets.json.example shared/config/rucio/${SCOPE_PROFILE}/idpsecrets.json
           sed -i \
             -e "s|<valid client id>|${OIDC_CLIENT_ID}|g" \
             -e "s|<valid client secret>|${OIDC_CLIENT_SECRET}|g" \

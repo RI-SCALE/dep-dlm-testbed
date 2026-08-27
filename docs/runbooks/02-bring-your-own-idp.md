@@ -16,12 +16,19 @@ of errors.
 - A CA bundle the server trusts that includes the issuer's chain (see "CA trust").
 
 > **EGI Check-In credentials:** the `client_id` / `client_secret` for
-> `idpsecrets.json` are not self-service. Replace the `<valid client id>` /
-> `<valid client secret>` placeholders in
-> `shared/config/rucio/egi-dev/idpsecrets.json`, then reseed via the gitops
-> target (not the raw seed script) so Argo/Flux and Vault re-render
-> consistently. Export the env vars first rather than passing them inline —
-> this also matches how CI invokes it:
+> `idpsecrets.json` are not self-service. Only `idpsecrets.json.example`
+> (placeholders only) is tracked in git — create the real file first, then
+> replace the `<valid client id>` / `<valid client secret>` placeholders in
+> it:
+> ```bash
+> cp shared/config/rucio/egi-dev/idpsecrets.json.example \
+>    shared/config/rucio/egi-dev/idpsecrets.json
+> # edit shared/config/rucio/egi-dev/idpsecrets.json with your real values
+> ```
+> `idpsecrets.json` itself is gitignored, so this file never gets committed
+> by accident. Then reseed via the gitops target (not the raw seed script)
+> so Argo/Flux and Vault re-render consistently. Export the env vars first
+> rather than passing them inline — this also matches how CI invokes it:
 >
 > ```bash
 > export GITOPS_ENV=sandbox
@@ -54,20 +61,28 @@ of errors.
 >   rucio-daemons-judge-cleaner rucio-daemons-judge-evaluator rucio-daemons-reaper \
 >   -n dep-dlm-sandbox
 > ```
-> This doesn't survive a reseed — still update the repo file for anything
+> This patches Vault's live value directly, not the repo file, so it's
+> unaffected by the `idpsecrets.json`/`.example` split above — it doesn't
+> survive a reseed either way; still update the repo file for anything
 > persistent.
 
 > **LS AAI credentials:** same non-self-service caveat applies — client
 > registration on `login.aai.lifescience-ri.eu` requires LS AAI support
 > involvement (contact `support@aai.lifescience-ri.eu` or Federation
-> Registry access if already granted). Real credentials go into the
-> `<valid client id>`/`<valid client secret>` placeholders in
-> `shared/config/rucio/ls-aai-dev/idpsecrets.json`. Reseed the same way as
-> EGI above, with `SCOPE_PROFILE=ls-aai-dev`. Both `TOKEN_MODE=unmanaged`
-> *and* `TOKEN_MODE=managed` are confirmed working end-to-end for ls-aai-dev
-> (see the token-strategy section below). In CI, this profile is seeded
-> from `secrets.LS_AAI_DEV_OIDC_CLIENT_ID`/`_SECRET` — see
-> `.github/workflows/ls-aai-dev.yml`, which runs both token modes.
+> Registry access if already granted). Same as EGI above, only
+> `idpsecrets.json.example` is tracked — create the real file first:
+> ```bash
+> cp shared/config/rucio/ls-aai-dev/idpsecrets.json.example \
+>    shared/config/rucio/ls-aai-dev/idpsecrets.json
+> # edit shared/config/rucio/ls-aai-dev/idpsecrets.json with your real values
+> ```
+> Then reseed the same way as EGI above, with `SCOPE_PROFILE=ls-aai-dev`.
+> Both `TOKEN_MODE=unmanaged` *and* `TOKEN_MODE=managed` are confirmed
+> working end-to-end for ls-aai-dev (see the token-strategy section below).
+> In CI, this profile is seeded from
+> `secrets.LS_AAI_DEV_OIDC_CLIENT_ID`/`_SECRET` — see
+> `.github/workflows/ls-aai-dev.yml`, which runs both token modes and
+> performs the same `.example` → real-file copy before templating.
 
 ## One client, two flows
 
@@ -123,7 +138,8 @@ Federation Registry access to replicate it.
    `offline_access`).
 9. Submit and self-approve on Dev/Demo (production needs admin approval —
    see EGI's [SP integration workflow](https://docs.egi.eu/providers/check-in/sp/)).
-10. Copy `client_id`/`client_secret` into `idpsecrets.json` (see Prerequisites).
+10. Copy `client_id`/`client_secret` into the real `idpsecrets.json` (create
+    it from `idpsecrets.json.example` first — see Prerequisites).
 
 > **No per-RSE clients exist on egi-dev today.** Not required for
 > `client_credentials` mode; *would* be required for `token_strategy=exchange`
@@ -178,8 +194,9 @@ project and how it differs from the EGI flow above:
    register at
    `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
    with the same identity first; propagation can take a few minutes.
-6. Copy `client_id`/`client_secret` into
-   `shared/config/rucio/ls-aai-dev/idpsecrets.json`.
+6. Copy `client_id`/`client_secret` into the real
+   `shared/config/rucio/ls-aai-dev/idpsecrets.json` (create it from
+   `idpsecrets.json.example` first — see Prerequisites).
 
 > **`user-mapping.csv` needs the client's own `client_credentials` sub,
 > too** — not just end-user subs. Teapot's automated test fixtures
@@ -320,7 +337,9 @@ mounted as `tls_ca_bundle.pem`.
    wanted.
 
 2. **Set issuer/audience/scopes** in `idpsecrets.json` and `rucio.cfg` per
-   the table above; ensure CA trust.
+   the table above; ensure CA trust. Remember `idpsecrets.json` itself is
+   gitignored — create it from `idpsecrets.json.example` first if you
+   haven't already (see Prerequisites).
 
 3. **Map the external identity to a Rucio account.** A valid token
    *authenticates* but isn't *authorized* until its `SUB`+`ISS` is bound to

@@ -106,6 +106,8 @@ Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
 source envs/egi-dev.env
 
 # Substitute your credentials into idpsecrets.json
+cp shared/config/rucio/egi-dev/idpsecrets.json.example shared/config/rucio/egi-dev/idpsecrets.json
+
 sed -i \
   -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
   -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
@@ -135,6 +137,8 @@ Copy `envs/ls-aai-dev.env.example` to `envs/ls-aai-dev.env`, fill in your LS AAI
 source envs/ls-aai-dev.env
 
 # Substitute your credentials into idpsecrets.json
+cp shared/config/rucio/ls-aai-dev/idpsecrets.json.example shared/config/rucio/ls-aai-dev/idpsecrets.json
+
 sed -i \
   -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
   -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
@@ -162,12 +166,6 @@ make test-rucio-transfers
 > required organizational units, register at
 > `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
 > with the same identity first; propagation can take a few minutes.
-
-> **NOTE:** **Don't commit the substituted `idpsecrets.json`.** The `sed` step above
-> writes real credentials into a git-tracked file. Before committing
-> anything else, check `git status shared/config/rucio/<profile>/idpsecrets.json`
-> and revert it (`git checkout -- shared/config/rucio/<profile>/idpsecrets.json`)
-> once you're done testing.
 
 ## Make Targets
 
