@@ -639,7 +639,7 @@ configure_validation_storage_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "${instance}"
         fi
         ra rse add-protocol "$rse" --scheme davs \
-            --hostname "$val_hostname" --port "$port" --prefix / \
+            --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
             --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done

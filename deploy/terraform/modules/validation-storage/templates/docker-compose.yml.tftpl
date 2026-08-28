@@ -11,6 +11,9 @@ services:
       - /etc/validation-storage/certs/xrd3key.pem:/tmp/xrdkey.pem:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - /etc/validation-storage/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - /etc/validation-storage/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - /etc/validation-storage/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - /etc/validation-storage/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - /etc/validation-storage/config/xrootd/authdb:/etc/xrootd/authdb:ro
@@ -31,6 +34,9 @@ services:
       - /etc/validation-storage/certs/xrd4key.pem:/tmp/xrdkey.pem:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - /etc/validation-storage/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - /etc/validation-storage/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - /etc/validation-storage/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - /etc/validation-storage/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - /etc/validation-storage/config/xrootd/authdb:/etc/xrootd/authdb:ro
@@ -55,6 +61,9 @@ services:
       - /etc/validation-storage/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - /etc/validation-storage/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - /etc/validation-storage/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
@@ -79,6 +88,9 @@ services:
       - /etc/validation-storage/certs/storm-webdav-localhostkey.pem:/etc/storm/webdav/localhost.key:ro
       - /etc/validation-storage/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - /etc/validation-storage/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - /etc/validation-storage/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
+      - /etc/validation-storage/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
+      - /etc/validation-storage/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - /etc/validation-storage/config/teapot/application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - /etc/validation-storage/config/teapot/data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - /etc/validation-storage/config/teapot/user-mapping.csv:/etc/teapot/user-mapping.csv:ro
