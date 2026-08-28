@@ -3,6 +3,20 @@ set -euo pipefail
 
 # ── Global Config ───────────────────────────────────────────────────────────
 CERTS="certs"
+# Extra SAN entries for the validation-storage externally-facing certs
+# (xrd3/xrd4/teapot1/teapot2). Only known once Terraform has reserved the
+# static IP (google_compute_address.this.address) — and, once DNS exists,
+# once that hostname resolves to it. Pass one or more comma-separated
+# entries; each is auto-detected as an IP literal or a DNS name.
+#
+#   VALSTORAGE_EXTERNAL_SAN="34.159.9.77" ./generate-certs.sh
+#   VALSTORAGE_EXTERNAL_SAN="valstorage.dep-dlm-staging.example.com,34.159.9.77" ./generate-certs.sh
+#
+# Regenerating requires re-running this script AFTER `terraform apply` has
+# produced the IP (or hostname), then updating the certs secret and
+# rebooting the VM to pick up the new cert — see module README for the
+# two-phase apply -> fetch IP -> regenerate certs -> re-apply flow.
+VALSTORAGE_EXTERNAL_SAN="${VALSTORAGE_EXTERNAL_SAN:-}"
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -13,15 +27,27 @@ write_ext_file() {
     client) eku="clientAuth" ;;
     both)   eku="serverAuth, clientAuth" ;;
   esac
+  # IPv4-literal detection: TLS hostname verification checks IP SANs
+  # separately from DNS SANs -- an IP address placed in a DNS.n entry
+  # will NOT be matched against a client connecting by IP. Route each
+  # entry to IP.n or DNS.n based on whether it parses as an IPv4 literal.
+  local is_ip_regex='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
   {
     echo "[ v3_req ]"
     echo "keyUsage         = digitalSignature, keyEncipherment"
     echo "extendedKeyUsage = $eku"
     echo "subjectAltName   = @alt_names"
     echo -e "\n[ alt_names ]"
-    local i=1; IFS=',' read -ra names <<< "$dns_list"
-    for n in "${names[@]}"; do echo "DNS.$i = ${n// /}"; i=$((i+1)); done
-    # echo "IP.1 = 127.0.0.1"
+    local dns_i=1; local ip_i=1; IFS=',' read -ra names <<< "$dns_list"
+    for n in "${names[@]}"; do
+      n="${n// /}"
+      [ -z "$n" ] && continue
+      if [[ "$n" =~ $is_ip_regex ]]; then
+        echo "IP.$ip_i = $n"; ip_i=$((ip_i+1))
+      else
+        echo "DNS.$dns_i = $n"; dns_i=$((dns_i+1))
+      fi
+    done
   } > "$out"
 }
 
@@ -45,14 +71,18 @@ generate_service_certs() {
 
     # XRootD SciTokens instances
     for host in xrd3 xrd4; do
-        write_ext_file "/tmp/${host}-ext.cnf" "${host},localhost" both
+        local sans="${host},localhost"
+        [ -n "$VALSTORAGE_EXTERNAL_SAN" ] && sans="${sans},${VALSTORAGE_EXTERNAL_SAN}"
+        write_ext_file "/tmp/${host}-ext.cnf" "$sans" both
         mint_cert "${host}" "${host}" "/tmp/${host}-ext.cnf"
         chmod 644 "$CERTS/${host}key.pem"
     done
 
     # Teapot instances
     for instance in teapot1 teapot2; do
-        write_ext_file "/tmp/${instance}-ext.cnf" "${instance},localhost" server
+        local sans="${instance},localhost"
+        [ -n "$VALSTORAGE_EXTERNAL_SAN" ] && sans="${sans},${VALSTORAGE_EXTERNAL_SAN}"
+        write_ext_file "/tmp/${instance}-ext.cnf" "$sans" server
         mint_cert "${instance}" "${instance}" "/tmp/${instance}-ext.cnf"
         chmod 644 "$CERTS/${instance}key.pem"
     done

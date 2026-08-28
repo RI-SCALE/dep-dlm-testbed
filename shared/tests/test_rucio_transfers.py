@@ -5,7 +5,7 @@ Covers:
   - XRootD SciTokens TPC:  XRD3  → XRD4    (davs/SciTokens, FTS OIDC)
   - Teapot WebDAV TPC:     TEAPOT1 → TEAPOT2 (davs/bearer token, FTS OIDC)
 
-Prerequisites (handled by bootstrap-testbed.sh):
+Prerequisites (handled by bootstrap-testbed.sh, xrd3_write_token, xrd4_write_token):
   - RSEs XRD3, XRD4, TEAPOT1, TEAPOT2 registered with OIDC attributes
   - FTS t_token_provider seeded with keycloak-rucio issuer entries
   - Rucio accounts ddmlab / randomaccount with quota on all four RSEs
@@ -62,7 +62,7 @@ class TestXRootDOIDC:
     an HTTP COPY between the two XRootD endpoints.
     """
 
-    def test_xrd3_to_xrd4(self, rucio_client):
+    def test_xrd3_to_xrd4(self, rucio_client, xrd3_write_token, xrd4_write_token):
         """Replicate a file from XRD3 to XRD4 via SciTokens + FTS OIDC."""
         name = f"xrd-oidc-{int(time.time())}"
         log.info("[ XRD3 → XRD4  name=%s ]", name)
@@ -73,12 +73,13 @@ class TestXRootDOIDC:
         log.info("  src PFN: %s", src_pfn)
         log.info("  dst PFN: %s", dst_pfn)
 
-        # Seed source file inside the xrd3 container
-        size, adler32 = seed_xrd("xrd3", src_pfn)
+        # Seed source file
+        size, adler32 = seed_xrd("xrd3", src_pfn, token=xrd3_write_token)
         log.info("  seeded %d bytes  adler32=%s", size, adler32)
 
-        # Pre-create destination directory
-        prepare_xrd_dest("xrd4", dst_pfn)
+        # Pre-create destination directory (auth-enforced — needs a
+        # write-scoped token for the destination RSE)
+        prepare_xrd_dest(dst_pfn, token=xrd4_write_token)
 
         # Register replica and create replication rule
         register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
@@ -171,8 +172,8 @@ class TestCrossProtocolOIDC:
     of cross-protocol cross-audience TPC in the dep-dlm-testbed.
     """
 
-    def test_xrd3_to_teapot1(self, rucio_client, teapots_ready):
-        """XRD3 (SciTokens) → TEAPOT1 (WebDAV): seed via xrd3 exec, dest via Teapot."""
+    def test_xrd3_to_teapot1(self, rucio_client, teapots_ready, xrd3_write_token):
+        """XRD3 (SciTokens) → TEAPOT1 (WebDAV, xrd3_write_token): seed via xrd3, dest via Teapot."""
         name = f"xrd-to-teapot-{int(time.time())}"
         log.info("[ XRD3 → TEAPOT1  name=%s ]", name)
 
@@ -182,8 +183,8 @@ class TestCrossProtocolOIDC:
         log.info("  src PFN: %s", src_pfn)
         log.info("  dst PFN: %s", dst_pfn)
 
-        # Seed source file inside the xrd3 container
-        size, adler32 = seed_xrd("xrd3", src_pfn)
+        # Seed source file
+        size, adler32 = seed_xrd("xrd3", src_pfn, token=xrd3_write_token)
         log.info("  seeded %d bytes  adler32=%s", size, adler32)
 
         # Register replica and create replication rule
@@ -194,8 +195,10 @@ class TestCrossProtocolOIDC:
         run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "XRD3→TEAPOT1 cross-protocol", RUCIO_SVC)
 
-    def test_teapot1_to_xrd3(self, rucio_client, teapot_token, teapots_ready):
-        """TEAPOT1 (WebDAV) → XRD3 (SciTokens): seed via WebDAV PUT, dest via xrd3 exec."""
+    def test_teapot1_to_xrd3(
+        self, rucio_client, teapot_token, teapots_ready, xrd3_write_token
+    ):
+        """TEAPOT1 (WebDAV) → XRD3 (SciTokens, xrd3_write_token): seed via WebDAV PUT, dest via xrd3."""
         name = f"teapot-to-xrd-{int(time.time())}"
         seed_content = b"rucio-teapot-to-xrd-test\n"
         log.info("[ TEAPOT1 → XRD3  name=%s ]", name)
@@ -221,8 +224,10 @@ class TestCrossProtocolOIDC:
         )
         log.info("  ✓ Seed confirmed readable (HTTP 200)")
 
-        # Pre-create destination directory on xrd3
-        prepare_xrd_dest("xrd3", dst_pfn)
+        # Pre-create destination directory on xrd3 — auth-enforced, needs
+        # a write-scoped token (previously this call was unauthenticated
+        # exec+chown, which had no equivalent against validation-storage)
+        prepare_xrd_dest(dst_pfn, token=xrd3_write_token)
 
         # Compute checksum locally
         adler32 = binascii.hexlify(
@@ -251,15 +256,19 @@ class TestDatasetOIDC:
       - add_files_to_dataset: extend an existing dataset with new replicas
     """
 
-    def test_add_dataset(self, rucio_client):
+    def test_add_dataset(self, rucio_client, xrd3_write_token, xrd4_write_token):
         """Register two files into a new dataset on XRD3, replicate to XRD4."""
         ts = int(time.time())
         dataset = f"oidc-dataset-{ts}"
         names = [f"{dataset}-file1", f"{dataset}-file2"]
         log.info("[ add_dataset: XRD3 (seed 2 files) → XRD4 ]")
 
-        registered = seed_and_register_files(rucio_client, "XRD3", SCOPE, names, "xrd3")
-        prepare_xrd_dest_files(rucio_client, "XRD4", "xrd4", SCOPE, names)
+        registered = seed_and_register_files(
+            rucio_client, "XRD3", SCOPE, names, "xrd3", token=xrd3_write_token
+        )
+        prepare_xrd_dest_files(
+            rucio_client, "XRD4", SCOPE, names, token=xrd4_write_token
+        )
 
         log.info(
             "  Creating dataset %s:%s with %d files", SCOPE, dataset, len(registered)
@@ -273,7 +282,9 @@ class TestDatasetOIDC:
         run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "add_dataset XRD3→XRD4", RUCIO_SVC)
 
-    def test_add_files_to_dataset(self, rucio_client):
+    def test_add_files_to_dataset(
+        self, rucio_client, xrd3_write_token, xrd4_write_token
+    ):
         """Append two files to an existing dataset on XRD3, replicate to XRD4."""
         ts = int(time.time())
         dataset = f"oidc-existing-dataset-{ts}"
@@ -283,8 +294,12 @@ class TestDatasetOIDC:
         rucio_client.add_dataset(scope=SCOPE, name=dataset)
         log.info("  Created empty dataset %s:%s", SCOPE, dataset)
 
-        registered = seed_and_register_files(rucio_client, "XRD3", SCOPE, names, "xrd3")
-        prepare_xrd_dest_files(rucio_client, "XRD4", "xrd4", SCOPE, names)
+        registered = seed_and_register_files(
+            rucio_client, "XRD3", SCOPE, names, "xrd3", token=xrd3_write_token
+        )
+        prepare_xrd_dest_files(
+            rucio_client, "XRD4", SCOPE, names, token=xrd4_write_token
+        )
 
         log.info("  Appending %d files to %s:%s", len(registered), SCOPE, dataset)
         rucio_client.add_files_to_dataset(

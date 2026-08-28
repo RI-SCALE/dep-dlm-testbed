@@ -34,7 +34,12 @@ spec:
 
               sleep infinity
           env:
-            {{- toYaml .Values.env | nindent 12 }}
+            {{- with .Values.env }}
+            {{- range . }}
+            - name: {{ .name }}
+              value: {{ .value }}
+            {{- end }}
+            {{- end }}
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:

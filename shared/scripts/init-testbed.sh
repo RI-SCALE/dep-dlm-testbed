@@ -270,7 +270,7 @@ seed_subject_tokens() {
 
     _exec rucio-server env \
         SEED_ACCOUNTS="$accounts_csv" \
-        OIDC_SEED_SCOPE="${OIDC_STORAGE_SCOPE:-$OIDC_SEED_SCOPE}" \
+        OIDC_SEED_SCOPE="${OIDC_EXPECTED_SCOPE:-$OIDC_SEED_SCOPE}" \
         OIDC_TOKEN_URL="$token_url" \
         OIDC_GRANT_MODE="$grant_mode" \
         OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
@@ -437,7 +437,7 @@ configure_rses() {
         ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance XRD3 XRD4 --distance 1 || true
     ra rse add-distance XRD4 XRD3 --distance 1 || true
@@ -458,12 +458,12 @@ configure_rses() {
         ra rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
 
         ra rse add-protocol "$rse" --scheme https \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
@@ -494,7 +494,7 @@ configure_s3_source_rse() {
         --hostname "${s3_endpoint}" --port 443 \
         --prefix "/${s3_bucket}" \
         --impl rucio.rse.protocols.gfal.Default \
-        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
+        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
 
     ra rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1 || true
     ra rse add-distance COPERNICUS_S3 XRD4    --distance 1 || true
@@ -525,10 +525,10 @@ configure_fts_cloud_storage() {
             OIDC_TOKEN_URL="$OIDC_TOKEN_URL" \
             OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" \
             OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
-            OIDC_STORAGE_SCOPE="${OIDC_STORAGE_SCOPE:-openid}" \
+            OIDC_EXPECTED_SCOPE="${OIDC_EXPECTED_SCOPE:-openid}" \
             python3 -c "
 import urllib.request, urllib.parse, json, base64, os
-data = urllib.parse.urlencode({'grant_type':'client_credentials','scope':os.environ['OIDC_STORAGE_SCOPE']}).encode()
+data = urllib.parse.urlencode({'grant_type':'client_credentials','scope':os.environ['OIDC_EXPECTED_SCOPE']}).encode()
 auth = base64.b64encode(f\"{os.environ['OIDC_CLIENT_ID']}:{os.environ['OIDC_CLIENT_SECRET']}\".encode()).decode()
 req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'], data=data, headers={'Authorization': f'Basic {auth}'})
 tok = json.loads(urllib.request.urlopen(req).read())['access_token']
@@ -580,6 +580,82 @@ CONF"
     _restart fts
 }
 
+# ── External validation-storage RSEs (see modules/validation-storage) ────
+configure_validation_storage_rses() {
+    local tf_dir="${TF_DIR:-deploy/terraform/environments/${TF_ENV:-staging}}"
+    local val_ip
+    val_ip=$(terraform -chdir="$tf_dir" output -raw validation_storage_ip 2>/dev/null) || {
+        echo "=== VALIDATION_STORAGE skipped (terraform output not available) ==="
+        return 0
+    }
+    [ -n "$val_ip" ] || { echo "=== VALIDATION_STORAGE skipped (empty IP) ==="; return 0; }
+
+    local val_hostname="valstorage.dep-dlm-${TF_ENV:-staging}.example.com"
+    echo "=== Configuring external validation-storage RSEs (${val_hostname}) ==="
+
+    local resource_param
+    resource_param=$(_cap "client_credentials.resource_param" "false")
+
+    # XRootD side — two RSEs, ports 1094/1095 (see module outputs
+    # xrd3_pfn_root/xrd4_pfn_root)
+    local rse port
+    for rse_port in "XRD3:1094" "XRD4:1095"; do
+        rse="${rse_port%%:*}"; port="${rse_port##*:}"
+        local host
+        host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
+        ra rse add "$rse" || true
+        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
+        ra rse set-attribute --rse "$rse" --key verify_checksum --value False
+        ra rse set-attribute --rse "$rse" --key oidc_support --value True
+        ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
+        if [ "$resource_param" = "true" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${host}"
+        fi
+        ra rse add-protocol "$rse" --scheme davs \
+            --hostname "$val_hostname" --port "$port" --prefix /data \
+            --impl rucio.rse.protocols.gfal.Default \
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+    done
+    ra rse add-distance XRD3 XRD4 --distance 1 || true
+    ra rse add-distance XRD4 XRD3 --distance 1 || true
+
+    # Teapot/WebDAV side — ports 8081/8082
+    for rse_port in "TEAPOT1:8081" "TEAPOT2:8082"; do
+        rse="${rse_port%%:*}"; port="${rse_port##*:}"
+        local instance
+        instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
+        ra rse add "$rse" || true
+        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
+        ra rse set-attribute --rse "$rse" --key verify_checksum --value False
+        ra rse set-attribute --rse "$rse" --key oidc_support --value True
+        ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
+        if [ "$resource_param" = "true" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${instance}.example.org/"
+        else
+            ra rse set-attribute --rse "$rse" --key audience --value "${instance}"
+        fi
+        ra rse add-protocol "$rse" --scheme davs \
+            --hostname "$val_hostname" --port "$port" --prefix /data \
+            --impl rucio.rse.protocols.gfal.Default \
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+    done
+    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
+    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+
+    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
+    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+
+    local acct
+    for acct in root ddmlab randomaccount; do
+        for rse in XRD3 XRD4 TEAPOT1 TEAPOT2; do
+            ra account set-limits "$acct" "$rse" -1 || true
+        done
+    done
+}
 
 # ── FTS OIDC Provider Registration ───────────────────────────────
 
@@ -656,6 +732,10 @@ setup_scopes_and_quotas() {
 
 # ── Token-exchange grant (merged from grant-token-exchange.sh) ────
 grant_token_exchange() {
+    if [ "${SCOPE_PROFILE:-local}" != "local" ]; then
+        echo "  ✗ grant_token_exchange requires SCOPE_PROFILE=local (local Keycloak) — got '${SCOPE_PROFILE}'" >&2
+        return 0
+    fi
     echo "=== Granting token-exchange permissions ==="
 
     _kc config credentials \
@@ -775,16 +855,31 @@ verify_token_exchange() {
 main() {
     wait_for_infrastructure
     setup_accounts_and_identities
-    if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
-        grant_token_exchange
-        seed_subject_tokens
+
+    if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
+        # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2 containers/pods,
+        # Copernicus S3 source RSE, FTS S3 cloud_storage config, and
+        # in-cluster ruciodb session-token maintenance — none of these
+        # exist or apply once GITOPS_ENV points at a real Terraform-managed
+        # environment (staging/production), where Postgres is Cloud SQL
+        # and the only storage target is validation-storage.
+        if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
+            if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
+                grant_token_exchange
+            fi
+            seed_subject_tokens
+        fi
+        configure_rses
+        configure_s3_source_rse
+        configure_fts_cloud_storage
+        cleanup_session_tokens
     fi
-    configure_rses
-    configure_s3_source_rse
-    configure_fts_cloud_storage
+
+    if [ "${GITOPS_ENV:-sandbox}" != "sandbox" ]; then
+        configure_validation_storage_rses
+    fi
     setup_scopes_and_quotas
     setup_fts_oidc_provider
-    cleanup_session_tokens
 
     echo -e "\n=== Initialization Complete ==="
 }

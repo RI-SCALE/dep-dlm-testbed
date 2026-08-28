@@ -79,7 +79,9 @@ class TestDeletionLifecycle:
     6. Assert the file no longer exists on the XRD4 storage backend
     """
 
-    def test_rule_deletion_via_judge_cleaner_and_reaper(self, rucio_client):
+    def test_rule_deletion_via_judge_cleaner_and_reaper(
+        self, rucio_client, xrd3_write_token, xrd4_write_token
+    ):
         """Replicate XRD3→XRD4, delete rule, verify judge-cleaner+reaper clean up."""
         name = f"deletion-test-{int(time.time())}"
         log.info("[ Rule deletion lifecycle  name=%s ]", name)
@@ -90,9 +92,9 @@ class TestDeletionLifecycle:
         log.info("  src PFN: %s", src_pfn)
         log.info("  dst PFN: %s", dst_pfn)
 
-        size, adler32 = seed_xrd("xrd3", src_pfn)
+        size, adler32 = seed_xrd("xrd3", src_pfn, token=xrd3_write_token)
         log.info("  seeded %d bytes  adler32=%s", size, adler32)
-        prepare_xrd_dest("xrd4", dst_pfn)
+        prepare_xrd_dest(dst_pfn, token=xrd4_write_token)
 
         register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "XRD4")

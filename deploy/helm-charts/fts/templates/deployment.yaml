@@ -32,6 +32,10 @@ spec:
                 cat /etc/grid-security/certificates/5fca1cb1.0 >> /etc/pki/tls/certs/ca-bundle.crt
               fi
 
+              if [ -n "$VALSTORAGE_IP" ] && [ -n "$VALSTORAGE_HOST" ]; then
+                echo "${VALSTORAGE_IP} ${VALSTORAGE_HOST}" >> /etc/hosts
+              fi
+
               /docker-entrypoint.sh
           env:
             {{- toYaml .Values.env | nindent 12 }}

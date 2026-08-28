@@ -70,8 +70,13 @@ module "secrets" {
   fts_db_password   = module.fts_database.fts_db_password
 
   bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
+  userpass_password      = var.userpass_password
   oidc_issuer            = var.oidc_issuer
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
+  oidc_expected_scope    = var.oidc_expected_scope
   token_mode             = var.token_mode
+  storage_ip             = module.validation_storage.external_ip
+
+  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
 }

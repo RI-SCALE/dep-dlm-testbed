@@ -7,11 +7,10 @@
 [![Local (full)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml)
 [![GitOps (ArgoCD)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml)
 [![GitOps (Flux)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml)
-[![GitOps install test (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml)
-[![Terraform apply (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
-[![Terraform apply (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
-[![Terraform destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
-[![Terraform destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
+[![Deploy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
+[![Deploy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
+[![Destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
+[![Destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
 
 This repository serves as the experimental validation environment for the DEP DLM architecture. It is intended to validate architectural assumptions, integration patterns, and deployment and operational procedures across identity providers, storage systems, and deployment environments; validated patterns may subsequently be promoted into production-focused repositories.
 
@@ -218,6 +217,9 @@ Tests
   test-copernicus-transfers Rucio E2E transfer test with Copernicus data
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
+  probe-xrootd         XRootD probe with SciTokens
+  probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
+  probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
 
 Terraform
   tf-fmt               Format Terraform files
@@ -233,10 +235,12 @@ Terraform
   tf-kubeconfig        Fetch kubectl credentials for TF_ENV's cluster
   tf-smoke-test        Run smoke tests against TF_ENV. Run tf-kubeconfig first.
   tf-import            Import an existing GCP resource into TF_ENV's state. Usage: make tf-import RESOURCE=module.rucio_database.google_sql_database_instance.this ID=dep-dlm-staging-e52e0d90/dep-dlm-staging-pg
-  tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running againstTF_ENV first — see the Lock Info 'Who' field.
+  tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running against TF_ENV first — see the Lock Info 'Who' field.
+  certs-sync           Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
 
 Cleanup
-  clean                Remove certs, volumes, Terraform/Python/Helm artifacts
+  clear-artifacts      Remove certs, volumes, Terraform/Python/Helm artifacts
+  cleanup              Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
 ```
 
 ## Documentation

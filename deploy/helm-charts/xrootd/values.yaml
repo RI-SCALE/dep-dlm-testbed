@@ -12,15 +12,6 @@ service:
 
 xrdPort: 1094
 
-certFile: xrd1cert.pem
-keyFile: xrd1key.pem
-
-# ── Auth mode ─────────────────────────────────────────────────────────────
-scitokens:
-  # Set to true for xrd3/xrd4 (SciTokens/OIDC).
-  # Set to false (default) for xrd1/xrd2 (GSI/VOMS).
-  enabled: false
-
 volumes: []
 volumeMounts: []
 

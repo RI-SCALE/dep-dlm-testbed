@@ -7,6 +7,7 @@ export TESTBED_HOST_SOURCE ?= $(CURDIR)
 
 RUNTIME    ?= compose
 TOKEN_MODE ?= managed
+SCOPE_PROFILE ?= local
 DAEMON_MODE ?= direct
 SERVICES   ?=
 
@@ -35,9 +36,9 @@ OIDC_ISSUER           ?=
 OIDC_TOKEN_URL        ?=
 OIDC_CLIENT_ID        ?=
 OIDC_CLIENT_SECRET    ?=
-OIDC_STORAGE_SCOPE    ?=
 OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
+OIDC_EXPECTED_SCOPE   ?=
 
 # Terraform
 #
@@ -51,8 +52,41 @@ TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
-# CI passes AUTO_APPROVE=1 for non-interactive apply/destroy; local use
-# defaults to interactive confirmation, same as running terraform directly.
+# Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
+# import — previously duplicated across all four targets, which is how
+# userpass_password ended up present in three of them and silently
+# missing from the fourth (tf-import) until CI's self-heal step hit it.
+# Must be expanded inside the same shell invocation as $(TF_RESOLVE_ENV)
+# (relies on its exported $$GCP_PROJECT_ID etc.), so always use as:
+#   @$(TF_RESOLVE_ENV); \
+#   $(TF_VARS) \
+#     $(TERRAFORM) <verb> ...
+define TF_VARS
+TF_VAR_project_id="$$GCP_PROJECT_ID" \
+	TF_VAR_region="$$GCP_REGION" \
+	TF_VAR_network_id="$$TF_NETWORK_ID" \
+	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
+	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
+	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
+	TF_VAR_bootstrap_userpass_pwd="secret" \
+	TF_VAR_userpass_password="secret" \
+	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
+	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
+	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
+	TF_VAR_oidc_expected_scope="$(OIDC_EXPECTED_SCOPE)" \
+	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
+	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
+	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
+	TF_VAR_token_mode="$(TOKEN_MODE)"
+endef
+
+# Optional -target for a partial/targeted apply -- e.g. reserving
+# validation-storage's static IP before certs (which need that IP baked
+# into their SAN) can be generated, ahead of the full apply. Empty by
+# default, so ordinary `make tf-apply` behaves exactly as before.
+TF_TARGET ?=
+TF_TARGET_FLAG := $(if $(TF_TARGET),-target=$(TF_TARGET),)
+
 AUTO_APPROVE ?=
 ifeq ($(AUTO_APPROVE),1)
   TF_AUTO_APPROVE_FLAG := -auto-approve
@@ -60,33 +94,6 @@ else
   TF_AUTO_APPROVE_FLAG :=
 endif
 
-# Test env injection: only export OIDC_* overrides when targeting an
-# external IdP profile. Passing OIDC_ISSUER='' etc. unconditionally would
-# shadow conftest.py's os.environ.get(..., default) fallback for the local/
-# Keycloak path, since an empty string still counts as "set".
-ifeq ($(SCOPE_PROFILE),local)
-  TEST_OIDC_ENV :=
-else
-  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
-    OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
-    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
-    OIDC_STORAGE_SCOPE='$(OIDC_STORAGE_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
-endif
-
-SCOPE_PROFILE ?= local
-
-ifeq ($(SCOPE_PROFILE),local)
-  export CONFIG_PROFILE_DIR :=
-else
-  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
-endif
-
-# Derive OIDC_ISSUER/OIDC_CLIENT_ID from SCOPE_PROFILE for known profiles —
-# mirrors verify-idp-token's own case statement below, so CI/Terraform
-# only ever needs to carry the one value with no public, derivable
-# default: OIDC_CLIENT_SECRET. An explicit OIDC_ISSUER/OIDC_CLIENT_ID
-# (already set via env or command line) always wins — this only fills in
-# what's still empty.
 ifeq ($(OIDC_ISSUER),)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     OIDC_ISSUER := https://aai-dev.egi.eu/auth/realms/egi
@@ -94,6 +101,7 @@ ifeq ($(OIDC_ISSUER),)
     OIDC_ISSUER := https://login.aai.lifescience-ri.eu/oidc/
   endif
 endif
+
 ifeq ($(OIDC_CLIENT_ID),)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     OIDC_CLIENT_ID := 699e9e29-29e8-4220-8863-5306d8a7feb8
@@ -102,29 +110,64 @@ ifeq ($(OIDC_CLIENT_ID),)
   endif
 endif
 
-# egi-dev's managed FTS token mode was found non-viable —
-# until the e2e tests get extended to check this properly
-# (separate branch/PR), default TOKEN_MODE to unmanaged specifically for
-# egi-dev so `make tf-apply SCOPE_PROFILE=egi-dev` alone doesn't silently
-# render a broken fts3config. origin==file means "still at the top-of-file
-# default, nobody overrode it" (origin==undefined would never match here,
-# since `TOKEN_MODE ?= managed` above already gave it origin "file") —
-# explicit TOKEN_MODE=... (command line or environment) always still wins.
+ifeq ($(OIDC_EXPECTED_SCOPE),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_EXPECTED_SCOPE := openid profile eduperson_entitlement offline_access read:/ write:/
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_EXPECTED_SCOPE := openid profile eduperson_entitlement offline_access
+  endif
+endif
+
+# Passed to module.validation_storage
+ifeq ($(OIDC_ISSUER_NAME),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_ISSUER_NAME := egi-checkin-dev
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_ISSUER_NAME := lsaai-dev
+  endif
+endif
+
+# LS AAI restricts Teapot tokens to these audiences; EGI/Keycloak don't use
+# audience restriction here, hence empty for every other profile.
+ifeq ($(TEAPOT_AUDIENCES),)
+  ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    TEAPOT_AUDIENCES := ["https://teapot1.example.org/","https://teapot2.example.org/"]
+  else
+    TEAPOT_AUDIENCES := []
+  endif
+endif
+
+ifeq ($(TEAPOT_EXTRA_SUBS),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    TEAPOT_EXTRA_SUBS := ["0f842730-ebfb-4de6-bcbb-3a44aab5a467@egi.eu","aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu"]
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    TEAPOT_EXTRA_SUBS := ["4ff05c0b-1d83-42b7-a00a-8bd162df4165","28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu"]
+  else
+    TEAPOT_EXTRA_SUBS := []
+  endif
+endif
+
+ifeq ($(SCOPE_PROFILE),local)
+  TEST_OIDC_ENV :=
+else
+  TEST_OIDC_ENV := OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+    OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
+    OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
+    OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+endif
+
+ifeq ($(SCOPE_PROFILE),local)
+  export CONFIG_PROFILE_DIR :=
+else
+  export CONFIG_PROFILE_DIR := $(SCOPE_PROFILE)/
+endif
+
 ifeq ($(origin TOKEN_MODE),file)
   ifeq ($(SCOPE_PROFILE),egi-dev)
     TOKEN_MODE := unmanaged
   endif
 endif
 
-# modules/secrets requires OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET.
-# OIDC_ISSUER/OIDC_CLIENT_ID are usually already filled in by the
-# SCOPE_PROFILE derivation above — this only fires for an unknown
-# SCOPE_PROFILE with no explicit override. OIDC_CLIENT_SECRET has no
-# derivable default (it's the one genuinely secret value) and always
-# needs this check. Fails loudly here rather than letting an empty
-# string silently pass through as TF_VAR_oidc_issuer="" — that would
-# make `terraform plan` "succeed" with broken rendered content instead
-# of failing clearly.
 define tf_require_oidc
 	@[ -n "$(OIDC_ISSUER)" ] && [ -n "$(OIDC_CLIENT_ID)" ] || \
 	  { echo "ERROR: OIDC_ISSUER/OIDC_CLIENT_ID couldn't be derived from SCOPE_PROFILE='$(SCOPE_PROFILE)'."; \
@@ -152,10 +195,62 @@ endif
 
 # Runtime-specific execution wrappers
 
-ifeq ($(RUNTIME),k8s)
-EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+# Terraform outputs needed to wire DNS + Teapot ports for the ephemeral
+# staging container. $(shell ...) only actually runs when a variable that
+# uses this macro is expanded (i.e. inside a staging test recipe), not on
+# every `make` invocation — but it does still require tf-init/tf-apply to
+# have already populated state, same precondition test-rucio-transfers
+# always had for GITOPS_ENV=staging.
+define staging_tf_output
+$(shell terraform -chdir=$(TF_DIR) output -raw $(1) 2>/dev/null)
+endef
+
+# Named, lazily-evaluated Terraform outputs
+RUCIO_PUBLIC_HOSTNAME       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_public_hostname),)
+FTS_PUBLIC_HOSTNAME         = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_public_hostname),)
+GATEWAY_STATIC_IP           = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,gateway_static_ip),)
+VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_hostname),)
+VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
+
+ifeq ($(GITOPS_ENV),staging)
+  override RUNTIME := k8s
+  # No long-running rucio-client pod exists in a real Terraform-managed
+  # environment (sandbox-only convenience container)
+  EXEC_RUCIO = docker run --rm -i \
+    --network host \
+	--cap-add=SYS_ADMIN \
+    --add-host $(RUCIO_PUBLIC_HOSTNAME):$(GATEWAY_STATIC_IP) \
+    --add-host $(FTS_PUBLIC_HOSTNAME):$(GATEWAY_STATIC_IP) \
+    --add-host $(VALIDATION_STORAGE_HOSTNAME):$(VALIDATION_STORAGE_IP) \
+    -e REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/tls_ca_bundle.pem \
+    -e RUNTIME=k8s \
+    -e K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	-e KUBECONFIG=/root/.kube/config \
+    -e DAEMON_MODE=$(DAEMON_MODE) \
+    -e TEAPOT1_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8081 \
+    -e TEAPOT2_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8082 \
+    -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
+    -v $(TESTBED_HOST_SOURCE)/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro \
+	-v $(TESTBED_HOST_SOURCE)/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro \
+    -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
+    -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
+	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
+    mgajekcern/rucio-client-docker-kubectl:latest
+  # Prefixed into each test recipe's bash -c string below (empty for
+  # sandbox, where the compose/helm rucio-client image already has
+  # pytest baked in). boto3 deliberately skipped — not needed by
+  # test_rucio_transfers.py; add it back here if test-copernicus-transfers
+  # is run this way too.
+  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
+  EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
+else ifeq ($(RUNTIME),k8s)
+  EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+  EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
 else
-EXEC_RUCIO := docker exec compose-rucio-client-1
+  EXEC_RUCIO := docker exec compose-rucio-client-1
+  EXEC_FTS := docker exec -i compose-fts-1
 endif
 
 ## Help
@@ -188,6 +283,7 @@ certs: ## Generate CA and host certificates
 
 .PHONY: init
 init: ## Init testbed accounts, RSEs, OIDC seed
+	$(TEST_OIDC_ENV) \
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
@@ -352,7 +448,7 @@ helm-template: ## Render manifests without installing
 ## Tests
 
 test-rucio-transfers: ## Rucio E2E transfer test
-	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
@@ -362,15 +458,39 @@ test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
 		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		$(STAGING_PIP_INSTALL) \
+		$(TEST_OIDC_ENV) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) python3 /tests/probe_teapot_auth.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_teapot.py -v"
+
+.PHONY: probe-xrootd
+probe-xrootd: ## XRootD probe with SciTokens
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_xrootd.py -v"
+
+.PHONY: probe-fts-teapot
+probe-fts-teapot: ## Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
+	$(EXEC_FTS) env \
+	  OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
+	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
+	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
+	  python3 - < shared/tests/probe_fts_teapot.py
+
+.PHONY: probe-fts-xrootd
+probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
+	$(EXEC_FTS) env \
+	  OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
+	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
+	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
+	  python3 - < shared/tests/probe_fts_xrootd.py
 
 ## Terraform
 
@@ -404,7 +524,7 @@ tf-docs: ## Generate Terraform reference docs. Needs terraform-docs.
 	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }
 	@for dir in bootstrap environments/staging environments/production \
 	            modules/networking modules/kubernetes modules/database-postgres \
-				modules/database-mysql modules/secrets; do \
+				modules/database-mysql modules/secrets modules/validation-storage; do \
 	  echo "Injecting docs into deploy/terraform/$$dir/README.md"; \
 	  terraform-docs markdown table --sort-by required \
 	    --output-file README.md --output-mode inject \
@@ -416,55 +536,25 @@ tf-docs: ## Generate Terraform reference docs. Needs terraform-docs.
 tf-plan: ## Plan Terraform changes for TF_ENV
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) plan -no-color -out=tfplan
 
 .PHONY: tf-apply
 tf-apply: ## Apply TF_ENV. Uses saved plan if present. AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
-	@if [ -f $(TF_DIR)/tfplan ]; then \
+	@if [ -z "$(TF_TARGET)" ] && [ -f $(TF_DIR)/tfplan ]; then \
 	  $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) tfplan; \
 	else \
 	  $(TF_RESOLVE_ENV); \
-	  TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	  TF_VAR_region="$$GCP_REGION" \
-	  TF_VAR_network_id="$$TF_NETWORK_ID" \
-	  TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	  TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	  TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	  TF_VAR_bootstrap_userpass_pwd="secret" \
-	  TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	  TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	  TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	  TF_VAR_token_mode="$(TOKEN_MODE)" \
-	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG); \
+	  $(TF_VARS) \
+	    $(TERRAFORM) apply -no-color $(TF_AUTO_APPROVE_FLAG) $(TF_TARGET_FLAG); \
 	fi
 
 .PHONY: tf-destroy
 tf-destroy: ## Destroy TF_ENV (GKE, Cloud SQL, Secret Manager, not networking). AUTO_APPROVE=1 for CI.
 	$(call tf_require_oidc)
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) destroy -no-color $(TF_AUTO_APPROVE_FLAG)
 
 .PHONY: tf-output
@@ -475,7 +565,24 @@ tf-output: ## Show Terraform outputs for TF_ENV
 tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 	@$(TF_RESOLVE_ENV); \
 	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"; \
+	mkdir -p $(CURDIR)/.kube; \
+	CLUSTER_NAME=$$($(TERRAFORM) output -raw cluster_name); \
+	CLUSTER_ENDPOINT=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --format='value(endpoint)'); \
+	CLUSTER_CA=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
+	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --format='value(masterAuth.clusterCaCertificate)'); \
+	ACCESS_TOKEN=$$(gcloud auth print-access-token); \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-cluster gke \
+	  --server="https://$$CLUSTER_ENDPOINT" \
+	  --certificate-authority=<(echo "$$CLUSTER_CA" | base64 -d) --embed-certs=true; \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-credentials gke-token \
+	  --token="$$ACCESS_TOKEN"; \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-context gke \
+	  --cluster=gke --user=gke-token --namespace=$(K8S_NAMESPACE); \
+	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) use-context gke
 
 .PHONY: tf-smoke-test
 tf-smoke-test: ## Run smoke tests against TF_ENV. Run tf-kubeconfig first.
@@ -487,17 +594,7 @@ tf-import: ## Import an existing GCP resource into TF_ENV's state. Usage: make t
 	@[ -n "$(RESOURCE)" ] && [ -n "$(ID)" ] || \
 	  { echo "ERROR: usage: make tf-import RESOURCE=<terraform address> ID=<cloud resource id>"; exit 1; }
 	@$(TF_RESOLVE_ENV); \
-	TF_VAR_project_id="$$GCP_PROJECT_ID" \
-	TF_VAR_region="$$GCP_REGION" \
-	TF_VAR_network_id="$$TF_NETWORK_ID" \
-	TF_VAR_subnet_id="$$TF_SUBNET_ID" \
-	TF_VAR_pods_range_name="$$TF_PODS_RANGE_NAME" \
-	TF_VAR_services_range_name="$$TF_SERVICES_RANGE_NAME" \
-	TF_VAR_bootstrap_userpass_pwd="secret" \
-	TF_VAR_oidc_issuer="$(OIDC_ISSUER)" \
-	TF_VAR_oidc_client_id="$(OIDC_CLIENT_ID)" \
-	TF_VAR_oidc_client_secret="$(OIDC_CLIENT_SECRET)" \
-	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	$(TF_VARS) \
 	  $(TERRAFORM) import -no-color "$(RESOURCE)" "$(ID)"
 
 .PHONY: tf-force-unlock
@@ -506,10 +603,18 @@ tf-force-unlock: ## Force-unlock TF_ENV's state after a stale/abandoned lock. Us
 	  { echo "ERROR: usage: make tf-force-unlock LOCK_ID=<lock id from the error message>"; exit 1; }
 	$(TERRAFORM) force-unlock $(if $(filter 1,$(AUTO_APPROVE)),-force) $(LOCK_ID)
 
+.PHONY: certs-sync
+certs-sync: ## Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-certs" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json,base64; d=json.load(sys.stdin); [open(f'certs/{k}','w').write(v) for k,v in d.items()]"
+
 ## Cleanup
 
-.PHONY: clean
-clean: ## Remove certs, volumes, Terraform/Python/Helm artifacts
+.PHONY: clear-artifacts
+clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
@@ -526,3 +631,10 @@ clean: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem), compose volumes,"
 	@echo ".terraform/tfplan/crash.log (preserved .terraform.lock.hcl), __pycache__/.pytest_cache, and Helm chart .tgz deps"
 	@echo "(NOT touched: envs/*.env — this holds real configured credentials, not regenerable artifacts)"
+
+.PHONY: cleanup
+cleanup: ## Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
+	$(TEST_OIDC_ENV) \
+	RUNTIME=$(RUNTIME) \
+	K8S_NAMESPACE=$(K8S_NAMESPACE) \
+	./shared/scripts/cleanup-testbed.sh

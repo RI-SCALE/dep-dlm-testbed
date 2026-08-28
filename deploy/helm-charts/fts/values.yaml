@@ -19,22 +19,14 @@ service:
 ftsdb:
   enabled: false
   hostname: ftsdb
-  image: mysql:8
+  image: mysql:8.4
   storage: 2Gi
   resources: {}
 
 volumes: []
 volumeMounts: []
 
-env:
-  - name: REQUESTS_CA_BUNDLE
-    value: /etc/pki/tls/certs/ca-bundle.crt
-  - name: X509_USER_PROXY
-    value: /tmp/x509up_u0
-  - name: XrdSecGSISRVNAMES
-    value: "*"
-  - name: XrdSecGSIDELEGPROXY
-    value: "2"
+env: []
 
 resources: {}
 

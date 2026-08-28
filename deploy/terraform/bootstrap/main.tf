@@ -31,6 +31,7 @@ locals {
     "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "sts.googleapis.com", # Workload Identity Federation token exchange
+    "dns.googleapis.com",
   ]
 }
 
@@ -176,4 +177,25 @@ resource "google_storage_bucket_iam_member" "tf_state_ci_access" {
   bucket = google_storage_bucket.tf_state[each.key].name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.terraform_ci[each.key].email}"
+}
+
+resource "google_compute_project_metadata_item" "enable_oslogin" {
+  for_each = local.environments
+
+  project = google_project.env[each.key].project_id
+  key     = "enable-oslogin"
+  value   = "TRUE"
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_project_iam_member" "os_login_admins" {
+  for_each = {
+    for pair in setproduct(keys(local.environments), var.os_login_admins) :
+    "${pair[0]}.${pair[1]}" => { env = pair[0], user = pair[1] }
+  }
+
+  project = google_project.env[each.value.env].project_id
+  role    = "roles/compute.osAdminLogin"
+  member  = "user:${each.value.user}"
 }

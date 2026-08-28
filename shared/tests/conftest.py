@@ -42,8 +42,13 @@ K8S_TARGETS: dict[str, tuple[str, Optional[str]]] = {
 
 # ── Service constants ─────────────────────────────────────────────────────
 
-TEAPOT1_URL = "https://teapot1:8081"
-TEAPOT2_URL = "https://teapot2:8081"
+VALSTORAGE_HOST = os.environ.get("VALIDATION_STORAGE_HOST")
+TEAPOT1_URL = os.environ.get("TEAPOT1_URL") or (
+    f"https://{VALSTORAGE_HOST}:8081" if VALSTORAGE_HOST else "https://teapot1:8081"
+)
+TEAPOT2_URL = os.environ.get("TEAPOT2_URL") or (
+    f"https://{VALSTORAGE_HOST}:8082" if VALSTORAGE_HOST else "https://teapot2:8081"
+)
 
 # Rucio client config (userpass, single instance)
 CFG_RUCIO = "/opt/rucio/etc/rucio.cfg"
@@ -77,8 +82,8 @@ OIDC_GRANT_TYPE = (
     os.environ.get("OIDC_GRANT_TYPE") or "password"
 )  # password | client_credentials
 
-OIDC_STORAGE_SCOPE = (
-    os.environ.get("OIDC_STORAGE_SCOPE") or "openid storage.read:/ storage.modify:/"
+OIDC_EXPECTED_SCOPE = (
+    os.environ.get("OIDC_EXPECTED_SCOPE") or "openid storage.read:/ storage.modify:/"
 )
 OIDC_TEAPOT_AUD_SCOPE = (
     os.environ.get("OIDC_TEAPOT_AUD_SCOPE") or "aud:teapot1 aud:teapot2"
@@ -89,6 +94,8 @@ OIDC_TEAPOT_AUD_SCOPE = (
 # consulted when OIDC_GRANT_TYPE == "client_credentials" (the EGI path);
 # under the password grant it's never even passed to the token request.
 OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX") or ".example.org"
+
+XRDFS_TRANSIENT_ERR = "resource temporarily unavailable"
 
 
 def _rse_resource(name: str) -> str:
@@ -309,51 +316,105 @@ def validate_rule(
     )
 
 
-# ── XRootD filesystem seeding (via container exec) ────────────────────────
+# ── XRootD protocol-based seeding / dest-prep ──────────────────────────────
 
 
-def seed_xrd(svc: str, pfn: str) -> tuple[int, str]:
-    """
-    Seed a test file into an XRootD container at the given PFN path.
-    Returns (size_bytes, adler32_hex).
-    """
-    local_path = pfn.split("//", 1)[-1].split("/", 1)[-1]
-    local_path = "/" + local_path
+def _xrdfs_run(
+    args: list, retries: int = 3, backoff: float = 3.0, **kwargs
+) -> subprocess.CompletedProcess:
+    """subprocess.run(["xrdfs", *args], ...) with retry-on-transient-TLS-error."""
+    out = None
+    for attempt in range(1, retries + 1):
+        out = subprocess.run(["xrdfs", *args], **kwargs)
+        stderr = out.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        stderr = stderr or ""
+        if out.returncode == 0 or XRDFS_TRANSIENT_ERR not in stderr.lower():
+            return out
+        if attempt < retries:
+            log.info(
+                "  [%d/%d] transient xrdfs TLS error, retrying in %ss...",
+                attempt,
+                retries,
+                backoff,
+            )
+            time.sleep(backoff)
+    return out
 
-    script = (
-        "set -e; "
-        f'mkdir -p "$(dirname {local_path})"; '
-        f'printf "rucio-test\\n" > {local_path}; '
-        f"chown xrootd:xrootd {local_path} 2>/dev/null || true"
+
+def _xrdcp_run(
+    args: list, retries: int = 3, backoff: float = 3.0, **kwargs
+) -> subprocess.CompletedProcess:
+    """subprocess.run(["xrdcp", *args], ...) with the same transient-TLS
+    retry as _xrdfs_run. xrdcp is normally called with check=True, so its
+    failure mode is CalledProcessError rather than a returncode — this
+    catches that specifically instead of inspecting .returncode."""
+    for attempt in range(1, retries + 1):
+        try:
+            return subprocess.run(["xrdcp", *args], **kwargs)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(errors="replace")
+            stderr = stderr or ""
+            if attempt < retries and XRDFS_TRANSIENT_ERR in stderr.lower():
+                log.info(
+                    "  [%d/%d] transient xrdcp TLS error, retrying in %ss...",
+                    attempt,
+                    retries,
+                    backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise
+
+
+def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
+    """Seed a test file at the given PFN over HTTP/WebDAV (XRootD's
+    libXrdHttp), matching how FTS itself performs the real transfer.
+    `svc` is only used for logging."""
+    content = b"rucio-test\n"
+    url = pfn.replace(
+        "davs://", "https://", 1
+    )  # XRootD's HTTP listener speaks TLS on the same port
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.put(url, data=content, headers=headers, verify=False, timeout=30)
+    resp.raise_for_status()
+
+    # Read back to confirm the write actually landed, rather than trusting
+    # a 2xx status alone.
+    check = requests.get(url, headers=headers, verify=False, timeout=30)
+    check.raise_for_status()
+    if check.content != content:
+        raise RuntimeError(f"seed_xrd: readback mismatch at {url}")
+
+    adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
+    return len(content), adler
+
+
+def prepare_xrd_dest(pfn: str, token: str = None) -> None:
+    """Pre-create the destination directory via HTTP MKCOL, matching seed_xrd."""
+    remote_dir_url = pfn.replace("davs://", "https://", 1).rsplit("/", 1)[0]
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    resp = requests.request(
+        "MKCOL", remote_dir_url, headers=headers, verify=False, timeout=30
     )
-    svc_exec(svc, ["sh", "-c", script], user="root")
-    raw = svc_exec(svc, ["cat", local_path])
-    adler = "%08x" % (zlib.adler32(raw) & 0xFFFFFFFF)
-    return len(raw), adler
-
-
-def prepare_xrd_dest(svc: str, pfn: str) -> None:
-    """Pre-create the destination directory on an XRootD container."""
-    local_path = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-    script = (
-        f'mkdir -p "$(dirname {local_path})" && '
-        f'chown xrootd:xrootd "$(dirname {local_path})" 2>/dev/null || true'
-    )
-    svc_exec(svc, ["sh", "-c", script], user="root")
+    # 201 = created, 405/409 = already exists — both fine; anything else is real
+    if resp.status_code not in (201, 405, 409):
+        raise RuntimeError(
+            f"prepare_xrd_dest failed for {remote_dir_url}: HTTP {resp.status_code} {resp.text}"
+        )
 
 
 def seed_and_register_files(
-    client,
-    rse: str,
-    scope: str,
-    names: list[str],
-    seed_svc: str,
+    client, rse: str, scope: str, names: list[str], seed_svc: str, token: str = None
 ) -> list[dict]:
     """Seed files into an XRootD RSE and return Rucio replica dicts."""
     registered = []
     for name in names:
         pfn = compute_pfn(client, rse, scope, name)
-        size, adler32 = seed_xrd(seed_svc, pfn)
+        size, adler32 = seed_xrd(seed_svc, pfn, token=token)
         registered.append(
             {
                 "scope": scope,
@@ -368,12 +429,12 @@ def seed_and_register_files(
 
 
 def prepare_xrd_dest_files(
-    client, rse: str, svc: str, scope: str, names: list[str]
+    client, rse: str, scope: str, names: list[str], token: str = None
 ) -> None:
     """Pre-create destination directories on an XRootD RSE for a list of DIDs."""
     for name in names:
         pfn = compute_pfn(client, rse, scope, name)
-        prepare_xrd_dest(svc, pfn)
+        prepare_xrd_dest(pfn, token=token)
 
 
 # ── Keycloak token helpers ────────────────────────────────────────────────
@@ -493,15 +554,23 @@ def webdav_warm_up(
     retries: int = 6,
     interval: int = 10,
 ) -> None:
-    """
-    Trigger Teapot's per-user Storm-WebDAV JVM cold start via PROPFIND.
-    Blocks until HTTP 207 or raises AssertionError.
-    The JVM cold start typically takes 20-40s.
-    """
     log.info("=== Warming up %s Storm-WebDAV instance ===", label)
     resp = None
+    last_exc = None
     for attempt in range(1, retries + 1):
-        resp = webdav_propfind(f"{base_url}{path}", token)
+        try:
+            resp = webdav_propfind(f"{base_url}{path}", token)
+        except requests.exceptions.RequestException as e:
+            last_exc = e
+            log.info(
+                "  [%d] %s request failed (%s) — retrying in %ds",
+                attempt,
+                label,
+                e.__class__.__name__,
+                interval,
+            )
+            time.sleep(interval)
+            continue
         if resp.status_code == 207:
             log.info("  ✓ %s Storm-WebDAV ready (HTTP 207)", label)
             return
@@ -515,7 +584,8 @@ def webdav_warm_up(
         time.sleep(interval)
     raise AssertionError(
         f"{label} warm-up failed after {retries} attempts "
-        f"(last HTTP {resp.status_code if resp else 'N/A'})"
+        f"(last HTTP {resp.status_code if resp else 'N/A'}"
+        f"{', last error: ' + str(last_exc) if last_exc else ''})"
     )
 
 
@@ -549,7 +619,7 @@ def _mint(scope: str, resource: str = None) -> str:
 
 @pytest.fixture(scope="session")
 def oidc_token():
-    return _mint(OIDC_STORAGE_SCOPE, resource=_rse_resource("xrd4"))
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd4"))
 
 
 @pytest.fixture(scope="session")
@@ -565,10 +635,10 @@ def teapot_token():
             OIDC_TOKEN_URL,
             OIDC_CLIENT_ID,
             OIDC_CLIENT_SECRET,
-            scope=OIDC_STORAGE_SCOPE,
+            scope=OIDC_EXPECTED_SCOPE,
             resource=[_rse_resource("teapot1"), _rse_resource("teapot2")],
         )
-    scope = " ".join(filter(None, [OIDC_STORAGE_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
+    scope = " ".join(filter(None, [OIDC_EXPECTED_SCOPE, OIDC_TEAPOT_AUD_SCOPE]))
     return fetch_token_password(
         OIDC_TOKEN_URL,
         OIDC_CLIENT_ID,
@@ -585,3 +655,19 @@ def teapots_ready(teapot_token):
     webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token)
     webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token)
     return True
+
+
+@pytest.fixture(scope="session")
+def xrd3_write_token():
+    """Token scoped for writing to XRD3 — needed by seed_xrd/prepare_xrd_dest
+    now that both write over the real protocol (auth-enforced) instead of
+    exec (auth-bypassing)."""
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd3"))
+
+
+@pytest.fixture(scope="session")
+def xrd4_write_token():
+    """Token scoped for writing to XRD4 — destination side of XRD3→XRD4
+    transfers and the dataset tests; needed now that prepare_xrd_dest is
+    protocol-based (auth-enforced) instead of exec-based."""
+    return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd4"))

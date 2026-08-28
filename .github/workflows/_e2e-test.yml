@@ -1,0 +1,108 @@
+name: _e2e-test
+
+on:
+  workflow_call:
+    inputs:
+      tf_env:
+        required: true
+        type: string
+      environment_name:
+        required: true
+        type: string
+      scope_profile:
+        description: "egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile. Without this, make init/test-rucio-transfers silently fall back to SCOPE_PROFILE=local's in-cluster Keycloak assumption, which doesn't exist on a real external-AAI deployment."
+        required: false
+        type: string
+        default: egi-dev
+    secrets:
+      OIDC_CLIENT_ID:
+        required: true
+      OIDC_CLIENT_SECRET:
+        required: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_ENV: ${{ inputs.tf_env }}
+  GITOPS_ENV: ${{ inputs.tf_env }}
+  SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  OIDC_ISSUER: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
+      inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/' ||
+      ''
+    }}
+  OIDC_TOKEN_URL: >-
+    ${{
+      inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/token' ||
+      ''
+    }}
+  OIDC_CLIENT_ID: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_ID || '' }}
+  OIDC_CLIENT_SECRET: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_SECRET || '' }}
+  OIDC_GRANT_TYPE: ${{ inputs.scope_profile != 'local' && 'client_credentials' || 'password' }}
+  OIDC_EXPECTED_SCOPE: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
+      inputs.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
+      ''
+    }}
+  OIDC_IDENTITY_SUB: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu' ||
+      inputs.scope_profile == 'ls-aai-dev' && '28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu' ||
+      ''
+    }}
+
+jobs:
+  e2e:
+    name: e2e transfer tests
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment_name }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
+      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
+      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
+      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
+      RUNTIME: k8s
+      K8S_NAMESPACE: dep-dlm-${{ inputs.tf_env }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: make tf-init
+        run: make tf-init
+
+      - name: make tf-kubeconfig
+        run: make tf-kubeconfig
+
+      - name: Sync certs for e2e test container
+        run: make certs-sync
+
+      - name: make init
+        run: make init
+
+      - name: make test-rucio-transfers
+        run: make test-rucio-transfers
+
+      - name: Remove local certs
+        if: always()
+        run: rm -rf certs/

@@ -1,0 +1,21 @@
+name: GitOps deploy (staging, standalone)
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_depth: { type: choice, options: [gitops, e2e], default: gitops }
+      scope_profile: { type: choice, options: [egi-dev, ls-aai-dev], default: egi-dev }
+      token_mode: { type: choice, options: [managed, unmanaged], default: unmanaged }
+      gitops_engine: { type: choice, options: [argocd, flux], default: argocd }
+jobs:
+  gitops:
+    uses: ./.github/workflows/_gitops-deploy.yml
+    with:
+      tf_env: staging
+      environment_name: staging
+      gitops_engine: ${{ inputs.gitops_engine }}
+      deploy_depth: ${{ inputs.deploy_depth }}
+      token_mode: ${{ inputs.token_mode }}
+      scope_profile: ${{ inputs.scope_profile }}
+    secrets:
+      OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
+      OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}

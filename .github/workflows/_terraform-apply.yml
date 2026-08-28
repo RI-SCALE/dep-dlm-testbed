@@ -30,8 +30,8 @@ env:
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:
-  plan:
-    name: plan
+  apply:
+    name: plan, apply & smoke test (infra only)
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -46,118 +46,6 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    outputs:
-      certs_artifact_id: ${{ steps.upload-certs.outputs.artifact-id }}
-      tfplan_artifact_id: ${{ steps.upload-tfplan.outputs.artifact-id }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: Generate certificates
-        run: make certs
-
-      - name: Upload certs artifact
-        id: upload-certs
-        uses: actions/upload-artifact@v4
-        with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-          retention-days: 1
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: make tf-validate
-        run: make tf-validate
-
-      - name: make tf-plan
-        run: make tf-plan
-
-      - name: Upload plan artifact
-        id: upload-tfplan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}/tfplan
-          retention-days: 1
-
-  apply:
-    name: apply
-    needs: plan
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - name: Download certs artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: certs-${{ inputs.tf_env }}
-          path: certs/
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Download plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.tf_env }}
-          path: deploy/terraform/environments/${{ inputs.tf_env }}
-
-      - name: make tf-apply
-        run: make tf-apply AUTO_APPROVE=1
-
-  smoke-test:
-    name: smoke test (infra only)
-    needs: apply
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-      # No gitops engine installed at this stage — public endpoint tests
-      # would fail deterministically, not flakily, so they're skipped
-      # here rather than allowed to fail. _gitops-deploy.yml's smoke-test
-      # job runs the full suite, including these, once an engine is up.
       SKIP_GATEWAY_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
@@ -183,37 +71,144 @@ jobs:
       - name: make tf-init
         run: make tf-init
 
+      # ── generate certs (pass 1, no external SAN yet) ──────────────────
+      # Even with -target, Terraform evaluates every resource's arguments
+      # while building the plan graph -- including module.secrets' file()
+      # calls -- regardless of which resources are actually targeted for
+      # apply. certs/ has to exist on disk before ANY terraform
+      # plan/apply runs, including the targeted one below, or these
+      # file() lookups fail outright. This first pass has no
+      # VALSTORAGE_EXTERNAL_SAN (the IP doesn't exist yet); it exists
+      # only so the upcoming targeted apply has files to read.
+      - name: Generate certificates (pass 1, no external SAN)
+        run: make certs
+
+      # ── self-heal: import the static IP if a prior run created it in
+      #    GCP but didn't get to record it in Terraform state (e.g. a
+      #    cancelled/failed job between resource creation and state
+      #    write) — without this, every subsequent run 409s forever.
+      - name: Import validation-storage IP if orphaned
+        run: |
+          ADDR_NAME="dep-dlm-${{ inputs.tf_env }}-validation-storage-ip"
+          if terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} state list \
+              | grep -qx 'module.validation_storage.google_compute_address.this'; then
+            echo "Already tracked in state — nothing to do."
+            exit 0
+          fi
+          if gcloud compute addresses describe "$ADDR_NAME" \
+              --region="${{ vars.GCP_REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            echo "Address exists in GCP but not in state — importing."
+            make tf-import \
+              RESOURCE=module.validation_storage.google_compute_address.this \
+              ID="projects/${{ vars.GCP_PROJECT_ID }}/regions/${{ vars.GCP_REGION }}/addresses/$ADDR_NAME"
+          else
+            echo "Address doesn't exist yet — normal first-run case, tf-apply will create it."
+          fi
+
+      # ── self-heal: import Cloud SQL instances if a prior run created
+      #    them in GCP but didn't get to record them in Terraform state
+      #    (e.g. a cancelled/failed job, or a client-side wait-timeout
+      #    like googleapi 409 after a successful async create) — without
+      #    this, every subsequent run 409s forever, same failure mode
+      #    the validation-storage IP import above already guards against.
+      - name: Import Cloud SQL instances if orphaned
+        run: |
+          import_if_orphaned() {
+            local state_addr="$1" instance_name="$2"
+            if terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} state list \
+                | grep -qx "$state_addr"; then
+              echo "$state_addr already tracked in state — nothing to do."
+              return 0
+            fi
+            if gcloud sql instances describe "$instance_name" \
+                --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+              echo "$instance_name exists in GCP but not in state — importing."
+              make tf-import \
+                RESOURCE="$state_addr" \
+                ID="${{ vars.GCP_PROJECT_ID }}/$instance_name"
+            else
+              echo "$instance_name doesn't exist yet — normal first-run case, tf-apply will create it."
+            fi
+          }
+          import_if_orphaned module.rucio_database.google_sql_database_instance.this "dep-dlm-${{ inputs.tf_env }}-pg"
+          import_if_orphaned module.fts_database.google_sql_database_instance.this "dep-dlm-${{ inputs.tf_env }}-mysql"
+
+      # ── reserve validation-storage's static IP ────────────────────────
+      # validation-storage's xrd3/xrd4/teapot1/teapot2 certs need the VM's
+      # public IP baked into their SAN (see generate-certs.sh's
+      # VALSTORAGE_EXTERNAL_SAN) so external TLS clients can verify them
+      # -- but that IP only exists once google_compute_address.this is
+      # actually created. -target applies just that one resource so the
+      # IP is available before certs are regenerated with it, without
+      # doing a full apply twice. Idempotent on every run after the
+      # address already exists.
+      - name: Reserve validation-storage static IP (targeted apply)
+        run: make tf-apply AUTO_APPROVE=1 TF_TARGET=module.validation_storage.google_compute_address.this
+
+      - name: Read validation-storage IP
+        id: valstorage_ip
+        run: |
+          IP=$(terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} \
+            output -raw validation_storage_ip)
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+
+      - name: Compute validation-storage hostname
+        id: valstorage_hostname
+        run: |
+          echo "hostname=valstorage.dep-dlm-${{ inputs.tf_env }}.example.com" >> "$GITHUB_OUTPUT"
+
+      # ── plan ──────────────────────────────────────────────────────────
+
+      # Pass 2: regenerate with the real IP now baked into the four
+      # external services' SANs. Overwrites pass 1's placeholder certs --
+      # these are the ones that actually get uploaded to Secret Manager
+      # by the full apply below.
+      - name: Generate certificates (pass 2, with external SAN)
+        env:
+          VALSTORAGE_EXTERNAL_SAN: ${{ steps.valstorage_ip.outputs.ip }},${{ steps.valstorage_hostname.outputs.hostname }}
+        run: make certs
+
+      - name: make tf-validate
+        run: make tf-validate
+
+      - name: make tf-plan
+        run: make tf-plan
+
+      # ── apply ─────────────────────────────────────────────────────────
+
+      - name: make tf-apply
+        run: make tf-apply AUTO_APPROVE=1
+
+      # ── reset validation-storage so it re-pulls certs/config ──────────
+      # Terraform apply only *uploads* new secret versions to GSM; the VM's
+      # startup-script (which wipes/re-populates $CONFIG_DIR and pulls
+      # fresh cert bytes) only runs at boot — metadata-only updates don't
+      # re-trigger it. Without an explicit reset, cert/config fixes land
+      # in Secret Manager but never reach the running instance.
+      - name: Reset validation-storage instance
+        if: inputs.tf_env == 'staging'
+        run: |
+          gcloud compute instances reset "dep-dlm-${{ inputs.tf_env }}-validation-storage" \
+            --zone="${{ vars.GCP_ZONE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}"
+          # give the startup-script + container stack time to come back
+          sleep 15
+
+      # ── smoke-test (infra only) ─────────────────────────────────────
+
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
 
       - name: Install smoke test dependencies
         run: |
           pip install --break-system-packages \
-            pytest google-cloud-secret-manager requests
+              pytest google-cloud-secret-manager requests
 
       - name: make tf-smoke-test
         run: make tf-smoke-test
 
-  cleanup:
-    name: delete sensitive artifacts
-    needs: [plan, apply]
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete certs artifact
-        if: needs.plan.outputs.certs_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.certs_artifact_id }}"
-
-      - name: Delete plan artifact
-        if: needs.plan.outputs.tfplan_artifact_id != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X DELETE \
-            "repos/${{ github.repository }}/actions/artifacts/${{ needs.plan.outputs.tfplan_artifact_id }}"
+      # ── cleanup ──────────────────────────────────────────────────────
+      - name: Remove local certs
+        if: always()
+        run: rm -rf certs/

@@ -60,3 +60,22 @@ output "rucio_public_hostname" {
 output "fts_public_hostname" {
   value = module.kubernetes.fts_public_hostname
 }
+
+output "validation_storage_ip" {
+  value = module.validation_storage.external_ip
+}
+output "validation_storage_hostname" {
+  value = module.validation_storage.hostname
+}
+output "validation_storage_xrd3_pfn_root" {
+  value = module.validation_storage.xrd3_pfn_root
+}
+output "validation_storage_xrd4_pfn_root" {
+  value = module.validation_storage.xrd4_pfn_root
+}
+output "validation_storage_teapot1_pfn_root" {
+  value = module.validation_storage.teapot1_pfn_root
+}
+output "validation_storage_teapot2_pfn_root" {
+  value = module.validation_storage.teapot2_pfn_root
+}

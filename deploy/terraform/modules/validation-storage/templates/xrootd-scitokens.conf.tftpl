@@ -1,0 +1,10 @@
+[Global]
+onmissing = passthrough
+audience = xrd3, xrd4, fts, rucio
+
+[Issuer ${oidc_issuer_name}]
+issuer = ${oidc_issuer}
+base_path = /data
+map_subject = True
+# default_user is a fallback, but 'u *' in authdb is more robust
+default_user = xrootd

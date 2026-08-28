@@ -75,10 +75,53 @@ module "secrets" {
   fts_db_password   = module.fts_database.fts_db_password
 
   bootstrap_userpass_pwd = var.bootstrap_userpass_pwd
+  userpass_password      = var.userpass_password
   oidc_issuer            = var.oidc_issuer
   oidc_client_id         = var.oidc_client_id
   oidc_client_secret     = var.oidc_client_secret
+  oidc_expected_scope    = var.oidc_expected_scope
   token_mode             = var.token_mode
-  # rucio_host, site_name, fts3rest_log_level left at modules/secrets'
-  # own defaults — override here only if staging needs to diverge.
+  storage_ip             = module.validation_storage.external_ip
+
+  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
+}
+
+# zone created once, shared
+resource "google_dns_managed_zone" "internal" {
+  name       = "dep-dlm-staging-internal"
+  dns_name   = "dep-dlm-staging.example.com."
+  visibility = "private"
+  private_visibility_config {
+    networks { network_url = var.network_id }
+  }
+}
+
+module "validation_storage" {
+  source = "../../modules/validation-storage"
+
+  project_id            = var.project_id
+  region                = var.region
+  zone                  = "europe-west3-b"
+  network_id            = var.network_id
+  subnet_id             = var.subnet_id
+  name_prefix           = "dep-dlm-staging"
+  terraform_ci_sa_email = "dep-dlm-terraform-ci@${var.project_id}.iam.gserviceaccount.com"
+
+  hostname        = "valstorage.dep-dlm-staging.example.com"
+  certs_secret_id = module.secrets.secret_ids["certs"]
+
+  oidc_issuer       = var.oidc_issuer
+  oidc_issuer_name  = var.oidc_issuer_name
+  teapot_idp_name   = var.teapot_idp_name
+  teapot_audiences  = var.teapot_audiences
+  teapot_extra_subs = var.teapot_extra_subs
+
+  repo_root = abspath("${path.module}/../../../..")
+
+  labels = {
+    environment = "staging"
+    component   = "validation-storage"
+  }
+
+  dns_zone_name = google_dns_managed_zone.internal.name
 }

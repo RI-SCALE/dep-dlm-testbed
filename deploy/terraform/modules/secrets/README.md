@@ -37,10 +37,16 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | n/a | yes |
 | <a name="input_rucio_db_host"></a> [rucio\_db\_host](#input\_rucio\_db\_host) | Private IP of the rucio Cloud SQL instance (module.rucio\_database.private\_ip\_address) | `string` | n/a | yes |
 | <a name="input_rucio_db_password"></a> [rucio\_db\_password](#input\_rucio\_db\_password) | rucio DB user password (module.rucio\_database.rucio\_db\_password) — sensitive, lands in this module's plan/state same as the password itself already does upstream | `string` | n/a | yes |
+| <a name="input_storage_ip"></a> [storage\_ip](#input\_storage\_ip) | External IP address of the validation-storage GCE instance, used to populate FTS's hostAliases so it can resolve valstorage.dep-dlm-<env>.example.com without a real DNS record. | `string` | n/a | yes |
+| <a name="input_userpass_password"></a> [userpass\_password](#input\_userpass\_password) | n/a | `string` | n/a | yes |
+| <a name="input_oidc_client_account"></a> [oidc\_client\_account](#input\_oidc\_client\_account) | Rucio account oidc-client.cfg authenticates as for interactive CLI use (rucio whoami/upload/download). Distinct from rucio.cfg's [client] account (root, used for internal bootstrap/admin calls). | `string` | `"randomaccount"` | no |
+| <a name="input_oidc_expected_scope"></a> [oidc\_expected\_scope](#input\_oidc\_expected\_scope) | Space-separated scope string rucio.cfg's [oidc] expected\_scope validates incoming tokens against. Must match what idpsecrets.json's capabilities.scope\_map actually produces for this issuer (e.g. EGI: 'storage.read:/ storage.modify:/' if scope\_map keys are used as-is, or 'read:/ write:/' if scope\_map remaps them — check the issuer's idpsecrets.json before overriding). Differs per OIDC profile the same way oidc\_issuer does. | `string` | `"openid offline_access storage.read:/ storage.modify:/"` | no |
 | <a name="input_rucio_host"></a> [rucio\_host](#input\_rucio\_host) | Base URL the rucio client/auth host point at | `string` | `"http://rucio-server"` | no |
 | <a name="input_secret_names"></a> [secret\_names](#input\_secret\_names) | Logical secret names to create empty containers for (values provisioned out-of-band). | `list(string)` | <pre>[<br/>  "certs",<br/>  "secrets"<br/>]</pre> | no |
 | <a name="input_site_name"></a> [site\_name](#input\_site\_name) | FTS SiteName / rucio SiteName-equivalent | `string` | `"DOCKER"` | no |
 | <a name="input_token_mode"></a> [token\_mode](#input\_token\_mode) | managed (exchange, FTS manages token lifecycle) \| unmanaged (client\_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN\_MODE | `string` | `"managed"` | no |
+| <a name="input_userpass_account"></a> [userpass\_account](#input\_userpass\_account) | n/a | `string` | `"ddmlab"` | no |
+| <a name="input_userpass_username"></a> [userpass\_username](#input\_userpass\_username) | n/a | `string` | `"ddmlab"` | no |
 
 ## Outputs
 

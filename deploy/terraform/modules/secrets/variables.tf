@@ -72,6 +72,31 @@ variable "oidc_client_secret" {
   sensitive   = true
 }
 
+variable "oidc_expected_scope" {
+  description = "Space-separated scope string rucio.cfg's [oidc] expected_scope validates incoming tokens against. Must match what idpsecrets.json's capabilities.scope_map actually produces for this issuer (e.g. EGI: 'storage.read:/ storage.modify:/' if scope_map keys are used as-is, or 'read:/ write:/' if scope_map remaps them — check the issuer's idpsecrets.json before overriding). Differs per OIDC profile the same way oidc_issuer does."
+  type        = string
+  default     = "openid offline_access storage.read:/ storage.modify:/"
+}
+
+variable "oidc_client_account" {
+  description = "Rucio account oidc-client.cfg authenticates as for interactive CLI use (rucio whoami/upload/download). Distinct from rucio.cfg's [client] account (root, used for internal bootstrap/admin calls)."
+  type        = string
+  default     = "randomaccount"
+}
+
+variable "userpass_username" {
+  type    = string
+  default = "ddmlab"
+}
+variable "userpass_account" {
+  type    = string
+  default = "ddmlab"
+}
+variable "userpass_password" {
+  type      = string
+  sensitive = true
+}
+
 variable "token_mode" {
   description = "managed (exchange, FTS manages token lifecycle) | unmanaged (client_credentials, AllowNonManagedTokens=True) — mirrors the sandbox's TOKEN_MODE"
   type        = string
@@ -97,4 +122,14 @@ variable "fts_db_password" {
   description = "fts DB user password (module.fts_database.fts_db_password) — sensitive"
   type        = string
   sensitive   = true
+}
+
+variable "storage_ip" {
+  description = "External IP address of the validation-storage GCE instance, used to populate FTS's hostAliases so it can resolve valstorage.dep-dlm-<env>.example.com without a real DNS record."
+  type        = string
+
+  validation {
+    condition     = can(cidrhost("${var.storage_ip}/32", 0))
+    error_message = "storage_ip must be a valid IPv4 address."
+  }
 }

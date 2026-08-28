@@ -16,9 +16,9 @@ resource "google_secret_manager_secret" "this" {
 # to every secret this module manages. Actual version creation/rotation
 # is out of Terraform's scope by design (see module docstring above).
 resource "google_secret_manager_secret_iam_member" "eso_access" {
-  for_each  = google_secret_manager_secret.this
+  for_each  = toset(var.secret_names)
   project   = var.project_id
-  secret_id = each.value.secret_id
+  secret_id = google_secret_manager_secret.this[each.key].secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.eso_service_account_email}"
 }

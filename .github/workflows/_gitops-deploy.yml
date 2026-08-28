@@ -14,11 +14,11 @@ on:
         required: false
         type: string
         default: argocd
-      deploy_depth:
-        description: "gitops (install + full smoke tests) | e2e (also seed + run e2e tests)"
+      scope_profile:
+        description: "egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile. Without this, make init/test-rucio-transfers silently fall back to SCOPE_PROFILE=local's in-cluster Keycloak assumption, which doesn't exist on a real external-AAI deployment."
         required: false
         type: string
-        default: gitops
+        default: egi-dev
       token_mode:
         description: "managed | unmanaged — passed through to make argocd-install/flux-install for Vault/token-exchange seeding"
         required: false
@@ -34,14 +34,41 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
-  TOKEN_MODE: ${{ inputs.token_mode }}
   GITOPS_ENV: ${{ inputs.tf_env }}
   GITOPS_REPO_URL: https://github.com/${{ github.repository }}.git
-  OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
+  GITOPS_REVISION: ${{ github.ref_name }}
+  SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
+  OIDC_ISSUER: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
+      inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/' ||
+      ''
+    }}
+  OIDC_TOKEN_URL: >-
+    ${{
+      inputs.scope_profile == 'ls-aai-dev' && 'https://login.aai.lifescience-ri.eu/oidc/token' ||
+      ''
+    }}
+  OIDC_CLIENT_ID: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_ID || '' }}
+  OIDC_CLIENT_SECRET: ${{ inputs.scope_profile != 'local' && secrets.OIDC_CLIENT_SECRET || '' }}
+  OIDC_GRANT_TYPE: ${{ inputs.scope_profile != 'local' && 'client_credentials' || 'password' }}
+  OIDC_EXPECTED_SCOPE: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'openid profile eduperson_entitlement offline_access read:/ write:/' ||
+      inputs.scope_profile == 'ls-aai-dev' && 'openid profile eduperson_entitlement offline_access' ||
+      ''
+    }}
+  OIDC_IDENTITY_SUB: >-
+    ${{
+      inputs.scope_profile == 'egi-dev' && 'aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu' ||
+      inputs.scope_profile == 'ls-aai-dev' && '28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu' ||
+      ''
+    }}
 
 jobs:
-  install:
-    name: ${{ inputs.gitops_engine }} install
+  deploy:
+    name: ${{ inputs.gitops_engine }} deploy
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -55,7 +82,12 @@ jobs:
       TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
       TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
       TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-      GITOPS_REVISION: ${{ github.ref_name }}
+
+      RUNTIME: k8s
+      K8S_NAMESPACE: dep-dlm-${{ inputs.tf_env }}
+
+      SKIP_VALIDATION_STORAGE_CHECKS: "1"
+      SKIP_DB_CHECKS: "1"
     steps:
       - uses: actions/checkout@v6
 
@@ -73,11 +105,17 @@ jobs:
         with:
           install_components: "gke-gcloud-auth-plugin"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: make tf-init
         run: make tf-init
 
       - name: Fetch kubeconfig
         run: make tf-kubeconfig
+
+      # ── install (always runs) ────────────────────────────────────────
 
       - name: Uninstall the other gitops engine, if present
         run: |
@@ -101,12 +139,37 @@ jobs:
         if: inputs.gitops_engine == 'flux'
         uses: ./.github/actions/wait-for-flux-ready
 
+      # rucio-server and the daemons (conveyor-*, judge-*, reaper) all read
+      # rucio.cfg/idpsecrets.json once at startup — a Terraform-driven
+      # secret change won't reach already-running processes without a
+      # restart. fts reads env vars (e.g. VALSTORAGE_IP) from testbed-secrets the
+      # same way — same restart requirement.
+      - name: Restart rucio-server, daemons, and fts to pick up latest secrets
+        run: |
+          ns=dep-dlm-${{ inputs.tf_env }}
+          kubectl -n "$ns" annotate externalsecret testbed-secrets \
+            force-sync="$(date +%s)" --overwrite
+          kubectl -n "$ns" get deploy/rucio-server >/dev/null 2>&1 && \
+            kubectl -n "$ns" rollout restart deploy/rucio-server || true
+          kubectl -n "$ns" get deploy/fts >/dev/null 2>&1 && \
+            kubectl -n "$ns" rollout restart deploy/fts || true
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n "$ns" get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
+              kubectl -n "$ns" rollout restart deploy/rucio-daemons-$d || true
+          done
+
       - name: Verify workload pods are Running
         run: |
           ns=dep-dlm-${{ inputs.tf_env }}
           kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
           kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
           kubectl -n $ns rollout status deploy/fts --timeout=300s
+          for d in conveyor-submitter conveyor-poller conveyor-finisher \
+                   judge-evaluator judge-cleaner reaper; do
+            kubectl -n $ns get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
+              kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s
+          done
           kubectl -n $ns get pods
 
       - name: Wait for Gateway to be Programmed
@@ -139,48 +202,7 @@ jobs:
           echo "=== Events ==="
           kubectl -n dep-dlm-${{ inputs.tf_env }} get events --sort-by=.lastTimestamp | tail -50 || true
 
-  smoke-test-full:
-    name: smoke test (full, incl. public endpoints)
-    needs: install
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Fetch kubeconfig
-        run: make tf-kubeconfig
+      # ── smoke-test-full (always runs, once install succeeds) ──────────
 
       - name: Install smoke test dependencies
         run: |
@@ -189,49 +211,3 @@ jobs:
 
       - name: make tf-smoke-test
         run: make tf-smoke-test
-
-  seed-and-e2e:
-    name: seed + e2e tests
-    needs: smoke-test-full
-    if: inputs.deploy_depth == 'e2e'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment_name }}
-    permissions:
-      id-token: write
-      contents: read
-    env:
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ vars.GCP_REGION }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_NETWORK_ID: ${{ vars.TF_NETWORK_ID }}
-      TF_SUBNET_ID: ${{ vars.TF_SUBNET_ID }}
-      TF_PODS_RANGE_NAME: ${{ vars.TF_PODS_RANGE_NAME }}
-      TF_SERVICES_RANGE_NAME: ${{ vars.TF_SERVICES_RANGE_NAME }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.TERRAFORM_CI_SERVICE_ACCOUNT }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.15.8"
-
-      - uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
-      - name: make tf-init
-        run: make tf-init
-
-      - name: Fetch kubeconfig
-        run: make tf-kubeconfig
-
-      - name: make init
-        run: make init
-
-      - name: make test-rucio-transfers
-        run: make test-rucio-transfers
