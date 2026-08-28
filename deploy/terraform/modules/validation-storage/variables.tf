@@ -77,9 +77,21 @@ variable "hostname" {
   description = <<-EOT
     Public DNS hostname this VM will be reachable at (e.g.
     validation-storage.dep-dlm-staging.example.com). Must resolve to the
-    static IP this module reserves — DNS record creation is NOT handled by
-    this module (out of scope: depends on the zone/registrar in use), set
-    it manually or via a separate DNS module once the IP output is known.
+    static IP this module reserves via the google_dns_record_set this
+    module creates (see var.dns_zone_name) — the zone itself is shared
+    across the environment and created by the caller, not this module.
+  EOT
+  type        = string
+}
+
+variable "dns_zone_name" {
+  description = <<-EOT
+    Name of the pre-existing Cloud DNS managed zone (e.g.
+    google_dns_managed_zone.internal.name) this module will create
+    var.hostname's A record in. The zone itself is a shared,
+    environment-level resource — created once by the caller (see
+    environments/staging/main.tf) since other hostnames (rucio, fts)
+    may need records in the same zone — not owned by this module.
   EOT
   type        = string
 }

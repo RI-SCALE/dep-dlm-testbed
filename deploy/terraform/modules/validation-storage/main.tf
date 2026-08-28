@@ -167,3 +167,12 @@ resource "google_compute_instance" "this" {
   # by forcing recreation on every apply.
   allow_stopping_for_update = true
 }
+
+resource "google_dns_record_set" "this" {
+  name         = "${var.hostname}."
+  type         = "A"
+  ttl          = 300
+  managed_zone = var.dns_zone_name
+  rrdatas      = [google_compute_address.this.address]
+  project      = var.project_id
+}

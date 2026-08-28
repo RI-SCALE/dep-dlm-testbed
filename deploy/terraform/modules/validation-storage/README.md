@@ -21,6 +21,7 @@ No modules.
 | [google_compute_firewall.validation_storage_iap_ssh](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_compute_firewall.validation_storage_ingress](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_compute_instance.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance) | resource |
+| [google_dns_record_set.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/dns_record_set) | resource |
 | [google_project_iam_member.logging](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_iam_member.monitoring](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_secret_manager_secret_iam_member.certs_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
@@ -32,7 +33,8 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_certs_secret_id"></a> [certs\_secret\_id](#input\_certs\_secret\_id) | Full resource ID of the Secret Manager secret containing this host's cert/key pair + rucio\_ca.pem (JSON-encoded, same shape as module.secrets' certs secret) | `string` | n/a | yes |
-| <a name="input_hostname"></a> [hostname](#input\_hostname) | Public DNS hostname this VM will be reachable at (e.g.<br/>validation-storage.dep-dlm-staging.example.com). Must resolve to the<br/>static IP this module reserves — DNS record creation is NOT handled by<br/>this module (out of scope: depends on the zone/registrar in use), set<br/>it manually or via a separate DNS module once the IP output is known. | `string` | n/a | yes |
+| <a name="input_dns_zone_name"></a> [dns\_zone\_name](#input\_dns\_zone\_name) | Name of the pre-existing Cloud DNS managed zone (e.g.<br/>google\_dns\_managed\_zone.internal.name) this module will create<br/>var.hostname's A record in. The zone itself is a shared,<br/>environment-level resource — created once by the caller (see<br/>environments/staging/main.tf) since other hostnames (rucio, fts)<br/>may need records in the same zone — not owned by this module. | `string` | n/a | yes |
+| <a name="input_hostname"></a> [hostname](#input\_hostname) | Public DNS hostname this VM will be reachable at (e.g.<br/>validation-storage.dep-dlm-staging.example.com). Must resolve to the<br/>static IP this module reserves via the google\_dns\_record\_set this<br/>module creates (see var.dns\_zone\_name) — the zone itself is shared<br/>across the environment and created by the caller, not this module. | `string` | n/a | yes |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for all resources this module creates (e.g. dep-dlm-staging) | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | Self-link or ID of the VPC network to attach the VM(s) to | `string` | n/a | yes |
 | <a name="input_oidc_issuer"></a> [oidc\_issuer](#input\_oidc\_issuer) | External OIDC issuer URL trusted by Teapot/XRootD alongside the internal Keycloak issuer — must match var.oidc\_issuer passed to module.secrets. | `string` | n/a | yes |

@@ -86,6 +86,16 @@ module "secrets" {
   rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
 }
 
+# zone created once, shared
+resource "google_dns_managed_zone" "internal" {
+  name       = "dep-dlm-staging-internal"
+  dns_name   = "dep-dlm-staging.example.com."
+  visibility = "private"
+  private_visibility_config {
+    networks { network_url = var.network_id }
+  }
+}
+
 module "validation_storage" {
   source = "../../modules/validation-storage"
 
@@ -112,4 +122,6 @@ module "validation_storage" {
     environment = "staging"
     component   = "validation-storage"
   }
+
+  dns_zone_name = google_dns_managed_zone.internal.name
 }
