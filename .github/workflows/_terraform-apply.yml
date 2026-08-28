@@ -106,6 +106,34 @@ jobs:
             echo "Address doesn't exist yet — normal first-run case, tf-apply will create it."
           fi
 
+      # ── self-heal: import Cloud SQL instances if a prior run created
+      #    them in GCP but didn't get to record them in Terraform state
+      #    (e.g. a cancelled/failed job, or a client-side wait-timeout
+      #    like googleapi 409 after a successful async create) — without
+      #    this, every subsequent run 409s forever, same failure mode
+      #    the validation-storage IP import above already guards against.
+      - name: Import Cloud SQL instances if orphaned
+        run: |
+          import_if_orphaned() {
+            local state_addr="$1" instance_name="$2"
+            if terraform -chdir=deploy/terraform/environments/${{ inputs.tf_env }} state list \
+                | grep -qx "$state_addr"; then
+              echo "$state_addr already tracked in state — nothing to do."
+              return 0
+            fi
+            if gcloud sql instances describe "$instance_name" \
+                --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+              echo "$instance_name exists in GCP but not in state — importing."
+              make tf-import \
+                RESOURCE="$state_addr" \
+                ID="${{ vars.GCP_PROJECT_ID }}/$instance_name"
+            else
+              echo "$instance_name doesn't exist yet — normal first-run case, tf-apply will create it."
+            fi
+          }
+          import_if_orphaned module.rucio_database.google_sql_database_instance.this "dep-dlm-${{ inputs.tf_env }}-pg"
+          import_if_orphaned module.fts_database.google_sql_database_instance.this "dep-dlm-${{ inputs.tf_env }}-mysql"
+
       # ── reserve validation-storage's static IP ────────────────────────
       # validation-storage's xrd3/xrd4/teapot1/teapot2 certs need the VM's
       # public IP baked into their SAN (see generate-certs.sh's
