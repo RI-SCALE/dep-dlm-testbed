@@ -53,7 +53,6 @@ jobs:
       tf_env: production
       environment_name: production
       gitops_engine: ${{ inputs.gitops_engine }}
-      deploy_depth: ${{ inputs.deploy_depth }}
       token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
     secrets:

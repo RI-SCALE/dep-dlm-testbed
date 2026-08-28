@@ -14,11 +14,6 @@ on:
         required: false
         type: string
         default: argocd
-      deploy_depth:
-        description: "gitops (install + full smoke tests) | e2e (also seed + run e2e tests)"
-        required: false
-        type: string
-        default: gitops
       scope_profile:
         description: "egi-dev | ls-aai-dev — drives OIDC_ISSUER/OIDC_CLIENT_ID derivation in the Makefile. Without this, make init/test-rucio-transfers silently fall back to SCOPE_PROFILE=local's in-cluster Keycloak assumption, which doesn't exist on a real external-AAI deployment."
         required: false
@@ -72,15 +67,8 @@ env:
     }}
 
 jobs:
-  # Single job, deliberately — install/smoke-test/e2e used to be three
-  # separate jobs, each carrying its own `environment:` gate. GitHub
-  # Actions requires a fresh approval PER JOB against a protected
-  # Environment, so one logical, sequential pipeline was producing three
-  # separate approval prompts. Consolidating into one job with step-level
-  # `if:` conditions (gated on inputs.deploy_depth) keeps the exact same
-  # sequencing and skip behavior, but only asks for approval once.
   deploy:
-    name: ${{ inputs.gitops_engine }} deploy (${{ inputs.deploy_depth }})
+    name: ${{ inputs.gitops_engine }} deploy
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -223,13 +211,3 @@ jobs:
 
       - name: make tf-smoke-test
         run: make tf-smoke-test
-
-      # ── seed-and-e2e (only when deploy_depth == 'e2e') ─────────────────
-
-      - name: make init
-        if: inputs.deploy_depth == 'e2e'
-        run: make init
-
-      - name: make test-rucio-transfers
-        if: inputs.deploy_depth == 'e2e'
-        run: make test-rucio-transfers
