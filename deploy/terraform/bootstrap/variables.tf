@@ -87,3 +87,14 @@ variable "environments" {
     { name = "production", deletion_policy = "PREVENT" },
   ]
 }
+
+variable "os_login_admins" {
+  description = <<-EOT
+    Users granted roles/compute.osAdminLogin (sudo-capable OS Login) on
+    every environment project — for humans who need to SSH into
+    validation-storage or other VMs for debugging. Not the same as
+    terraform_ci's service account access; this is direct human IAM.
+  EOT
+  type        = list(string)
+  default     = ["marvin.gajek@cern.ch"]
+}
