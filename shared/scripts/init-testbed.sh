@@ -646,6 +646,9 @@ configure_validation_storage_rses() {
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
 
+    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
+    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+
     local acct
     for acct in root ddmlab randomaccount; do
         for rse in XRD3 XRD4 TEAPOT1 TEAPOT2; do
