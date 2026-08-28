@@ -256,7 +256,7 @@ def test_rucio_database_connection(tf_outputs):
 def test_fts_database_connection(tf_outputs):
     logs = _run_db_check_pod(
         "db-test-fts",
-        "mysql:8",
+        "mysql:8.4",
         "mysql",
         "-h",
         tf_outputs["fts_database_private_ip"],

@@ -21,7 +21,7 @@ variable "network_id" {
 variable "mysql_version" {
   description = "Cloud SQL MySQL version"
   type        = string
-  default     = "MYSQL_8_0"
+  default     = "MYSQL_8_4"
 }
 
 variable "tier" {
