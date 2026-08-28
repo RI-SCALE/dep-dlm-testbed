@@ -7,7 +7,6 @@
 [![Local (full)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml)
 [![GitOps (ArgoCD)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml)
 [![GitOps (Flux)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml)
-[![GitOps install test (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-install-test-staging.yml)
 [![Deploy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
 [![Deploy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
 [![Destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
