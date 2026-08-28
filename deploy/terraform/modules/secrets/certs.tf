@@ -12,6 +12,7 @@ resource "google_secret_manager_secret_version" "certs" {
     "tls_ca_bundle.pem"       = file("${local.certs_dir}/tls_ca_bundle.pem")
     "5fca1cb1.0"              = file("${local.certs_dir}/rucio_ca.pem")
     "5fca1cb1.signing_policy" = file("${local.certs_dir}/5fca1cb1.signing_policy")
+    "b96dc756.0"              = file("${local.certs_dir}/b96dc756.0")
     "b96dc756.signing_policy" = file("${local.certs_dir}/b96dc756.signing_policy")
 
     "storm-webdav-localhostcert.pem" = file("${local.certs_dir}/storm-webdav-localhostcert.pem")
