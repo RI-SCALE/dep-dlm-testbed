@@ -21,11 +21,30 @@ external": a single GCE VM (Container-Optimized OS, NOT GKE — see
 modules/validation-storage) running XRootD (xrd3/xrd4) + Teapot/WebDAV
 (teapot1/teapot2) via docker compose, reachable on its own public IP
 through a firewall rule scoped to exactly those four ports. It's
-registered as real Rucio RSEs (EXT_XRD3/EXT_XRD4/EXT_TEAPOT1/
-EXT_TEAPOT2) so FTS exercises a genuine external network path — same
+registered as real Rucio RSEs (XRD3/XRD4/TEAPOT1/TEAPOT2 — see
+shared/scripts/init-testbed.sh's configure_validation_storage_rses(),
+no EXT_ prefix) so FTS exercises a genuine external network path — same
 role as the generic Source/Destination RSEs, just with real
-infrastructure instead of a placeholder. No DNS record exists for it
-yet, so it's addressed by IP.
+infrastructure instead of a placeholder.
+
+Resolved via a private Cloud DNS zone (dep-dlm-staging-internal, zone
+dep-dlm-staging.example.com.) shared with rucio/fts's own public
+hostnames, rather than addressed by raw IP. This is load-bearing, not
+cosmetic: FTS's actual transfer engine (the gfal2/davix client
+performing the real davs:// TPC pull) does not consult the same
+resolver path a per-pod /etc/hosts entry reaches, so DNS-record-less
+IP addressing left every real transfer failing with UnknownHostException
+even though diagnostic tools (curl, xrdfs, a plain Python `requests`
+call) resolved the hostname fine. The managed zone is created once,
+shared, at the environment level (environments/staging/main.tf);
+validation-storage's own module only owns the A record pointing at its
+reserved static IP, keeping the record's lifecycle tied to the VM it
+describes.
+
+The VM also trusts the same CA chain (rucio_ca.pem plus the two
+grid-security hashes 5fca1cb1.*/b96dc756.*) pulled from the identical
+Secret Manager "certs" secret every other RSE/FTS endpoint already
+uses — no second trust root to manage.
 
 Regenerate: python3 staging_gcp.py  (writes generated/staging-gcp.png)
 """
@@ -33,7 +52,7 @@ Regenerate: python3 staging_gcp.py  (writes generated/staging-gcp.png)
 from diagrams import Diagram, Cluster, Edge
 from diagrams.gcp.compute import GKE, ComputeEngine
 from diagrams.gcp.database import SQL
-from diagrams.gcp.network import LoadBalancing
+from diagrams.gcp.network import LoadBalancing, DNS
 from diagrams.gcp.security import SecretManager, Iam
 from diagrams.k8s.compute import Deployment
 from diagrams.k8s.network import Ingress
@@ -68,12 +87,18 @@ with Diagram(
     dest_rses = Storage("Destination RSEs\n(compute centres)")
 
     with Cluster("GCP Project: dep-dlm-staging"):
-        sm = SecretManager("Secret Manager\n(dep-dlm-staging secrets)")
+        sm = SecretManager(
+            "Secret Manager\n(dep-dlm-staging secrets\n+ certs, incl. shared CA chain)"
+        )
         db = SQL("Cloud SQL\nfor PostgreSQL\n(rucio + fts metadata)")
         wif = Iam("Workload Identity\nFederation")
         glb = LoadBalancing(
             "Global External ALB\n(provisioned by GKE Gateway,\n"
             "static IP: gateway_static_ip)"
+        )
+        dns = DNS(
+            "Cloud DNS\n(private zone:\ndep-dlm-staging.example.com,\n"
+            "shared across rucio/fts/\nvalidation-storage hostnames)"
         )
 
         with Cluster("GKE Autopilot Cluster: dep-dlm-staging-gke"):
@@ -124,10 +149,17 @@ with Diagram(
     source_rses >> Edge() >> dest_rses
 
     # validation-storage: real external network path, registered as
-    # EXT_XRD3/EXT_XRD4/EXT_TEAPOT1/EXT_TEAPOT2 and paired with the
+    # XRD3/XRD4/TEAPOT1/TEAPOT2 (no EXT_ prefix) and paired with the
     # generic sandbox RSEs above (same role, real infra) — see
     # shared/scripts/init-testbed.sh's configure_validation_storage_rses().
+    #
+    # DNS resolution is load-bearing here, not decorative: FTS's real
+    # transfer engine only resolves valstorage.dep-dlm-staging.example.com
+    # via this Cloud DNS record (see module docstring above) — a
+    # per-pod /etc/hosts entry alone was confirmed insufficient for the
+    # actual davs:// TPC pull, even though it satisfied diagnostic tools.
+    dns >> Edge(label="A record", style="dashed") >> valstorage_vm
     fts >> Edge() >> valstorage_vm
-    sm >> Edge() >> valstorage_vm
+    sm >> Edge(label="certs +\nCA chain") >> valstorage_vm
 
     gke >> Edge(style="invis") >> sm
