@@ -31,6 +31,7 @@ locals {
     "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "sts.googleapis.com", # Workload Identity Federation token exchange
+    "dns.googleapis.com",
   ]
 }
 
