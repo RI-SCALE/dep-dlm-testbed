@@ -218,6 +218,8 @@ Tests
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
   probe-xrootd         XRootD probe with SciTokens
+  probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
+  probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
 
 Terraform
   tf-fmt               Format Terraform files

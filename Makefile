@@ -205,7 +205,12 @@ define staging_tf_output
 $(shell terraform -chdir=$(TF_DIR) output -raw $(1) 2>/dev/null)
 endef
 
-export TESTBED_HOST_HOME ?= $(HOME)
+# Named, lazily-evaluated Terraform outputs
+RUCIO_PUBLIC_HOSTNAME       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_public_hostname),)
+FTS_PUBLIC_HOSTNAME         = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_public_hostname),)
+GATEWAY_STATIC_IP           = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,gateway_static_ip),)
+VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_hostname),)
+VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
 
 ifeq ($(GITOPS_ENV),staging)
   override RUNTIME := k8s
@@ -214,16 +219,16 @@ ifeq ($(GITOPS_ENV),staging)
   EXEC_RUCIO = docker run --rm -i \
     --network host \
 	--cap-add=SYS_ADMIN \
-    --add-host $(call staging_tf_output,rucio_public_hostname):$(call staging_tf_output,gateway_static_ip) \
-    --add-host $(call staging_tf_output,fts_public_hostname):$(call staging_tf_output,gateway_static_ip) \
-    --add-host $(call staging_tf_output,validation_storage_hostname):$(call staging_tf_output,validation_storage_ip) \
+    --add-host $(RUCIO_PUBLIC_HOSTNAME):$(GATEWAY_STATIC_IP) \
+    --add-host $(FTS_PUBLIC_HOSTNAME):$(GATEWAY_STATIC_IP) \
+    --add-host $(VALIDATION_STORAGE_HOSTNAME):$(VALIDATION_STORAGE_IP) \
     -e REQUESTS_CA_BUNDLE=/etc/grid-security/certificates/tls_ca_bundle.pem \
     -e RUNTIME=k8s \
     -e K8S_NAMESPACE=$(K8S_NAMESPACE) \
 	-e KUBECONFIG=/root/.kube/config \
     -e DAEMON_MODE=$(DAEMON_MODE) \
-    -e TEAPOT1_URL=https://$(call staging_tf_output,validation_storage_hostname):8081 \
-    -e TEAPOT2_URL=https://$(call staging_tf_output,validation_storage_hostname):8082 \
+    -e TEAPOT1_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8081 \
+    -e TEAPOT2_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8082 \
     -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
@@ -239,10 +244,13 @@ ifeq ($(GITOPS_ENV),staging)
   # test_rucio_transfers.py; add it back here if test-copernicus-transfers
   # is run this way too.
   STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
+  EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
 else ifeq ($(RUNTIME),k8s)
   EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
+  EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
 else
   EXEC_RUCIO := docker exec compose-rucio-client-1
+  EXEC_FTS := docker exec -i compose-fts-1
 endif
 
 ## Help
@@ -460,11 +468,29 @@ test-rucio-deletion: ## Rucio E2E deletion test
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_hostname) pytest /tests/probe_teapot.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_teapot.py -v"
 
 .PHONY: probe-xrootd
 probe-xrootd: ## XRootD probe with SciTokens
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(call staging_tf_output,validation_storage_hostname) pytest /tests/probe_xrootd.py -v"
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_xrootd.py -v"
+
+.PHONY: probe-fts-teapot
+probe-fts-teapot: ## Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
+	$(EXEC_FTS) env \
+	  OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
+	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
+	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
+	  python3 - < shared/tests/probe_fts_teapot.py
+
+.PHONY: probe-fts-xrootd
+probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
+	$(EXEC_FTS) env \
+	  OIDC_ISSUER='$(OIDC_ISSUER)' OIDC_TOKEN_URL='$(OIDC_TOKEN_URL)' \
+	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
+	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
+	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
+	  python3 - < shared/tests/probe_fts_xrootd.py
 
 ## Terraform
 
