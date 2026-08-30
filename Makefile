@@ -211,6 +211,9 @@ FTS_PUBLIC_HOSTNAME         = $(if $(filter staging,$(GITOPS_ENV)),$(call stagin
 GATEWAY_STATIC_IP           = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,gateway_static_ip),)
 VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_hostname),)
 VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
+FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_database_private_ip),)
+FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
+
 
 ifeq ($(GITOPS_ENV),staging)
   override RUNTIME := k8s
@@ -229,6 +232,9 @@ ifeq ($(GITOPS_ENV),staging)
     -e DAEMON_MODE=$(DAEMON_MODE) \
     -e TEAPOT1_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8081 \
     -e TEAPOT2_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8082 \
+    -e GITOPS_ENV=$(GITOPS_ENV) \
+    -e FTS_DATABASE_HOST=$(FTS_DATABASE_HOST) \
+    -e FTS_DB_PASSWORD=$(FTS_DB_PASSWORD) \
     -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \

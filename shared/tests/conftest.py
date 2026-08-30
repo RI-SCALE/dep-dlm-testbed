@@ -5,6 +5,7 @@ Covers XRootD SciTokens (xrd3/xrd4) and Teapot WebDAV (teapot1/teapot2).
 Runtime-agnostic: respects $RUNTIME (compose | k8s, default compose).
 """
 
+import json
 import logging
 import os
 import subprocess
@@ -97,6 +98,15 @@ OIDC_RESOURCE_SUFFIX = os.environ.get("OIDC_RESOURCE_SUFFIX") or ".example.org"
 
 XRDFS_TRANSIENT_ERR = "resource temporarily unavailable"
 
+GITOPS_ENV = os.environ.get("GITOPS_ENV") or "sandbox"
+# Only set on staging (see Makefile's staging_tf_output-derived env vars) —
+# staging's FTS MySQL is Cloud SQL, not an in-cluster `ftsdb` StatefulSet,
+# so there's no pod for svc_exec to target and no route from the runner
+# to the private IP (same constraint documented in
+# deploy/terraform/tests/test_deployed_infra.py's module docstring).
+FTS_DATABASE_HOST = os.environ.get("FTS_DATABASE_HOST")
+FTS_DB_PASSWORD = os.environ.get("FTS_DB_PASSWORD")
+
 
 def _rse_resource(name: str) -> str:
     """Map a bare RSE name to the URI form EGI expects as resource=."""
@@ -133,6 +143,138 @@ def svc_exec(svc: str, cmd: list, user: str = None) -> bytes:
             f"stderr: {result.stderr.decode(errors='replace')}"
         )
     return result.stdout
+
+
+# ── FTS database access (compose/sandbox exec vs. staging Cloud SQL) ──────
+
+
+def fts_mysql_exec(sql: str) -> None:
+    """Run a statement against FTS's MySQL DB, picking the right transport
+    for the environment:
+
+      - compose / k8s sandbox: exec into the `ftsdb` container/pod directly
+        (existing behaviour, unchanged).
+      - k8s staging: no `ftsdb` resource exists — FTS's DB is Cloud SQL,
+        reachable only from inside the cluster's VPC. Run the statement as
+        a one-shot `kubectl run` pod, the same transport
+        test_deployed_infra.py's _run_db_check_pod uses for the identical
+        constraint.
+    """
+    if RUNTIME == "k8s" and GITOPS_ENV == "staging":
+        if not FTS_DATABASE_HOST or not FTS_DB_PASSWORD:
+            raise RuntimeError(
+                "fts_mysql_exec: GITOPS_ENV=staging requires FTS_DATABASE_HOST "
+                "and FTS_DB_PASSWORD to be set (see Makefile's staging_tf_output "
+                "wiring for EXEC_RUCIO)"
+            )
+        pod_name = f"fts-mysql-exec-{int(time.time())}"
+        overrides = {
+            "apiVersion": "v1",
+            "spec": {
+                "containers": [
+                    {
+                        "name": pod_name,
+                        "image": "mysql:8.4",
+                        "command": [
+                            "mysql",
+                            "-h",
+                            FTS_DATABASE_HOST,
+                            "-ufts",
+                            f"-p{FTS_DB_PASSWORD}",
+                            "fts",
+                            "-e",
+                            sql,
+                        ],
+                        "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}},
+                    }
+                ]
+            },
+        }
+        subprocess.run(
+            [
+                "kubectl",
+                "-n",
+                K8S_NAMESPACE,
+                "delete",
+                "pod",
+                pod_name,
+                "--ignore-not-found",
+                "--wait=true",
+                "--timeout=60s",
+            ],
+            capture_output=True,
+        )
+        try:
+            run = subprocess.run(
+                [
+                    "kubectl",
+                    "run",
+                    pod_name,
+                    "-n",
+                    K8S_NAMESPACE,
+                    "--image=mysql:8.4",
+                    "--restart=Never",
+                    f"--overrides={json.dumps(overrides)}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if run.returncode != 0:
+                raise RuntimeError(f"fts_mysql_exec: kubectl run failed: {run.stderr}")
+
+            wait = subprocess.run(
+                [
+                    "kubectl",
+                    "wait",
+                    "-n",
+                    K8S_NAMESPACE,
+                    "--for=jsonpath={.status.phase}=Succeeded",
+                    f"pod/{pod_name}",
+                    "--timeout=60s",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if wait.returncode != 0:
+                logs = subprocess.run(
+                    ["kubectl", "logs", pod_name, "-n", K8S_NAMESPACE],
+                    capture_output=True,
+                    text=True,
+                ).stdout
+                raise RuntimeError(
+                    f"fts_mysql_exec: pod didn't succeed: {wait.stderr}\nlogs: {logs}"
+                )
+        finally:
+            subprocess.run(
+                [
+                    "kubectl",
+                    "-n",
+                    K8S_NAMESPACE,
+                    "delete",
+                    "pod",
+                    pod_name,
+                    "--ignore-not-found",
+                    "--wait=false",
+                ],
+                capture_output=True,
+            )
+        return
+
+    # compose / k8s sandbox — unchanged path
+    svc_exec(
+        "ftsdb",
+        [
+            "mysql",
+            "-h",
+            "127.0.0.1",
+            "--protocol=tcp",
+            "-ufts",
+            "-pfts",
+            "fts",
+            "-e",
+            sql,
+        ],
+    )
 
 
 # ── Rucio client (Python API) ─────────────────────────────────────────────

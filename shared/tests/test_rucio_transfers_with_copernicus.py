@@ -5,11 +5,11 @@ import time
 from conftest import (
     TEAPOT2_URL,
     add_rule,
+    fts_mysql_exec,
     register_replica,
     run_daemons,
     validate_rule,
     webdav_delete,
-    svc_exec,
 )
 
 import boto3
@@ -45,44 +45,23 @@ def force_streamed_teapot2():
     TEAPOT2 is registered with both davs and https protocols, and FTS records
     the SE without a port (davs://teapot2, https://teapot2), so both forms
     must be set.
+
+    Uses fts_mysql_exec rather than a raw svc_exec("ftsdb", ...) call —
+    staging's FTS database is Cloud SQL, not an in-cluster `ftsdb`
+    StatefulSet, so the transport has to differ by environment (see
+    conftest.py's fts_mysql_exec docstring).
     """
     sql_set = (
         "INSERT INTO t_se (storage, tpc_support) VALUES "
         "('davs://teapot2','NONE'),('https://teapot2','NONE') "
         "ON DUPLICATE KEY UPDATE tpc_support='NONE';"
     )
-    svc_exec(
-        "ftsdb",
-        [
-            "mysql",
-            "-h",
-            "127.0.0.1",
-            "--protocol=tcp",
-            "-ufts",
-            "-pfts",
-            "fts",
-            "-e",
-            sql_set,
-        ],
-    )
+    fts_mysql_exec(sql_set)
     yield
     sql_unset = (
         "DELETE FROM t_se WHERE storage IN ('davs://teapot2','https://teapot2');"
     )
-    svc_exec(
-        "ftsdb",
-        [
-            "mysql",
-            "-h",
-            "127.0.0.1",
-            "--protocol=tcp",
-            "-ufts",
-            "-pfts",
-            "fts",
-            "-e",
-            sql_unset,
-        ],
-    )
+    fts_mysql_exec(sql_unset)
 
 
 class TestCopernicusS3:
