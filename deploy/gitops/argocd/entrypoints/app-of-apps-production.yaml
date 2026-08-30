@@ -17,7 +17,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: feat/testbed-validation-storage
+    targetRevision: main
     path: deploy/gitops/argocd/applicationsets
     directory:
       recurse: false
@@ -37,7 +37,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: feat/testbed-validation-storage
+    targetRevision: main
     path: deploy/gitops/environments/production/secrets
     kustomize: {}
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
@@ -55,7 +55,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: feat/testbed-validation-storage
+    targetRevision: main
     path: deploy/gitops/environments/production/gateway
     kustomize: {}
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-production }
