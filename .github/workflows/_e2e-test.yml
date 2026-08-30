@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         default: egi-dev
+      token_mode:
+        description: "managed | unmanaged — drives var.token_mode, a real Terraform input (module.secrets), not just a script flag. The initial terraform apply (before gitops install) never receives this, so it needs its own re-apply here before init/tests run against the selected mode."
+        required: false
+        type: string
+        default: unmanaged
     secrets:
       OIDC_CLIENT_ID:
         required: true
@@ -26,6 +31,7 @@ env:
   TF_ENV: ${{ inputs.tf_env }}
   GITOPS_ENV: ${{ inputs.tf_env }}
   SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
   OIDC_ISSUER: >-
     ${{
       inputs.scope_profile == 'egi-dev' && 'https://aai-dev.egi.eu/auth/realms/egi' ||
@@ -55,7 +61,7 @@ env:
 
 jobs:
   e2e:
-    name: e2e transfer tests
+    name: e2e transfer tests (${{ inputs.token_mode }})
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment_name }}
     permissions:
@@ -102,6 +108,12 @@ jobs:
 
       - name: make test-rucio-transfers
         run: make test-rucio-transfers
+
+      - name: make test-copernicus-transfers
+        run: make test-copernicus-transfers
+
+      - name: make test-rucio-deletion
+        run: make test-rucio-deletion
 
       - name: Remove local certs
         if: always()

@@ -40,6 +40,7 @@ jobs:
     with:
       tf_env: staging
       environment_name: staging
+      token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
     secrets:
       OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
@@ -66,6 +67,7 @@ jobs:
     with:
       tf_env: staging
       environment_name: staging
+      token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
     secrets:
       OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
