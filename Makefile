@@ -458,14 +458,13 @@ test-rucio-transfers: ## Rucio E2E transfer test
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
-	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) \
+	$(EXEC_RUCIO) bash -c "export $(TEST_OIDC_ENV) \
 		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
-		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		K8S_NAMESPACE=$(K8S_NAMESPACE); \
 		$(STAGING_PIP_INSTALL) \
-		$(TEST_OIDC_ENV) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion

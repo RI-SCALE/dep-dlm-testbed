@@ -870,14 +870,16 @@ main() {
             seed_subject_tokens
         fi
         configure_rses
-        configure_s3_source_rse
-        configure_fts_cloud_storage
         cleanup_session_tokens
     fi
 
     if [ "${GITOPS_ENV:-sandbox}" != "sandbox" ]; then
         configure_validation_storage_rses
     fi
+
+    configure_s3_source_rse
+    configure_fts_cloud_storage
+
     setup_scopes_and_quotas
     setup_fts_oidc_provider
 
