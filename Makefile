@@ -238,12 +238,12 @@ ifeq ($(GITOPS_ENV),staging)
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
 	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
     mgajekcern/rucio-client-docker-kubectl:latest
+
   # Prefixed into each test recipe's bash -c string below (empty for
   # sandbox, where the compose/helm rucio-client image already has
-  # pytest baked in). boto3 deliberately skipped — not needed by
-  # test_rucio_transfers.py; add it back here if test-copernicus-transfers
-  # is run this way too.
-  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
+  # pytest and boto3 baked in). Includes boto3 since
+  # test-copernicus-transfers needs it for _get_copernicus_metadata().
+  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest boto3 >/dev/null 2>&1 &&
   EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
 else ifeq ($(RUNTIME),k8s)
   EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
