@@ -36,12 +36,33 @@ EXPECTED_KEYS = {
     "certs": {"hostcert.pem", "hostkey.pem", "rucio_ca.pem"},
     "secrets": {"server.cfg", "idpsecrets.json", "fts3config", "fts3restconfig"},
 }
-DB_CHECK_RETRIES = 1
-DB_CHECK_BACKOFF_S = 15
-GATEWAY_CHECK_RETRIES = 3
+# Deadline-based, not attempt-count-based: both of these wait on a real
+# managed-infra propagation delay after `terraform apply` reports
+# complete, not on transient flakiness, so "retry N times" tuned against
+# a guess is the wrong shape — "keep trying until this much time has
+# passed" matches the actual failure mode.
+#
+# Cloud SQL's private-IP peering route can take a couple of minutes to
+# fully propagate through the VPC after apply, even though the instance
+# resource itself is done — a single short retry essentially never
+# covers that window on a fresh deploy.
+DB_CHECK_TIMEOUT_S = 300
+DB_CHECK_BACKOFF_S = 20
+
+# A GCP Global External ALB (what the Gateway API provisions here)
+# commonly takes 3-8 minutes to fully propagate a new/changed backend
+# across edge POPs after the Gateway reports Programmed: True --
+# Programmed means the control plane accepted the config, not that
+# every edge location is already serving it.
+GATEWAY_CHECK_TIMEOUT_S = 480
 GATEWAY_CHECK_BACKOFF_S = 20
+
+# validation-storage is a single VM's docker-compose bring-up finishing,
+# not a distributed system's propagation delay — a bounded attempt count
+# is fine here.
 VALSTORAGE_CHECK_RETRIES = 6
 VALSTORAGE_CHECK_BACKOFF_S = 20
+
 SKIP_DB_CHECKS = os.environ.get("SKIP_DB_CHECKS") == "1"
 SKIP_GATEWAY_CHECKS = os.environ.get("SKIP_GATEWAY_CHECKS") == "1"
 SKIP_VALIDATION_STORAGE_CHECKS = os.environ.get("SKIP_VALIDATION_STORAGE_CHECKS") == "1"
@@ -217,8 +238,10 @@ def _run_db_check_pod_once(
 
 
 def _run_db_check_pod(pod_base_name, image, *cmd_args, timeout_s=300):
-    last_error = None
-    for attempt in range(1, DB_CHECK_RETRIES + 2):
+    deadline = time.time() + DB_CHECK_TIMEOUT_S
+    attempt = 0
+    while True:
+        attempt += 1
         # Unique name per attempt — avoids any residual collision with a
         # not-yet-fully-cleaned-up pod from a previous attempt or a
         # concurrent run, rather than relying solely on delete+wait above.
@@ -228,10 +251,20 @@ def _run_db_check_pod(pod_base_name, image, *cmd_args, timeout_s=300):
                 pod_name, image, *cmd_args, timeout_s=timeout_s
             )
         except AssertionError as e:
-            last_error = e
-            if attempt <= DB_CHECK_RETRIES:
-                time.sleep(DB_CHECK_BACKOFF_S)
-    raise last_error
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise AssertionError(
+                    f"{pod_base_name}: still failing after {attempt} attempt(s) "
+                    f"over {DB_CHECK_TIMEOUT_S}s (likely Cloud SQL's private-IP "
+                    f"peering route still propagating post-apply). "
+                    f"Last error: {e}"
+                ) from e
+            wait_s = min(DB_CHECK_BACKOFF_S, remaining)
+            print(
+                f"  [{pod_base_name}] attempt {attempt} failed, retrying in "
+                f"{wait_s:.0f}s ({remaining:.0f}s left before giving up)..."
+            )
+            time.sleep(wait_s)
 
 
 @pytest.mark.skipif(
@@ -311,8 +344,10 @@ def _check_gateway_endpoint(scheme, ip, hostname, path, expected_status=200):
     import requests
 
     url = f"{scheme}://{ip}{path}"
-    last_error = None
-    for attempt in range(1, GATEWAY_CHECK_RETRIES + 2):
+    deadline = time.time() + GATEWAY_CHECK_TIMEOUT_S
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             resp = requests.get(
                 url, headers={"Host": hostname}, timeout=10, verify=False
@@ -323,10 +358,20 @@ def _check_gateway_endpoint(scheme, ip, hostname, path, expected_status=200):
             )
             return resp
         except (requests.RequestException, AssertionError) as e:
-            last_error = e
-            if attempt <= GATEWAY_CHECK_RETRIES:
-                time.sleep(GATEWAY_CHECK_BACKOFF_S)
-    raise last_error
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise AssertionError(
+                    f"{hostname}{path}: still unreachable via gateway {ip} "
+                    f"after {attempt} attempt(s) over {GATEWAY_CHECK_TIMEOUT_S}s "
+                    f"(likely still propagating across the LB's edge POPs). "
+                    f"Last error: {e}"
+                ) from e
+            wait_s = min(GATEWAY_CHECK_BACKOFF_S, remaining)
+            print(
+                f"  [{hostname}{path}] attempt {attempt} failed, retrying in "
+                f"{wait_s:.0f}s ({remaining:.0f}s left before giving up)..."
+            )
+            time.sleep(wait_s)
 
 
 @pytest.mark.skipif(
