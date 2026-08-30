@@ -131,6 +131,9 @@ jobs:
       - name: Sync certs for e2e test container
         run: make certs-sync
 
+      - name: Sync userpass-client.cfg for e2e test container
+        run: make userpass-client-sync
+
       - name: make init
         run: make init
 
@@ -145,4 +148,4 @@ jobs:
 
       - name: Remove local certs
         if: always()
-        run: rm -rf certs/
+        run: rm -rf certs/ userpass-client.cfg

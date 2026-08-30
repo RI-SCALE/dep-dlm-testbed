@@ -611,6 +611,14 @@ certs-sync: ## Fetch current certs from Secret Manager (matches what's deployed 
 	  --project="$$GCP_PROJECT_ID" \
 	| python3 -c "import sys,json,base64; d=json.load(sys.stdin); [open(f'certs/{k}','w').write(v) for k,v in d.items()]"
 
+.PHONY: userpass-client-sync
+userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches what's deployed to TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-secrets" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json; d=json.load(sys.stdin); open('userpass-client.cfg','w').write(d['userpass-client.cfg'])"
+
 ## Cleanup
 
 .PHONY: clear-artifacts
