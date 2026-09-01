@@ -243,7 +243,7 @@ ifeq ($(GITOPS_ENV),staging)
     -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
 	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
-    mgajekcern/rucio-client-docker-kubectl:latest
+    mgajekcern/rucio-client-docker-kubectl:3867d9453cff79ce4d3b9354065e1c57402dafc7
 
   # Prefixed into each test recipe's bash -c string below (empty for
   # sandbox, where the compose/helm rucio-client image already has

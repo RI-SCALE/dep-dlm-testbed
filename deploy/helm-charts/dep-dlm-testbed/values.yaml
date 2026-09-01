@@ -80,7 +80,7 @@ ruciodb:
   replicaCount: 1
   image:
     repository: rucio/rucio-server
-    tag: release-40.0.0
+    tag: release-41.2.1
     pullPolicy: IfNotPresent
   useSSL: false
   service:
@@ -157,7 +157,7 @@ rucio-daemons:
   fullnameOverride: rucio-daemons
   image:
     repository: rucio/rucio-daemons
-    tag: release-40.0.0
+    tag: release-41.2.1
     pullPolicy: IfNotPresent
 
   lifecycle:
