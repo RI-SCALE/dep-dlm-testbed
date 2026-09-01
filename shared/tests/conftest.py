@@ -115,6 +115,12 @@ def _rse_resource(name: str) -> str:
     return f"https://{name}{OIDC_RESOURCE_SUFFIX}/"
 
 
+def _auth_headers(token: str = None) -> dict:
+    """Shared header-building for the webdav_* helpers — omit Authorization
+    entirely when no token is given, rather than sending `Bearer None`."""
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 # ── Container exec ────────────────────────────────────────────────────────
 
 
@@ -458,7 +464,7 @@ def validate_rule(
     )
 
 
-# ── XRootD protocol-based seeding / dest-prep ──────────────────────────────
+# ── XRootD SciTokens (shells out — no HTTP equivalent for these checks) ────
 
 
 def _xrdfs_run(
@@ -510,73 +516,6 @@ def _xrdcp_run(
                 time.sleep(backoff)
                 continue
             raise
-
-
-def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
-    """Seed a test file at the given PFN over HTTP/WebDAV (XRootD's
-    libXrdHttp), matching how FTS itself performs the real transfer.
-    `svc` is only used for logging."""
-    content = b"rucio-test\n"
-    url = pfn.replace(
-        "davs://", "https://", 1
-    )  # XRootD's HTTP listener speaks TLS on the same port
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    resp = requests.put(url, data=content, headers=headers, verify=False, timeout=30)
-    resp.raise_for_status()
-
-    # Read back to confirm the write actually landed, rather than trusting
-    # a 2xx status alone.
-    check = requests.get(url, headers=headers, verify=False, timeout=30)
-    check.raise_for_status()
-    if check.content != content:
-        raise RuntimeError(f"seed_xrd: readback mismatch at {url}")
-
-    adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
-    return len(content), adler
-
-
-def prepare_xrd_dest(pfn: str, token: str = None) -> None:
-    """Pre-create the destination directory via HTTP MKCOL, matching seed_xrd."""
-    remote_dir_url = pfn.replace("davs://", "https://", 1).rsplit("/", 1)[0]
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    resp = requests.request(
-        "MKCOL", remote_dir_url, headers=headers, verify=False, timeout=30
-    )
-    # 201 = created, 405/409 = already exists — both fine; anything else is real
-    if resp.status_code not in (201, 405, 409):
-        raise RuntimeError(
-            f"prepare_xrd_dest failed for {remote_dir_url}: HTTP {resp.status_code} {resp.text}"
-        )
-
-
-def seed_and_register_files(
-    client, rse: str, scope: str, names: list[str], seed_svc: str, token: str = None
-) -> list[dict]:
-    """Seed files into an XRootD RSE and return Rucio replica dicts."""
-    registered = []
-    for name in names:
-        pfn = compute_pfn(client, rse, scope, name)
-        size, adler32 = seed_xrd(seed_svc, pfn, token=token)
-        registered.append(
-            {
-                "scope": scope,
-                "name": name,
-                "bytes": size,
-                "adler32": adler32,
-                "pfn": pfn,
-            }
-        )
-        log.info("  seeded %s:%s → %s", scope, name, pfn)
-    return registered
-
-
-def prepare_xrd_dest_files(
-    client, rse: str, scope: str, names: list[str], token: str = None
-) -> None:
-    """Pre-create destination directories on an XRootD RSE for a list of DIDs."""
-    for name in names:
-        pfn = compute_pfn(client, rse, scope, name)
-        prepare_xrd_dest(pfn, token=token)
 
 
 # ── Keycloak token helpers ────────────────────────────────────────────────
@@ -644,47 +583,60 @@ def fetch_token_client_credentials(
 
 
 # ── WebDAV helpers ────────────────────────────────────────────────────────
+# Shared HTTP primitives — seed_xrd/prepare_xrd_dest below are thin PFN->URL
+# wrappers around these, not a separate filesystem-based path. XRootD's
+# libXrdHttp and Teapot's Storm-WebDAV both speak plain WebDAV/HTTP with a
+# bearer token; the only real difference is that callers here work with a
+# Rucio PFN (davs://...) rather than an already-built URL.
 
 
 def webdav_put(
-    url: str, token: str, content: bytes, timeout: int = 30
+    url: str, token: str = None, content: bytes = b"", timeout: int = 30
 ) -> requests.Response:
     return requests.put(
         url,
-        headers={"Authorization": f"Bearer {token}"},
+        headers=_auth_headers(token),
         data=content,
         verify=False,
         timeout=timeout,
     )
 
 
-def webdav_get(url: str, token: str, timeout: int = 30) -> requests.Response:
+def webdav_get(url: str, token: str = None, timeout: int = 30) -> requests.Response:
     return requests.get(
         url,
-        headers={"Authorization": f"Bearer {token}"},
+        headers=_auth_headers(token),
         verify=False,
         timeout=timeout,
     )
 
 
-def webdav_delete(url: str, token: str, timeout: int = 30) -> requests.Response:
+def webdav_delete(url: str, token: str = None, timeout: int = 30) -> requests.Response:
     return requests.delete(
         url,
-        headers={"Authorization": f"Bearer {token}"},
+        headers=_auth_headers(token),
         verify=False,
         timeout=timeout,
     )
 
 
 def webdav_propfind(
-    url: str, token: str, depth: str = "1", timeout: int = 240
+    url: str, token: str = None, depth: str = "1", timeout: int = 240
 ) -> requests.Response:
+    headers = _auth_headers(token)
+    headers["Depth"] = depth
     return requests.request(
         "PROPFIND",
         url,
-        headers={"Authorization": f"Bearer {token}", "Depth": depth},
+        headers=headers,
         verify=False,
         timeout=timeout,
+    )
+
+
+def webdav_mkcol(url: str, token: str = None, timeout: int = 30) -> requests.Response:
+    return requests.request(
+        "MKCOL", url, headers=_auth_headers(token), verify=False, timeout=timeout
     )
 
 
@@ -729,6 +681,81 @@ def webdav_warm_up(
         f"(last HTTP {resp.status_code if resp else 'N/A'}"
         f"{', last error: ' + str(last_exc) if last_exc else ''})"
     )
+
+
+# ── PFN-based seeding (XRootD RSEs — Teapot tests call webdav_* directly) ──
+
+
+def _pfn_to_https(pfn: str) -> str:
+    """XRootD's HTTP listener speaks TLS on the same port as davs://."""
+    return pfn.replace("davs://", "https://", 1)
+
+
+def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
+    """Seed a test file at the given PFN — a thin PFN->URL wrapper around
+    webdav_put/webdav_get, matching how FTS itself performs the real
+    transfer. `svc` is only used for logging."""
+    content = b"rucio-test\n"
+    url = _pfn_to_https(pfn)
+
+    resp = webdav_put(url, token, content)
+    resp.raise_for_status()
+
+    # Read back to confirm the write actually landed, rather than trusting
+    # a 2xx status alone.
+    check = webdav_get(url, token)
+    check.raise_for_status()
+    if check.content != content:
+        raise RuntimeError(f"seed_xrd: readback mismatch at {url}")
+
+    adler = "%08x" % (zlib.adler32(content) & 0xFFFFFFFF)
+    return len(content), adler
+
+
+def prepare_xrd_dest(pfn: str, token: str = None) -> None:
+    """Pre-create the destination directory via HTTP MKCOL, matching seed_xrd.
+
+    XRootD needs this explicit MKCOL before a first write to a new
+    directory; Teapot's storage area auto-creates intermediate directories,
+    so TestTeapotOIDC has no equivalent call before its webdav_put.
+    """
+    remote_dir_url = _pfn_to_https(pfn).rsplit("/", 1)[0]
+    resp = webdav_mkcol(remote_dir_url, token)
+    # 201 = created, 405/409 = already exists — both fine; anything else is real
+    if resp.status_code not in (201, 405, 409):
+        raise RuntimeError(
+            f"prepare_xrd_dest failed for {remote_dir_url}: HTTP {resp.status_code} {resp.text}"
+        )
+
+
+def seed_and_register_files(
+    client, rse: str, scope: str, names: list[str], seed_svc: str, token: str = None
+) -> list[dict]:
+    """Seed files into an XRootD RSE and return Rucio replica dicts."""
+    registered = []
+    for name in names:
+        pfn = compute_pfn(client, rse, scope, name)
+        size, adler32 = seed_xrd(seed_svc, pfn, token=token)
+        registered.append(
+            {
+                "scope": scope,
+                "name": name,
+                "bytes": size,
+                "adler32": adler32,
+                "pfn": pfn,
+            }
+        )
+        log.info("  seeded %s:%s → %s", scope, name, pfn)
+    return registered
+
+
+def prepare_xrd_dest_files(
+    client, rse: str, scope: str, names: list[str], token: str = None
+) -> None:
+    """Pre-create destination directories on an XRootD RSE for a list of DIDs."""
+    for name in names:
+        pfn = compute_pfn(client, rse, scope, name)
+        prepare_xrd_dest(pfn, token=token)
 
 
 # ── Session-scoped fixtures ───────────────────────────────────────────────
