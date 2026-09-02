@@ -24,31 +24,31 @@ spec:
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   path: deploy/helm-charts/rucio-server
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   ref: values
           - name: rucio-daemons
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   path: deploy/helm-charts/rucio-daemons
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/staging/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   ref: values
           - name: fts
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/staging/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/e2e-full-suite
                   ref: values
   template:
     metadata:
