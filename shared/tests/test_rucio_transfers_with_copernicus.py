@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from urllib.parse import urlparse
 
 from conftest import (
     TEAPOT2_URL,
@@ -42,25 +43,21 @@ def force_streamed_teapot2():
     DESTINATION is not FULL/PULL. Scoped to this test and torn down so the
     davs<->davs TPC tests (test_rucio_transfers.py) keep their pull behaviour.
 
-    TEAPOT2 is registered with both davs and https protocols, and FTS records
-    the SE without a port (davs://teapot2, https://teapot2), so both forms
-    must be set.
-
-    Uses fts_mysql_exec rather than a raw svc_exec("ftsdb", ...) call —
-    staging's FTS database is Cloud SQL, not an in-cluster `ftsdb`
-    StatefulSet, so the transport has to differ by environment (see
-    conftest.py's fts_mysql_exec docstring).
+    The storage key FTS actually records in t_se.storage/t_file.dest_se
+    matches TEAPOT2's registered protocol hostname, not a fixed "teapot2"
+    alias — on staging that's the shared validation-storage VM hostname,
+    not "teapot2" as in sandbox/compose. Derive it from TEAPOT2_URL, which
+    is already correctly set per-environment, rather than hardcoding it.
     """
+    teapot2_host = urlparse(TEAPOT2_URL).hostname
     sql_set = (
         "INSERT INTO t_se (storage, tpc_support) VALUES "
-        "('davs://teapot2','NONE'),('https://teapot2','NONE') "
+        f"('davs://{teapot2_host}','NONE'),('https://{teapot2_host}','NONE') "
         "ON DUPLICATE KEY UPDATE tpc_support='NONE';"
     )
     fts_mysql_exec(sql_set)
     yield
-    sql_unset = (
-        "DELETE FROM t_se WHERE storage IN ('davs://teapot2','https://teapot2');"
-    )
+    sql_unset = f"DELETE FROM t_se WHERE storage IN ('davs://{teapot2_host}','https://{teapot2_host}');"
     fts_mysql_exec(sql_unset)
 
 
