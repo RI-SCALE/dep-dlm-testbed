@@ -29,9 +29,10 @@ from conftest import (
     register_replica,
     run_daemons,
     seed_xrd,
-    svc_exec,
     validate_rule,
     advance_pipeline,
+    webdav_get,
+    pfn_to_https,
     DELETION_DAEMONS,
 )
 
@@ -53,17 +54,15 @@ def run_deletion_daemons(rucio_svc: str = RUCIO_SVC) -> None:
     )
 
 
-def replica_exists_on_xrd(svc: str, pfn: str) -> bool:
-    """Check whether a file exists at the given PFN path inside an XRootD container."""
-
-    local_path = "/" + pfn.split("//", 1)[-1].split("/", 1)[-1]
-    if RUCIO_SVC == "rucio-server":  # reuse svc_exec indirectly
-        try:
-            svc_exec(svc, ["test", "-f", local_path])
-            return True
-        except RuntimeError:
-            return False
-    return False
+def replica_exists_on_xrd(pfn: str, token: str = None) -> bool:
+    """Check whether a file exists at the given PFN via HTTP GET — same
+    transport seed_xrd/prepare_xrd_dest use. Works against both sandbox's
+    in-cluster XRootD pods and staging's external validation-storage VM;
+    neither is reachable via svc_exec/kubectl exec on staging, where xrd3/
+    xrd4 are plain Docker containers on a GCE VM, not Kubernetes Deployments.
+    """
+    resp = webdav_get(pfn_to_https(pfn), token)
+    return resp.status_code == 200
 
 
 class TestDeletionLifecycle:
@@ -103,7 +102,7 @@ class TestDeletionLifecycle:
         validate_rule(rucio_client, rule_id, "XRD3→XRD4 (pre-deletion)", RUCIO_SVC)
 
         # Confirm file exists on XRD4 before deletion
-        assert replica_exists_on_xrd("xrd4", dst_pfn), (
+        assert replica_exists_on_xrd(dst_pfn, xrd4_write_token), (
             f"Expected replica to exist on XRD4 before deletion: {dst_pfn}"
         )
         log.info("  ✓ Replica confirmed on XRD4 before deletion")
@@ -120,8 +119,14 @@ class TestDeletionLifecycle:
         # In direct mode advance_pipeline runs the daemons synchronously;
         # in daemon mode it's a no-op and the long-running daemons converge
         # on their own loop — so poll until the replica is gone either way.
+        # One pass isn't guaranteed to catch it — a tombstone set moments
+        # earlier in the same reaper cycle can still be missed (observed on
+        # staging: reaper's list_and_mark_unlocked_replicas returned 0 for
+        # XRD4 on its first pass), so re-run the daemons on every iteration
+        # of both polling loops below rather than relying on one pass here.
         run_deletion_daemons(RUCIO_SVC)
 
+        # ── Step 5: poll for catalogue removal, re-running daemons each cycle
         deadline = time.time() + 120
         xrd4_pfns = None
         while time.time() < deadline:
@@ -135,25 +140,26 @@ class TestDeletionLifecycle:
             ]
             if not xrd4_pfns:
                 break
+            run_deletion_daemons(RUCIO_SVC)
             time.sleep(5)
 
-        # ── Step 5: verify replica removed from catalogue ─────────────────
         assert not xrd4_pfns, (
             f"Expected replica to be removed from Rucio catalogue on XRD4, "
             f"but found: {xrd4_pfns}"
         )
         log.info("  ✓ Replica removed from Rucio catalogue on XRD4")
 
-        # ── Step 6: verify physical deletion from storage ─────────────────
-        # Reaper removes the catalogue row after issuing the physical delete,
-        # but the storage backend isn't guaranteed to reflect it in the same
-        # instant — poll briefly rather than checking once immediately after
-        # the catalogue-removal loop exits (that's the flaky window).
-        deadline = time.time() + 30
-        still_exists = replica_exists_on_xrd("xrd4", dst_pfn)
+        # ── Step 6: poll for physical deletion, re-running daemons each cycle
+        # Rucio delinks the catalogue row (Step 5) before the physical davs://
+        # DELETE against storage actually completes — a real race window,
+        # not just eventual consistency — so this can't be a single
+        # immediately-after check; keep re-running the daemons while polling.
+        deadline = time.time() + 120
+        still_exists = replica_exists_on_xrd(dst_pfn, xrd4_write_token)
         while still_exists and time.time() < deadline:
-            time.sleep(3)
-            still_exists = replica_exists_on_xrd("xrd4", dst_pfn)
+            run_deletion_daemons(RUCIO_SVC)
+            time.sleep(5)
+            still_exists = replica_exists_on_xrd(dst_pfn, xrd4_write_token)
 
         assert not still_exists, (
             f"Expected file to be physically deleted from XRD4: {dst_pfn}"

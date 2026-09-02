@@ -686,7 +686,7 @@ def webdav_warm_up(
 # ── PFN-based seeding (XRootD RSEs — Teapot tests call webdav_* directly) ──
 
 
-def _pfn_to_https(pfn: str) -> str:
+def pfn_to_https(pfn: str) -> str:
     """XRootD's HTTP listener speaks TLS on the same port as davs://."""
     return pfn.replace("davs://", "https://", 1)
 
@@ -696,7 +696,7 @@ def seed_xrd(svc: str, pfn: str, token: str = None) -> tuple[int, str]:
     webdav_put/webdav_get, matching how FTS itself performs the real
     transfer. `svc` is only used for logging."""
     content = b"rucio-test\n"
-    url = _pfn_to_https(pfn)
+    url = pfn_to_https(pfn)
 
     resp = webdav_put(url, token, content)
     resp.raise_for_status()
@@ -719,7 +719,7 @@ def prepare_xrd_dest(pfn: str, token: str = None) -> None:
     directory; Teapot's storage area auto-creates intermediate directories,
     so TestTeapotOIDC has no equivalent call before its webdav_put.
     """
-    remote_dir_url = _pfn_to_https(pfn).rsplit("/", 1)[0]
+    remote_dir_url = pfn_to_https(pfn).rsplit("/", 1)[0]
     resp = webdav_mkcol(remote_dir_url, token)
     # 201 = created, 405/409 = already exists — both fine; anything else is real
     if resp.status_code not in (201, 405, 409):
