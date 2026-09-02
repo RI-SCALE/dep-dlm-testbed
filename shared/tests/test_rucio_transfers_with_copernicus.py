@@ -1,15 +1,16 @@
 import logging
 import os
 import time
+from urllib.parse import urlparse
 
 from conftest import (
     TEAPOT2_URL,
     add_rule,
+    fts_mysql_exec,
     register_replica,
     run_daemons,
     validate_rule,
     webdav_delete,
-    svc_exec,
 )
 
 import boto3
@@ -42,47 +43,22 @@ def force_streamed_teapot2():
     DESTINATION is not FULL/PULL. Scoped to this test and torn down so the
     davs<->davs TPC tests (test_rucio_transfers.py) keep their pull behaviour.
 
-    TEAPOT2 is registered with both davs and https protocols, and FTS records
-    the SE without a port (davs://teapot2, https://teapot2), so both forms
-    must be set.
+    The storage key FTS actually records in t_se.storage/t_file.dest_se
+    matches TEAPOT2's registered protocol hostname, not a fixed "teapot2"
+    alias — on staging that's the shared validation-storage VM hostname,
+    not "teapot2" as in sandbox/compose. Derive it from TEAPOT2_URL, which
+    is already correctly set per-environment, rather than hardcoding it.
     """
+    teapot2_host = urlparse(TEAPOT2_URL).hostname
     sql_set = (
         "INSERT INTO t_se (storage, tpc_support) VALUES "
-        "('davs://teapot2','NONE'),('https://teapot2','NONE') "
+        f"('davs://{teapot2_host}','NONE'),('https://{teapot2_host}','NONE') "
         "ON DUPLICATE KEY UPDATE tpc_support='NONE';"
     )
-    svc_exec(
-        "ftsdb",
-        [
-            "mysql",
-            "-h",
-            "127.0.0.1",
-            "--protocol=tcp",
-            "-ufts",
-            "-pfts",
-            "fts",
-            "-e",
-            sql_set,
-        ],
-    )
+    fts_mysql_exec(sql_set)
     yield
-    sql_unset = (
-        "DELETE FROM t_se WHERE storage IN ('davs://teapot2','https://teapot2');"
-    )
-    svc_exec(
-        "ftsdb",
-        [
-            "mysql",
-            "-h",
-            "127.0.0.1",
-            "--protocol=tcp",
-            "-ufts",
-            "-pfts",
-            "fts",
-            "-e",
-            sql_unset,
-        ],
-    )
+    sql_unset = f"DELETE FROM t_se WHERE storage IN ('davs://{teapot2_host}','https://{teapot2_host}');"
+    fts_mysql_exec(sql_unset)
 
 
 class TestCopernicusS3:

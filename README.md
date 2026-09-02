@@ -237,6 +237,7 @@ Terraform
   tf-import            Import an existing GCP resource into TF_ENV's state. Usage: make tf-import RESOURCE=module.rucio_database.google_sql_database_instance.this ID=dep-dlm-staging-e52e0d90/dep-dlm-staging-pg
   tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running against TF_ENV first — see the Lock Info 'Who' field.
   certs-sync           Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
+  userpass-client-sync Fetch userpass-client.cfg from Secret Manager (matches what's deployed to TF_ENV)
 
 Cleanup
   clear-artifacts      Remove certs, volumes, Terraform/Python/Helm artifacts

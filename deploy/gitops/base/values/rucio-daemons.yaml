@@ -1,7 +1,7 @@
 fullnameOverride: rucio-daemons
 image:
   repository: rucio/rucio-daemons
-  tag: release-40.0.0
+  tag: release-41.2.1
   pullPolicy: IfNotPresent
 useDeprecatedImplicitSecrets: false
 

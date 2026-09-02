@@ -4,12 +4,6 @@ ftsdb:
 env:
   - name: REQUESTS_CA_BUNDLE
     value: /etc/pki/tls/certs/ca-bundle.crt
-  - name: X509_USER_PROXY
-    value: /tmp/x509up_u0
-  - name: XrdSecGSISRVNAMES
-    value: "*"
-  - name: XrdSecGSIDELEGPROXY
-    value: "2"
   - name: VALSTORAGE_IP
     valueFrom:
       secretKeyRef:
@@ -30,6 +24,8 @@ volumes:
         - { key: rucio_ca.pem,            path: rucio_ca.pem,            mode: 0644 }
         - { key: 5fca1cb1.0,              path: 5fca1cb1.0,              mode: 0644 }
         - { key: 5fca1cb1.signing_policy, path: 5fca1cb1.signing_policy, mode: 0644 }
+        - { key: b96dc756.0,              path: b96dc756.0,              mode: 0644 }
+        - { key: b96dc756.signing_policy, path: b96dc756.signing_policy, mode: 0644 }
   - name: secrets
     secret:
       secretName: testbed-secrets

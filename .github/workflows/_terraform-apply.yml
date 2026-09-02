@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: egi-dev
+      token_mode:
+        description: "managed | unmanaged — drives var.token_mode (module.secrets), which sets rucio.cfg's [oidc] token_strategy. Without this, the apply falls back to the Makefile's own TOKEN_MODE ?= managed default regardless of what any downstream caller actually wants tested."
+        required: false
+        type: string
+        default: managed
     secrets:
       OIDC_CLIENT_ID:
         required: true
@@ -27,6 +32,7 @@ env:
   TF_INPUT: "false"
   TF_ENV: ${{ inputs.tf_env }}
   SCOPE_PROFILE: ${{ inputs.scope_profile }}
+  TOKEN_MODE: ${{ inputs.token_mode }}
   OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
 
 jobs:

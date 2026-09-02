@@ -211,6 +211,9 @@ FTS_PUBLIC_HOSTNAME         = $(if $(filter staging,$(GITOPS_ENV)),$(call stagin
 GATEWAY_STATIC_IP           = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,gateway_static_ip),)
 VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_hostname),)
 VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
+FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_database_private_ip),)
+FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
+
 
 ifeq ($(GITOPS_ENV),staging)
   override RUNTIME := k8s
@@ -229,6 +232,9 @@ ifeq ($(GITOPS_ENV),staging)
     -e DAEMON_MODE=$(DAEMON_MODE) \
     -e TEAPOT1_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8081 \
     -e TEAPOT2_URL=https://$(VALIDATION_STORAGE_HOSTNAME):8082 \
+    -e GITOPS_ENV=$(GITOPS_ENV) \
+    -e FTS_DATABASE_HOST=$(FTS_DATABASE_HOST) \
+    -e FTS_DB_PASSWORD=$(FTS_DB_PASSWORD) \
     -v $(TESTBED_HOST_SOURCE)/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro \
     -v $(TESTBED_HOST_SOURCE)/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro \
@@ -237,13 +243,13 @@ ifeq ($(GITOPS_ENV),staging)
     -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
     -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
 	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
-    mgajekcern/rucio-client-docker-kubectl:latest
+    mgajekcern/rucio-client-docker-kubectl:3867d9453cff79ce4d3b9354065e1c57402dafc7
+
   # Prefixed into each test recipe's bash -c string below (empty for
   # sandbox, where the compose/helm rucio-client image already has
-  # pytest baked in). boto3 deliberately skipped — not needed by
-  # test_rucio_transfers.py; add it back here if test-copernicus-transfers
-  # is run this way too.
-  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest >/dev/null 2>&1 &&
+  # pytest and boto3 baked in). Includes boto3 since
+  # test-copernicus-transfers needs it for _get_copernicus_metadata().
+  STAGING_PIP_INSTALL := pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org pytest boto3 >/dev/null 2>&1 &&
   EXEC_FTS := $(KUBECTL) exec -i deploy/fts --
 else ifeq ($(RUNTIME),k8s)
   EXEC_RUCIO := $(KUBECTL) exec deploy/rucio-client --
@@ -452,14 +458,13 @@ test-rucio-transfers: ## Rucio E2E transfer test
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
-	$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) \
+	$(EXEC_RUCIO) bash -c "export $(TEST_OIDC_ENV) \
 		S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 		S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
-		K8S_NAMESPACE=$(K8S_NAMESPACE) \
+		K8S_NAMESPACE=$(K8S_NAMESPACE); \
 		$(STAGING_PIP_INSTALL) \
-		$(TEST_OIDC_ENV) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
@@ -610,6 +615,14 @@ certs-sync: ## Fetch current certs from Secret Manager (matches what's deployed 
 	  --secret="dep-dlm-$(TF_ENV)-certs" \
 	  --project="$$GCP_PROJECT_ID" \
 	| python3 -c "import sys,json,base64; d=json.load(sys.stdin); [open(f'certs/{k}','w').write(v) for k,v in d.items()]"
+
+.PHONY: userpass-client-sync
+userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches what's deployed to TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-secrets" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json; d=json.load(sys.stdin); open('userpass-client.cfg','w').write(d['userpass-client.cfg'])"
 
 ## Cleanup
 

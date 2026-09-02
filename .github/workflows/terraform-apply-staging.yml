@@ -16,17 +16,26 @@ on:
         options: [managed, unmanaged]
         default: unmanaged
       gitops_engine:
-        description: "GitOps engine to install"
+        description: "GitOps engine to install (only used if run_gitops is checked)"
         required: true
         type: choice
         options: [argocd, flux]
         default: argocd
-      deploy_depth:
-        description: "How far to progress after apply"
+      run_terraform:
+        description: "Run terraform plan/apply + infra smoke test"
         required: true
-        type: choice
-        options: [apply-only, gitops, e2e]
-        default: apply-only
+        type: boolean
+        default: true
+      run_gitops:
+        description: "Install GitOps engine + full smoke test (requires an already-applied environment, either from this run or a prior one)"
+        required: true
+        type: boolean
+        default: false
+      run_e2e:
+        description: "Run e2e transfer tests (requires GitOps already installed and healthy, either from this run or a prior one)"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -36,10 +45,12 @@ permissions:
 
 jobs:
   terraform:
+    if: inputs.run_terraform
     uses: ./.github/workflows/_terraform-apply.yml
     with:
       tf_env: staging
       environment_name: staging
+      token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
     secrets:
       OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
@@ -47,7 +58,10 @@ jobs:
 
   gitops:
     needs: terraform
-    if: inputs.deploy_depth != 'apply-only'
+    if: |
+      always() &&
+      inputs.run_gitops &&
+      (needs.terraform.result == 'success' || needs.terraform.result == 'skipped')
     uses: ./.github/workflows/_gitops-deploy.yml
     with:
       tf_env: staging
@@ -60,13 +74,20 @@ jobs:
       OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
 
   e2e:
-    needs: gitops
-    if: inputs.deploy_depth == 'e2e'
+    needs: [terraform, gitops]
+    if: |
+      always() &&
+      inputs.run_e2e &&
+      (needs.terraform.result == 'success' || needs.terraform.result == 'skipped') &&
+      (needs.gitops.result == 'success' || needs.gitops.result == 'skipped')
     uses: ./.github/workflows/_e2e-test.yml
     with:
       tf_env: staging
       environment_name: staging
+      token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
     secrets:
       OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
       OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+      S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+      S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
