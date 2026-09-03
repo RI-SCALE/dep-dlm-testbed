@@ -133,6 +133,25 @@ install_gcloud() {
     echo -e "${YELLOW}Run 'gcloud init' manually to authenticate — this is interactive (browser sign-in) and intentionally not automated here.${NC}\n"
 }
 
+install_helm_git() {
+    echo -e "${BLUE}Installing helm-git plugin (needed for git+https chart dependencies)...${NC}"
+
+    local plugin_dir="${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git"
+
+    if [[ -d "$plugin_dir" ]]; then
+        echo -e "${GREEN}helm-git already installed${NC}\n"
+        return 0
+    fi
+
+    helm plugin install https://github.com/aslafy-z/helm-git --verify=false
+
+    if [[ ! -d "$plugin_dir" ]]; then
+        echo -e "${RED}helm-git install failed — check the output above${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}helm-git installed${NC}\n"
+}
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -153,4 +172,5 @@ install_yq
 install_rucio_gfal
 install_diagrams
 install_gcloud
+install_helm_git
 print_summary

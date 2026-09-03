@@ -39,7 +39,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository.yaml"
+GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository-dep-dlm-testbed.yaml"
+FORK_GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository-rucio-charts-fork.yaml"
 ENTRYPOINT="${GITOPS_DIR}/flux/entrypoints/${GITOPS_ENV}.yaml"
 APP_NS="${APP_NS:-dep-dlm-${GITOPS_ENV}}"
 CORE_KS="dep-dlm-${GITOPS_ENV}-core"       # confirmed correct by CI
@@ -60,8 +61,29 @@ preflight() {
   require_cluster
   [[ -f "$ENTRYPOINT" ]] || die "entrypoint not found: $ENTRYPOINT"
   [[ -f "$GITREPO" ]]    || die "gitrepository not found: $GITREPO"
+  [[ -f "$FORK_GITREPO" ]] || die "rucio-charts-fork gitrepository not found: $FORK_GITREPO"
   if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
     require_cmd envsubst
+  fi
+  if command -v helm >/dev/null 2>&1; then
+    if [[ ! -d "${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git" ]]; then
+      log "Installing helm-git plugin (needed for git+https chart dependencies)"
+      helm plugin install https://github.com/aslafy-z/helm-git \
+        || die "helm-git plugin install failed — required for the rucio-server/rucio-daemons fork dependency in Chart.yaml"
+    fi
+    # helm dependency build (unlike dependency update) checks registered repos
+    # rather than resolving git+https URLs live, so these must exist as named
+    # repos even though Chart.yaml references them by URL, not by name.
+    if ! helm repo list 2>/dev/null | grep -q '^rucio-server-fork'; then
+      log "Registering rucio-server-fork repo (git+https, for helm dependency build)"
+      helm repo add rucio-server-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master" \
+        || die "failed to register rucio-server-fork helm repo"
+    fi
+    if ! helm repo list 2>/dev/null | grep -q '^rucio-daemons-fork'; then
+      log "Registering rucio-daemons-fork repo (git+https, for helm dependency build)"
+      helm repo add rucio-daemons-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master" \
+        || die "failed to register rucio-daemons-fork helm repo"
+    fi
   fi
   log "Target cluster:"
   kubectl config current-context || true
@@ -105,9 +127,12 @@ wait_for_flux_ready() {
 # Applies the GitRepository source (with optional URL/revision overrides).
 apply_gitrepository() {
   APPLY_GITREPO="$(patch_git_ref "$GITREPO" url branch "$REPO_URL" "$REVISION")"
-  log "Applying GitRepository source"
+  log "Applying GitRepository source (dep-dlm-testbed)"
   kubectl apply -f "$APPLY_GITREPO"
   [[ "$APPLY_GITREPO" != "$GITREPO" ]] && rm -f "$APPLY_GITREPO"
+
+  log "Applying GitRepository source (rucio-charts-fork, unaffected by --revision)"
+  kubectl apply -f "$FORK_GITREPO"
 }
 
 # Applies the FULL entrypoint in one shot (eso + core + secrets + components)

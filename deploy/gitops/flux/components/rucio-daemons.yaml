@@ -12,9 +12,8 @@ spec:
     - { name: rucio-server }
   chart:
     spec:
-      chart: rucio-daemons
-      version: "40.0.0"
-      sourceRef: { kind: HelmRepository, name: rucio, namespace: flux-system }
+      chart: charts/rucio-daemons
+      sourceRef: { kind: GitRepository, name: rucio-charts-fork, namespace: flux-system }
   # Argo $values -> base/values/rucio-daemons.yaml; Flux reads it from a ConfigMap the
   # env Kustomization generates (configMapGenerator: rucio-daemons-values).
   valuesFrom:

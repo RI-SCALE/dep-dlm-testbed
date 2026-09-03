@@ -13,7 +13,7 @@ spec:
   chart:
     spec:
       chart: rucio-client
-      version: "40.0.0"
+      version: "41.2.1"
       sourceRef: { kind: HelmRepository, name: rucio, namespace: flux-system }
   # Argo $values -> base/values/rucio-client.yaml; Flux reads it from a ConfigMap the
   # env Kustomization generates (configMapGenerator: rucio-client-values).

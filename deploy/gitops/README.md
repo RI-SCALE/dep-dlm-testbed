@@ -8,8 +8,16 @@ rationale live in `docs/gitops-blueprint.md`; this is the operational entry poin
 - `environments/<env>/secrets/` — per-env ClusterSecretStore + `testbed-certs`/
   `testbed-secrets` ExternalSecrets (the only Secrets in any environment)
 - `argocd/` — per-env ApplicationSet + app-of-apps entrypoints (`.../secrets`
-  is the whole synced tree per environment)
-- `flux/` — HelmReleases, sources, ESO, staged entrypoints
+  is the whole synced tree per environment). `rucio-server`/`rucio-daemons`
+  source their chart directly from the `mgajek-cern/helm-charts` fork
+  (`targetRevision: master`) rather than from this repo.
+- `flux/` — HelmReleases, sources, ESO, staged entrypoints. Two `GitRepository`
+  sources are used: `flux-system/gitrepository-dep-dlm-testbed.yaml` (this
+  repo, tracks whatever branch is being deployed) and
+  `flux-system/gitrepository-rucio-charts-fork.yaml` (the Rucio chart fork,
+  always pinned to `master`, independent of this repo's branch — see
+  `docs/concepts/gitops-branch-development.md` for why these are kept in
+  separate files).
 
 `testbed-configs`/`testbed-patches`/`testbed-scripts`/`testbed-tests` are
 **not** Kustomize-generated or GitOps-synced — same as Vault seeding and the
@@ -42,5 +50,11 @@ the FTS token mode / OIDC scope profile with `TOKEN_MODE` / `SCOPE_PROFILE`
 ```bash
 make argocd-install TOKEN_MODE=unmanaged SCOPE_PROFILE=egi-dev
 ```
+
+`GITOPS_REVISION`/`GITOPS_REPO_URL` only ever override this repo's own
+source (the app-of-apps root for Argo, the `dep-dlm-testbed` `GitRepository`
+for Flux) — they never affect the `rucio-server`/`rucio-daemons` chart
+sources, which always track the `mgajek-cern/helm-charts` fork's `master`
+branch regardless of which branch of this repo you're deploying.
 
 Staging/production need external Vault/DB/IdP (see [BACKLOG.md](../../BACKLOG.md)).
