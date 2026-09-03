@@ -9,7 +9,7 @@ spec:
   interval: 1m
   url: https://github.com/ri-scale/dep-dlm-testbed.git
   ref:
-    branch: main
+    branch: feat/vendor-rucio-charts-from-fork
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository

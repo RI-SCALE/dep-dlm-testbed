@@ -28,7 +28,7 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/vendor-rucio-charts-from-fork
                   ref: values
           - name: rucio-daemons
             spec:
@@ -38,17 +38,17 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/staging/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/vendor-rucio-charts-from-fork
                   ref: values
           - name: fts
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/vendor-rucio-charts-from-fork
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/staging/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/vendor-rucio-charts-from-fork
                   ref: values
   template:
     metadata:
