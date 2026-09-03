@@ -54,9 +54,9 @@ spec:
           - name: rucio-server
             spec:
               sources:
-                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  path: deploy/helm-charts/rucio-server
-                  targetRevision: main
+                - repoURL: https://github.com/mgajek-cern/helm-charts.git
+                  path: charts/rucio-server
+                  targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
@@ -64,9 +64,9 @@ spec:
           - name: rucio-daemons
             spec:
               sources:
-                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  path: deploy/helm-charts/rucio-daemons
-                  targetRevision: main
+                - repoURL: https://github.com/mgajek-cern/helm-charts.git
+                  path: charts/rucio-daemons
+                  targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main

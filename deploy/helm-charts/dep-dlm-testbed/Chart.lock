@@ -4,7 +4,7 @@ dependencies:
   version: 18.3.0
 - name: rucio-server
   repository: file://../rucio-server
-  version: 40.0.0
+  version: 41.2.1
 - name: fts
   repository: file://../fts
   version: 0.1.0
@@ -22,7 +22,7 @@ dependencies:
   version: 0.1.0
 - name: rucio-daemons
   repository: file://../rucio-daemons
-  version: 40.0.0
+  version: 41.2.1
 - name: teapot
   repository: file://../teapot
   version: 0.1.0

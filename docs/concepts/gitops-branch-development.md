@@ -22,7 +22,7 @@ nothing to hand-edit.
 
 Quick sweep to find any you missed:
 ```bash
-grep -rn "targetRevision:\|branch:" deploy/gitops | grep -v "40.0.0\|0.10.7\|0.28.1\|18.3.0"
+grep -rn "targetRevision:\|branch:" deploy/gitops | grep -v "41.2.1\|0.10.7\|0.28.1\|18.3.0"
 ```
 
 ## Why
