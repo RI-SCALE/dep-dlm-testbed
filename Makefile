@@ -418,28 +418,33 @@ flux-install: ## Install Flux, bootstrap GITOPS_ENV
 
 .PHONY: flux-uninstall
 flux-uninstall: ## Remove Flux Kustomizations and controllers
-	# 1. Suspend + delete the entrypoint Kustomizations (stops Flux re-reconciling).
-	#    Reverse order: components -> secrets -> eso.
+	# 1. Suspend + delete the entrypoint Kustomizations (stops Flux re-reconciling). Reverse order: components -> secrets -> eso.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV) --ignore-not-found --wait=false
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-secrets --ignore-not-found --wait=false
 	# 2. Clear ESO-managed resources WHILE ESO is still alive (avoids finalizer deadlock).
 	-kubectl delete clustersecretstore dep-dlm-secrets --ignore-not-found
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
-	# 3. Now the workload namespace can finalize. NOTE: vault-seed-once and
-	#    rucio-bootstrap-db are imperative Jobs (shared/scripts/seed-vault.sh,
-	#    run-bootstrap-db.sh) — not GitOps-managed, so nothing above prunes
-	#    them, but they live in this namespace and are deleted with it here.
+	# 3. Now the workload namespace can finalize
 	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
 	# 4. Remove ESO (its own Kustomization) and the HelmReleases it managed.
 	kubectl -n $(FLUX_NAMESPACE) delete kustomization dep-dlm-$(GITOPS_ENV)-eso --ignore-not-found --wait=false
-	# 5. Remove the GitRepository source.
-	kubectl -n $(FLUX_NAMESPACE) delete gitrepository dep-dlm-testbed --ignore-not-found
+	# 5. Remove both GitRepository sources
+	kubectl -n $(FLUX_NAMESPACE) delete gitrepository dep-dlm-testbed rucio-charts-fork --ignore-not-found
+	# 5b. Belt-and-braces
+	-kubectl -n $(FLUX_NAMESPACE) delete helmrelease,helmchart,kustomization,gitrepository --all --ignore-not-found --wait=true --timeout=60s
+	-for r in $$(kubectl -n $(FLUX_NAMESPACE) get helmrelease,helmchart,kustomization,gitrepository -o name 2>/dev/null); do \
+	  kubectl -n $(FLUX_NAMESPACE) patch $$r --type=json -p '[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true; done
 	@echo "GitOps $(GITOPS_ENV) Flux Kustomizations removed (Flux controllers left intact)"
 	# 6. Uinstall Flux itself
 	flux uninstall --namespace=$(FLUX_NAMESPACE) --silent 2>/dev/null || \
 	  kubectl delete namespace $(FLUX_NAMESPACE) --ignore-not-found
 	@echo "Flux controllers removed"
+	# 7. Belt-and-braces for the namespace itself
+	-kubectl get namespace $(FLUX_NAMESPACE) >/dev/null 2>&1 && \
+	  kubectl get namespace $(FLUX_NAMESPACE) -o json 2>/dev/null \
+	  | python3 -c "import json,sys; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \
+	  | kubectl replace --raw "/api/v1/namespaces/$(FLUX_NAMESPACE)/finalize" -f - >/dev/null 2>&1 || true
 
 ## Helm-only
 
