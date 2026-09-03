@@ -10,14 +10,3 @@ spec:
   url: https://github.com/ri-scale/dep-dlm-testbed.git
   ref:
     branch: feat/vendor-rucio-charts-from-fork
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: GitRepository
-metadata:
-  name: rucio-charts-fork
-  namespace: flux-system
-spec:
-  interval: 5m
-  url: https://github.com/mgajek-cern/helm-charts.git
-  ref:
-    branch: master

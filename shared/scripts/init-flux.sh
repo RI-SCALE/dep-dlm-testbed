@@ -39,7 +39,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository.yaml"
+GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository-dep-dlm-testbed.yaml"
+FORK_GITREPO="${GITOPS_DIR}/flux/flux-system/gitrepository-rucio-charts-fork.yaml"
 ENTRYPOINT="${GITOPS_DIR}/flux/entrypoints/${GITOPS_ENV}.yaml"
 APP_NS="${APP_NS:-dep-dlm-${GITOPS_ENV}}"
 CORE_KS="dep-dlm-${GITOPS_ENV}-core"       # confirmed correct by CI
@@ -60,6 +61,7 @@ preflight() {
   require_cluster
   [[ -f "$ENTRYPOINT" ]] || die "entrypoint not found: $ENTRYPOINT"
   [[ -f "$GITREPO" ]]    || die "gitrepository not found: $GITREPO"
+  [[ -f "$FORK_GITREPO" ]] || die "rucio-charts-fork gitrepository not found: $FORK_GITREPO"
   if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
     require_cmd envsubst
   fi
@@ -125,9 +127,12 @@ wait_for_flux_ready() {
 # Applies the GitRepository source (with optional URL/revision overrides).
 apply_gitrepository() {
   APPLY_GITREPO="$(patch_git_ref "$GITREPO" url branch "$REPO_URL" "$REVISION")"
-  log "Applying GitRepository source"
+  log "Applying GitRepository source (dep-dlm-testbed)"
   kubectl apply -f "$APPLY_GITREPO"
   [[ "$APPLY_GITREPO" != "$GITREPO" ]] && rm -f "$APPLY_GITREPO"
+
+  log "Applying GitRepository source (rucio-charts-fork, unaffected by --revision)"
+  kubectl apply -f "$FORK_GITREPO"
 }
 
 # Applies the FULL entrypoint in one shot (eso + core + secrets + components)
