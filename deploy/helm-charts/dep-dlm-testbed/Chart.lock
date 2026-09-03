@@ -3,7 +3,7 @@ dependencies:
   repository: https://charts.bitnami.com/bitnami
   version: 18.3.0
 - name: rucio-server
-  repository: file://../rucio-server
+  repository: git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master
   version: 41.2.1
 - name: fts
   repository: file://../fts
@@ -21,7 +21,7 @@ dependencies:
   repository: file://../rucio-client
   version: 0.1.0
 - name: rucio-daemons
-  repository: file://../rucio-daemons
+  repository: git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master
   version: 41.2.1
 - name: teapot
   repository: file://../teapot
@@ -29,5 +29,5 @@ dependencies:
 - name: teapot
   repository: file://../teapot
   version: 0.1.0
-digest: sha256:15fc27f5ed3d5b4a9113937f7ff7a00efae11cc84e0db3eefca92adfc5d50e67
-generated: "2026-06-18T06:57:03.241273167Z"
+digest: sha256:fb2f4e940401c968543827badc509303639f3855deef0ce69578bc58c985dc49
+generated: "2026-09-03T11:51:25.921491719Z"

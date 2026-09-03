@@ -61,6 +61,26 @@ preflight() {
   if [[ "$SEED" -eq 1 && "$GITOPS_ENV" == "sandbox" ]]; then
     require_cmd envsubst
   fi
+  if command -v helm >/dev/null 2>&1; then
+    if [[ ! -d "${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git" ]]; then
+      log "Installing helm-git plugin (needed for git+https chart dependencies)"
+      helm plugin install https://github.com/aslafy-z/helm-git \
+        || die "helm-git plugin install failed — required for the rucio-server/rucio-daemons fork dependency in Chart.yaml"
+    fi
+    # helm dependency build (unlike dependency update) checks registered repos
+    # rather than resolving git+https URLs live, so these must exist as named
+    # repos even though Chart.yaml references them by URL, not by name.
+    if ! helm repo list 2>/dev/null | grep -q '^rucio-server-fork'; then
+      log "Registering rucio-server-fork repo (git+https, for helm dependency build)"
+      helm repo add rucio-server-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master" \
+        || die "failed to register rucio-server-fork helm repo"
+    fi
+    if ! helm repo list 2>/dev/null | grep -q '^rucio-daemons-fork'; then
+      log "Registering rucio-daemons-fork repo (git+https, for helm dependency build)"
+      helm repo add rucio-daemons-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master" \
+        || die "failed to register rucio-daemons-fork helm repo"
+    fi
+  fi
   log "Target cluster:"
   kubectl config current-context || true
 }
