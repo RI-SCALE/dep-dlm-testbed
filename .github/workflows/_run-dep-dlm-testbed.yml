@@ -102,6 +102,13 @@ jobs:
         if: inputs.runtime == 'k8s'
         uses: azure/setup-helm@v4
 
+      - name: Install helm-git plugin
+        if: inputs.runtime == 'k8s'
+        run: |
+          if [ ! -d "${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git" ]; then
+            helm plugin install https://github.com/aslafy-z/helm-git --verify=false
+          fi
+
       - name: Render idpsecrets.json from secrets
         if: inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev'
         run: |
