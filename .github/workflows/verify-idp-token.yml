@@ -1,0 +1,32 @@
+name: Verify IdP token flow
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - shared/scripts/verify-idp-token.sh
+      - Makefile
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scope_profile: egi-dev
+            client_id: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+            client_secret: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+          - scope_profile: ls-aai-dev
+            client_id: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+            client_secret: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify IdP token flow (${{ matrix.scope_profile }})
+        env:
+          OIDC_CLIENT_ID: ${{ matrix.client_id }}
+          OIDC_CLIENT_SECRET: ${{ matrix.client_secret }}
+        run: make verify-idp-token SCOPE_PROFILE=${{ matrix.scope_profile }}
