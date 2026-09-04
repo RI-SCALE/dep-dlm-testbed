@@ -51,7 +51,7 @@ print(d['token_endpoint'])
 }
 
 # 1. client_credentials — does it work at all?
-test_client_credentials() {
+test_client_credentials_baseline() {
   echo "=== 1. client_credentials ==="
   local resp
   resp=$(curl -s -u "${CID}:${CSECRET}" \
@@ -64,7 +64,7 @@ test_client_credentials() {
 }
 
 # 2. client_credentials + resource= — does aud reflect it?
-test_resource_audience() {
+test_client_credentials_resource_audience() {
   echo
   echo "=== 2. client_credentials + resource=${RESOURCE_1} ==="
   local resp token
@@ -88,7 +88,7 @@ print('aud reflects resource=:', 'aud' in claims and '$RESOURCE_1' in claims.get
 }
 
 # 3. token-exchange, if enabled on this client
-test_token_exchange() {
+test_token_exchange_access_token() {
   echo
   echo "=== 3. token-exchange (${RESOURCE_1} -> ${RESOURCE_2}) ==="
   local subject_resp subject_token exchange_resp
@@ -119,12 +119,14 @@ t = resp['access_token']
 p = t.split('.')[1]; p += '=' * (-len(p) % 4)
 claims = json.loads(base64.urlsafe_b64decode(p))
 print(json.dumps(claims, indent=2))
-print('aud present:', 'aud' in claims)
+aud = claims.get('aud')
+ok = aud == '$RESOURCE_2' or (isinstance(aud, list) and '$RESOURCE_2' in aud)
+print('aud reflects resource=:', ok)
 "
 }
 
 # 4. refresh_token grant — does it work, and does aud/resource carry over?
-test_refresh_token() {
+test_refresh_token_grant() {
   echo
   echo "=== 4. refresh_token grant (resource=${RESOURCE_1}) ==="
   local cc_resp refresh_token refresh_resp token
@@ -135,7 +137,7 @@ test_refresh_token() {
     "$TOKEN_URL")
   refresh_token=$(echo "$cc_resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('refresh_token',''))")
   if [[ -z "$refresh_token" ]]; then
-    warn "No refresh_token returned — client may not have 'Issue refresh tokens' enabled, or offline_access scope was dropped/rejected: $cc_resp"
+    warn "No refresh_token returned from client_credentials+offline_access."
     return 0
   fi
   refresh_resp=$(curl -s -u "${CID}:${CSECRET}" \
@@ -157,10 +159,47 @@ print('aud reflects resource= after refresh:', 'aud' in claims and '$RESOURCE_1'
 "
 }
 
-# 5. Authorization code flow can't be scripted — just print how to do it manually.
-print_auth_code_note() {
+# 5. token-exchange requesting a refresh_token as output — the actual
+#    original question (distinct from test 4's ordinary refresh grant).
+test_token_exchange_refresh_token() {
   echo
-  echo "=== 5. Authorization code flow — manual, can't be scripted ==="
+  echo "=== 5. token-exchange requesting requested_token_type=refresh_token ==="
+  local subject_resp subject_token exchange_resp
+  subject_resp=$(curl -s -u "${CID}:${CSECRET}" \
+    -d 'grant_type=client_credentials' \
+    -d "resource=${RESOURCE_1}" \
+    -d 'scope=openid' \
+    "$TOKEN_URL")
+  subject_token=$(echo "$subject_resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access_token',''))")
+  if [[ -z "$subject_token" ]]; then
+    warn "subject token mint FAILED: $subject_resp"
+    return 0
+  fi
+  exchange_resp=$(curl -s -u "${CID}:${CSECRET}" \
+    -d 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+    -d "subject_token=${subject_token}" \
+    -d 'subject_token_type=urn:ietf:params:oauth:token-type:access_token' \
+    -d 'requested_token_type=urn:ietf:params:oauth:token-type:refresh_token' \
+    -d "resource=${RESOURCE_2}" \
+    -d 'scope=openid' \
+    "$TOKEN_URL")
+  echo "$exchange_resp" | python3 -m json.tool
+  echo "$exchange_resp" | python3 -c "
+import sys, json
+resp = json.load(sys.stdin)
+if 'refresh_token' in resp:
+    print('refresh_token issued by token-exchange: True')
+elif resp.get('error') == 'invalid_request' and 'requested_token_type' in resp.get('error_description',''):
+    print('requested_token_type=refresh_token NOT SUPPORTED by this deployment')
+else:
+    print('token-exchange for refresh_token FAILED:', json.dumps(resp, indent=2))
+"
+}
+
+# 6. Authorization code flow can't be scripted — just print how to do it manually.
+print_auth_code_flow_note() {
+  echo
+  echo "=== 6. Authorization code flow — manual, can't be scripted ==="
   echo "Point RUCIO_CONFIG at the profile's oidc-client.cfg and run 'rucio whoami'"
   echo "once idpsecrets.json's placeholders are filled in — exercises the browser"
   echo "login and gives you a real user 'sub' for the profile's user-mapping.csv."
@@ -171,11 +210,12 @@ print_auth_code_note() {
 main() {
   validate_args
   resolve_token_endpoint
-  test_client_credentials
-  test_resource_audience
-  test_token_exchange
-  test_refresh_token
-  print_auth_code_note
+  test_client_credentials_baseline
+  test_client_credentials_resource_audience
+  test_token_exchange_access_token
+  test_refresh_token_grant
+  test_token_exchange_refresh_token
+  print_auth_code_flow_note
 }
 
 main

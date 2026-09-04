@@ -1,0 +1,46 @@
+name: Verify IdP token flow
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - shared/scripts/verify-idp-token.sh
+      - Makefile
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scope_profile: [egi-dev, ls-aai-dev]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Select credentials for ${{ matrix.scope_profile }}
+        id: creds
+        env:
+          EGI_DEV_OIDC_CLIENT_ID: ${{ secrets.EGI_DEV_OIDC_CLIENT_ID }}
+          EGI_DEV_OIDC_CLIENT_SECRET: ${{ secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
+          LS_AAI_DEV_OIDC_CLIENT_ID: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_ID }}
+          LS_AAI_DEV_OIDC_CLIENT_SECRET: ${{ secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET }}
+        run: |
+          if [ "${{ matrix.scope_profile }}" = "egi-dev" ]; then
+            echo "::add-mask::$EGI_DEV_OIDC_CLIENT_ID"
+            echo "::add-mask::$EGI_DEV_OIDC_CLIENT_SECRET"
+            echo "client_id=$EGI_DEV_OIDC_CLIENT_ID" >> "$GITHUB_OUTPUT"
+            echo "client_secret=$EGI_DEV_OIDC_CLIENT_SECRET" >> "$GITHUB_OUTPUT"
+          else
+            echo "::add-mask::$LS_AAI_DEV_OIDC_CLIENT_ID"
+            echo "::add-mask::$LS_AAI_DEV_OIDC_CLIENT_SECRET"
+            echo "client_id=$LS_AAI_DEV_OIDC_CLIENT_ID" >> "$GITHUB_OUTPUT"
+            echo "client_secret=$LS_AAI_DEV_OIDC_CLIENT_SECRET" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify IdP token flow (${{ matrix.scope_profile }})
+        env:
+          OIDC_CLIENT_ID: ${{ steps.creds.outputs.client_id }}
+          OIDC_CLIENT_SECRET: ${{ steps.creds.outputs.client_secret }}
+        run: make verify-idp-token SCOPE_PROFILE=${{ matrix.scope_profile }}
