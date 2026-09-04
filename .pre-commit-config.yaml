@@ -26,6 +26,18 @@ repos:
         exclude: ^shared/patches/.*\.py$
       - id: ruff-format
 
+  - repo: local
+    hooks:
+      - id: helm-dependency-build
+        name: helm dependency build (umbrella chart)
+        description: rucio-server/rucio-daemons resolve via git+https through
+          the helm-git plugin — helmlint needs charts/ populated first, or it
+          silently skips/misreports the umbrella chart.
+        entry: shared/scripts/ensure-helm-chart-deps.sh
+        language: system
+        files: ^deploy/helm-charts/dep-dlm-testbed/Chart\.(yaml|lock)$
+        pass_filenames: false
+
   - repo: https://github.com/gruntwork-io/pre-commit
     rev: v0.1.24
     hooks:
