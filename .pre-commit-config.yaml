@@ -33,7 +33,7 @@ repos:
         description: rucio-server/rucio-daemons resolve via git+https through
           the helm-git plugin — helmlint needs charts/ populated first, or it
           silently skips/misreports the umbrella chart.
-        entry: bash -c 'helm dependency build deploy/helm-charts/dep-dlm-testbed'
+        entry: shared/scripts/ensure-helm-chart-deps.sh
         language: system
         files: ^deploy/helm-charts/dep-dlm-testbed/Chart\.(yaml|lock)$
         pass_filenames: false

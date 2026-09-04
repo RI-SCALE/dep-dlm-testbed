@@ -211,3 +211,43 @@ bootstrap_rucio_db() {
   "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS" \
     --db-host "$rucio_db_host" --skip-service-check --generate-scripts-secret
 }
+
+# ensure_helm_chart_deps [<chart_dir>]
+# Installs the helm-git plugin (needed for git+https:// chart sources —
+# see Chart.yaml's rucio-server/rucio-daemons dependencies), registers the
+# named repos `helm dependency build` needs (it checks registered repos
+# rather than resolving git+https URLs live, unlike `dependency update`),
+# and runs `helm dependency build` against chart_dir (default: the
+# umbrella chart at deploy/helm-charts/dep-dlm-testbed).
+ensure_helm_chart_deps() {
+  local chart_dir="${1:-${REPO_ROOT:-.}/deploy/helm-charts/dep-dlm-testbed}"
+  require_cmd helm
+
+  if [[ ! -d "${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git" ]]; then
+    log "Installing helm-git plugin (needed for git+https chart dependencies)"
+    helm plugin install https://github.com/aslafy-z/helm-git \
+      || die "helm-git plugin install failed — required for the rucio-server/rucio-daemons fork dependency in Chart.yaml"
+  fi
+
+  if ! helm repo list 2>/dev/null | grep -q '^bitnami'; then
+    log "Adding bitnami chart repo"
+    helm repo add bitnami https://charts.bitnami.com/bitnami \
+      || die "failed to register bitnami helm repo"
+  fi
+
+  if ! helm repo list 2>/dev/null | grep -q '^rucio-server-fork'; then
+    log "Registering rucio-server-fork repo (git+https, for helm dependency build)"
+    helm repo add rucio-server-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master" \
+      || die "failed to register rucio-server-fork helm repo"
+  fi
+
+  if ! helm repo list 2>/dev/null | grep -q '^rucio-daemons-fork'; then
+    log "Registering rucio-daemons-fork repo (git+https, for helm dependency build)"
+    helm repo add rucio-daemons-fork "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master" \
+      || die "failed to register rucio-daemons-fork helm repo"
+  fi
+
+  helm repo update >/dev/null 2>&1 || true
+  log "Building chart dependencies for ${chart_dir}"
+  helm dependency build "$chart_dir"
+}
