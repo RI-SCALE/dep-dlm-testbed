@@ -151,3 +151,33 @@ unregistered keys.
   cache key too — otherwise two different credential bindings
   requesting the same audience/scope could incorrectly share a cached
   token.
+- **User-delegated token exchange is out of scope for this design and has a real, unresolved dependency, not just  a resolution-shape question.** If conveyor's service-account-only assumption
+  (ADR-006's NOTE) is ever revisited, cross-issuer exchange between a
+  transfer's source and destination RSE only works if those two
+  issuers already trust each other — either directly, via federation
+  (e.g. EGI Check-in / WLCG IAM), or indirectly, via a mediating Security
+  Token Service (STS) that both issuers separately trust and that
+  translates a token from issuer A into one issuer B accepts. Token
+  exchange does not manufacture trust between unrelated issuers on its
+  own. Confirming whether the target issuers are federated, or whether
+  a mediating STS would need to be introduced, is a question for the
+  AAI/IAM operators (see ADR-006's `consulted`), not something this
+  design or Rucio's code can resolve. An STS is new infrastructure —
+  same category ADR-006 already declined to add (see its Rejected
+  Alternative) — so it should only be pursued if federation between
+  the specific issuers in play turns out not to exist. Until confirmed,
+  any user-delegated flow crossing an unfederated issuer boundary
+  should fall back to the service-credential flow this design already
+  implements, rather than attempting exchange.
+
+  Note also that `idp-secrets.json`'s entries are shaped for the
+  client_credentials grant this design uses (`client_id`/
+  `client_secret` authenticate DLM itself to obtain a token). In a
+  token-exchange flow, the subject being exchanged is the user's own
+  token, supplied at request time — not read from this file. The
+  `client_id`/`client_secret` in a resolved entry may still be needed
+  to authenticate the *requesting client* in some exchange grants, but
+  their role shifts from "obtain a token" to "authorize this specific
+  exchange," and `issuer_binding` still correctly identifies which
+  entry to use either way — only what `request_token` (or its future
+  exchange-flow equivalent) does with that entry changes.

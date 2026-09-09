@@ -15,7 +15,24 @@ What is missing is a standard **RSE → AAI/IdP binding**: a first-class attribu
 
 This gap becomes a hard blocker once a component must deal with more than one AAI at once — e.g. DLM needs source and destination tokens from different AAIs, and RSEs may each sit behind a different issuer. The decision below is about introducing that RSE-to-AAI binding abstraction, and choosing the mechanism (a keyed credential file) that resolves it — not about adding multi-issuer support to Rucio, which already exists.
 
-**NOTE:** Transfers are executed by background daemons (conveyor) rather than in the context of an interactive user session, so the tokens involved are understood to be service-level (client credentials) rather than delegated user identity. If that holds, the binding only ever needs to resolve to one fixed service credential per RSE, with no per-user routing to design for — worth confirming with the Rucio team rather than assuming.
+**NOTE:** Transfers are executed by background daemons (conveyor)
+rather than in the context of an interactive user session, so the
+tokens involved are understood to be service-level (client
+credentials) rather than delegated user identity. If that holds, the
+binding only ever needs to resolve to one fixed service credential per
+RSE, with no per-user routing to design for — worth confirming with
+the Rucio team rather than assuming.
+
+If this assumption is ever revisited in favor of user-delegated token
+exchange, `issuer_binding` resolving one static credential per RSE is
+not sufficient on its own: token exchange across two RSEs bound to
+*different* issuers additionally requires those issuers to trust each
+other (federation, or a mediating token service) — this ADR's file-
+and-attribute mechanism only solves *which* credential/issuer an RSE
+maps to, not whether two issuers can vouch for each other's tokens.
+That trust question sits outside this ADR's scope and would need its
+own decision if pursued. See Design-003's open questions for how this
+surfaced in practice.
 
 This is a credential/config lifecycle concern, distinct from and sitting below the Authorization Service decision (see adr-authorization-service.md).
 
