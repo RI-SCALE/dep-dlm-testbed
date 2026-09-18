@@ -334,6 +334,7 @@ services:
         rucio-judge-evaluator --sleep-time 5 &
         rucio-judge-cleaner --sleep-time 5 &
         rucio-reaper --greedy --sleep-time 5 &
+        rucio-undertaker --sleep-time 5 &
         wait
     volumes:
       # identical to the `rucio` service

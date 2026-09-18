@@ -89,9 +89,8 @@ Rule-based deletion path, as exercised by
 `update_replication_rule(lifetime=-1)` expires the rule; Judge-Cleaner sets
 the tombstone; Reaper physically deletes from storage.
 
-**NOTE:** DID-based deletion (Undertaker) is a separate flow triggered by
-DID expiration, not rule expiration. The Undertaker is not involved in the
-flow below.
+**NOTE:** This is the rule-expiration path. DID expiration (Undertaker) is a
+separate deletion trigger, covered below.
 
 ```mermaid
 sequenceDiagram
@@ -115,5 +114,49 @@ SE-->>RP: Confirmed
 RP->>RS: Mark replica removed from catalogue
 ```
 
-> For reference see the
-> [official Rucio Deletion Overview](https://rucio.github.io/documentation/started/concepts/deletion_overview/).
+## DID-based Deletion Flow (Undertaker)
+
+DID expiration path, as exercised by
+[test_rucio_deletion.py](../shared/tests/test_rucio_deletion.py):
+`set_metadata(key='lifetime', value=-1)` expires the DID; Undertaker deletes
+any unlocked rules on it (equivalent to the rule-based flow above) and
+removes the DID from the catalogue; Reaper physically deletes the resulting
+tombstoned replicas from storage.
+
+**NOTE:** DID expiration takes precedence over rule expiration, but locked
+rules are always protected regardless of DID state. By default Undertaker
+sets a *standard* (LRU) tombstone, not Obsolete — set
+`undertaker.purge_all_replicas = True` in `rucio.cfg` to force Obsolete
+tombstones instead. The testbed's Reaper runs `--greedy`, so this default
+is sufficient here: greedy mode deletes any eligible tombstone regardless of
+type.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant RS as Rucio
+    participant UT as Undertaker
+    participant RP as Reaper
+    participant SE as Storage (Bearer Auth)
+    participant KC as Keycloak (IdP)
+    User->>RS: set_metadata(scope, name, key='lifetime', value=-1)
+    NOTE over RS: DID expired_at set to past
+    UT->>RS: Poll for DIDs where expired_at < now()
+    UT->>RS: Check for locked rules on the DID
+    alt No locked rules
+        UT->>RS: Delete unlocked rules, release replica locks
+        NOTE over UT,RS: purge_all_replicas=False (default) → standard<br/>tombstone on replicas (or Obsolete if set True)
+        UT->>RS: Remove DID from catalogue
+    else Locked rule exists
+        NOTE over UT,RS: DID retained — locked rules protect the DID from deletion
+    end
+    RP->>RS: Poll for replicas with eligible tombstone
+    RP->>KC: Request storage deletion token
+    KC-->>RP: Token
+    RP->>SE: DELETE replica via davs://
+    SE-->>RP: Confirmed
+    RP->>RS: Mark replica removed from catalogue
+```
+
+> For reference see the [official Rucio Deletion Overview](https://rucio.github.io/documentation/started/concepts/deletion_overview/).

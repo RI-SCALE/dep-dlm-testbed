@@ -63,9 +63,14 @@ DEFAULT_CONVEYOR = (
     ["rucio-conveyor-finisher", "--run-once"],
 )
 
-DELETION_DAEMONS = (
-    ["rucio-judge-cleaner", "--run-once"],
-    ["rucio-reaper", "--run-once", "--greedy"],
+SUBMIT_DAEMONS = (
+    ["rucio-judge-evaluator", "--run-once"],
+    ["rucio-conveyor-submitter", "--run-once"],
+)
+
+POLL_DAEMONS = (
+    ["rucio-conveyor-poller", "--run-once", "--older-than", "0"],
+    ["rucio-conveyor-finisher", "--run-once"],
 )
 
 # ── OIDC provider config (env-overridable; defaults = internal Keycloak) ──
@@ -411,9 +416,10 @@ def advance_pipeline(
         _log_daemon_output(out, keywords)
 
 
-def run_daemons(rucio_svc: str = "rucio-server") -> None:
-    """Back-compat wrapper: advance the conveyor pipeline."""
-    advance_pipeline(rucio_svc, DEFAULT_CONVEYOR)
+def run_daemons(rucio_svc: str = "rucio-server", daemons=None) -> None:
+    """Back-compat wrapper: advance a stage of the conveyor pipeline.
+    Defaults to the full pipeline; pass POLL_DAEMONS to skip evaluator/submitter."""
+    advance_pipeline(rucio_svc, daemons or DEFAULT_CONVEYOR)
 
 
 def validate_rule(
@@ -423,12 +429,19 @@ def validate_rule(
     rucio_svc: str = "rucio-server",
     timeout: int = 300,
 ) -> None:
-    """Poll until locks_ok >= 1 and locks_replicating == 0, cycling daemons each iteration."""
+    """Poll until locks_ok >= 1 and locks_replicating == 0.
+
+    Submits once (evaluator+submitter), then only cycles poller+finisher
+    while waiting — avoids re-running the whole pipeline every tick.
+    """
     from rucio.common.exception import RuleNotFound
 
     log.info("=== Validating rule %s (%s) ===", rule_id, label)
+    run_daemons(rucio_svc, SUBMIT_DAEMONS)
+
     deadline = time.time() + timeout
     ok = repl = stk = 0
+    interval = 2  # adaptive backoff, caps at 15s
 
     while time.time() < deadline:
         try:
@@ -450,13 +463,13 @@ def validate_rule(
 
         if stk > 0:
             raise RuntimeError(f"Rule {rule_id} ({label}) has {stk} stuck lock(s)")
-
         if ok >= 1 and repl == 0:
             log.info("  ✓ %s passed (rule_id=%s)", label, rule_id)
             return
 
-        run_daemons(rucio_svc)
-        time.sleep(5)
+        run_daemons(rucio_svc, POLL_DAEMONS)
+        time.sleep(interval)
+        interval = min(interval * 1.5, 15)
 
     raise TimeoutError(
         f"Rule {rule_id} ({label}) did not converge within {timeout}s — "
