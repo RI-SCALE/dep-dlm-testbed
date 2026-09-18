@@ -16,3 +16,6 @@ judgeCleaner:
 reaper:
   resources:
     requests: { cpu: "50m" }
+undertaker:
+  resources:
+    requests: { cpu: "50m" }

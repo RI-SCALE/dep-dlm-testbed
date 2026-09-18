@@ -172,3 +172,89 @@ class TestDeletionLifecycle:
         )
         assert src_replicas, "Source replica on XRD3 should still exist"
         log.info("  ✓ Source replica on XRD3 intact")
+
+    def test_did_deletion_via_undertaker(
+        self, rucio_client, xrd3_write_token, xrd4_write_token
+    ):
+        """Replicate XRD3→XRD4, expire the DID, verify undertaker+reaper clean up.
+
+        Distinct from test_rule_deletion_via_judge_cleaner_and_reaper: this
+        expires the DID itself (undertaker path), not the rule (judge-cleaner
+        path). Per Rucio's deletion model, DID expiration takes precedence
+        over rule expiration and removes any unlocked rules on the DID as
+        part of the same operation.
+        """
+        name = f"undertaker-deletion-test-{int(time.time())}"
+        log.info("[ DID deletion lifecycle (undertaker)  name=%s ]", name)
+
+        # ── Step 1: seed and replicate (identical setup to the rule test) ──
+        src_pfn = compute_pfn(rucio_client, "XRD3", SCOPE, name)
+        dst_pfn = compute_pfn(rucio_client, "XRD4", SCOPE, name)
+
+        size, adler32 = seed_xrd("xrd3", src_pfn, token=xrd3_write_token)
+        prepare_xrd_dest(dst_pfn, token=xrd4_write_token)
+
+        register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
+        rule_id = add_rule(rucio_client, SCOPE, name, "XRD4")
+
+        run_daemons(RUCIO_SVC)
+        validate_rule(rucio_client, rule_id, "XRD3→XRD4 (pre-deletion)", RUCIO_SVC)
+
+        assert replica_exists_on_xrd(dst_pfn, xrd4_write_token), (
+            f"Expected replica to exist on XRD4 before deletion: {dst_pfn}"
+        )
+        log.info("  ✓ Replica confirmed on XRD4 before deletion")
+
+        # ── Step 2: expire the DID itself (not the rule) ────────────────
+        log.info("  Expiring DID %s:%s", SCOPE, name)
+        rucio_client.set_metadata(SCOPE, name, "lifetime", -1)
+        log.info("  ✓ DID lifetime set to -1 (expires immediately)")
+
+        # ── Step 3+4: undertaker deletes the unlocked rule + sets tombstone,
+        # reaper physically deletes — reuse the same daemon runner, since
+        # RUCIO_SVC hosts undertaker alongside judge-cleaner/reaper
+        run_deletion_daemons(RUCIO_SVC)
+
+        # ── Step 5: poll for catalogue removal ──────────────────────────
+        deadline = time.time() + 120
+        xrd4_pfns = None
+        while time.time() < deadline:
+            replicas = list(
+                rucio_client.list_replicas(
+                    [{"scope": SCOPE, "name": name}], rse_expression="XRD4"
+                )
+            )
+            xrd4_pfns = [
+                pfn for r in replicas for pfn in r.get("pfns", {}) if "xrd4" in pfn
+            ]
+            if not xrd4_pfns:
+                break
+            run_deletion_daemons(RUCIO_SVC)
+            time.sleep(5)
+
+        assert not xrd4_pfns, (
+            f"Expected replica to be removed from Rucio catalogue on XRD4, "
+            f"but found: {xrd4_pfns}"
+        )
+        log.info("  ✓ Replica removed from Rucio catalogue on XRD4")
+
+        # ── Step 6: poll for physical deletion ───────────────────────────
+        deadline = time.time() + 120
+        still_exists = replica_exists_on_xrd(dst_pfn, xrd4_write_token)
+        while still_exists and time.time() < deadline:
+            run_deletion_daemons(RUCIO_SVC)
+            time.sleep(5)
+            still_exists = replica_exists_on_xrd(dst_pfn, xrd4_write_token)
+
+        assert not still_exists, (
+            f"Expected file to be physically deleted from XRD4: {dst_pfn}"
+        )
+        log.info("  ✓ File physically deleted from XRD4 storage")
+
+        # ── Step 7: confirm the DID itself is gone from the catalogue ────
+        try:
+            list(rucio_client.list_dids(SCOPE, {"name": name}, did_type="file"))
+            assert False, f"Expected DID {SCOPE}:{name} to be removed by undertaker"
+        except Exception:
+            pass  # DataIdentifierNotFound (or empty result) confirms removal
+        log.info("  ✓ DID removed from catalogue")

@@ -24,6 +24,7 @@ conveyorFinisherCount: 1
 judgeEvaluatorCount: 1
 judgeCleanerCount: 1
 reaperCount: 1
+undertakerCount: 1
 
 conveyorTransferSubmitter:
   threads: 1
@@ -60,6 +61,11 @@ reaper:
   greedy: 1
   threads: 1
   sleepTime: 5
+  resources:
+    requests: { memory: "512Mi", cpu: "100m" }
+    limits:   { memory: "1Gi",   cpu: "500m" }
+undertaker:
+  threads: 1
   resources:
     requests: { memory: "512Mi", cpu: "100m" }
     limits:   { memory: "1Gi",   cpu: "500m" }

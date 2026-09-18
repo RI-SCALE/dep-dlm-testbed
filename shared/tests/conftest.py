@@ -66,6 +66,7 @@ DEFAULT_CONVEYOR = (
 DELETION_DAEMONS = (
     ["rucio-judge-cleaner", "--run-once"],
     ["rucio-reaper", "--run-once", "--greedy"],
+    ["rucio-undertaker", "--run-once"],
 )
 
 # ── OIDC provider config (env-overridable; defaults = internal Keycloak) ──
