@@ -16,6 +16,7 @@ Runtime-agnostic: respects $RUNTIME (compose | k8s, default compose).
 
 import logging
 import time
+import os
 import zlib
 
 from conftest import (
@@ -37,6 +38,15 @@ log = logging.getLogger("test-deletion")
 
 SCOPE = "ddmlab"
 RUCIO_SVC = "rucio-server"
+
+# In DAEMON_MODE=daemons, advance_pipeline() (and therefore
+# run_deletion_daemons/deletion_daemons_for) is a documented no-op -- see
+# conftest.py. In that mode the physical-delete step is a pure passive wait
+# on a real, continuously-running reaper with its own internal cooldown/
+# sleep-time cadence we don't control, so it needs real headroom rather
+# than the 60s that's sufficient when we can force an extra --rses-scoped
+# cycle ourselves (DAEMON_MODE=direct).
+PHYSICAL_DELETE_TIMEOUT = 300 if os.environ.get("DAEMON_MODE") == "daemons" else 60
 
 CLEANER_AND_UNDERTAKER = (
     ["rucio-judge-cleaner", "--run-once"],
@@ -145,7 +155,7 @@ class TestDeletionLifecycle:
         log.info("  ✓ Replica removed from Rucio catalogue on XRD4")
 
         gone = poll_until(
-            60,
+            PHYSICAL_DELETE_TIMEOUT,
             lambda: not replica_exists(dst_pfn, xrd4_write_token),
             lambda: run_deletion_daemons(RUCIO_SVC, rse="XRD4"),
         )
@@ -216,7 +226,7 @@ class TestDeletionLifecycle:
         log.info("  ✓ Replica removed from Rucio catalogue on TEAPOT2")
 
         gone = poll_until(
-            60,
+            PHYSICAL_DELETE_TIMEOUT,
             lambda: not replica_exists(dst_pfn, teapot_token),
             lambda: run_deletion_daemons(RUCIO_SVC, rse="TEAPOT2"),
         )
