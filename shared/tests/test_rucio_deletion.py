@@ -31,7 +31,6 @@ from conftest import (
     webdav_get,
     webdav_put,
     pfn_to_https,
-    DELETION_DAEMONS,
 )
 
 log = logging.getLogger("test-deletion")
@@ -39,11 +38,38 @@ log = logging.getLogger("test-deletion")
 SCOPE = "ddmlab"
 RUCIO_SVC = "rucio-server"
 
+CLEANER_AND_UNDERTAKER = (
+    ["rucio-judge-cleaner", "--run-once"],
+    ["rucio-undertaker", "--run-once"],
+)
 
-def run_deletion_daemons(rucio_svc: str = RUCIO_SVC) -> None:
+DELETION_DAEMONS = (
+    ["rucio-judge-cleaner", "--run-once"],
+    ["rucio-undertaker", "--run-once"],
+    ["rucio-reaper", "--run-once", "--greedy"],
+)
+
+
+def deletion_daemons_for(rse: str):
+    """Same as DELETION_DAEMONS, but scopes rucio-reaper to a single RSE.
+    Without this, reaper iterates every registered RSE each cycle and, on
+    finding nothing eligible on an unrelated RSE, enters a per-RSE pause
+    that's tracked outside this process and can still be active when a
+    LATER test needs that RSE checked -- cross-test contamination, not a
+    daemon-ordering issue. Confirm the flag name against your Rucio
+    version: `docker exec compose-rucio-server-1 rucio-reaper --help`.
+    """
+    return (
+        ["rucio-judge-cleaner", "--run-once"],
+        ["rucio-undertaker", "--run-once"],
+        ["rucio-reaper", "--run-once", "--greedy", "--rses", rse],
+    )
+
+
+def run_deletion_daemons(rucio_svc: str = RUCIO_SVC, rse: str = None) -> None:
     advance_pipeline(
         rucio_svc,
-        DELETION_DAEMONS,
+        deletion_daemons_for(rse) if rse else DELETION_DAEMONS,
         keywords=("warning", "error", "delet", "expir", "reap", "tomb"),
     )
 
@@ -52,12 +78,6 @@ def replica_exists(pfn: str, token: str = None) -> bool:
     """HTTP GET against a PFN's https form — works on both in-cluster
     sandbox storage and staging's external validation-storage VM."""
     return webdav_get(pfn_to_https(pfn), token).status_code == 200
-
-
-def https_pfn(rucio_client, rse: str, scope: str, name: str) -> str:
-    """compute_pfn(), forced to https:// — avoids the nondeterministic
-    davs/https protocol pick on RSEs (e.g. Teapot) that register both."""
-    return compute_pfn(rucio_client, rse, scope, name).replace("davs://", "https://", 1)
 
 
 def poll_until(deadline_s: int, check, on_miss=None, interval: float = 2.0):
@@ -69,6 +89,15 @@ def poll_until(deadline_s: int, check, on_miss=None, interval: float = 2.0):
         time.sleep(interval)
         result = check()
     return result
+
+
+def rule_gone(client, rule_id: str) -> bool:
+    """True once the replication rule no longer exists in the catalogue."""
+    try:
+        client.get_replication_rule(rule_id)
+        return False
+    except Exception:
+        return True
 
 
 class TestDeletionLifecycle:
@@ -103,31 +132,22 @@ class TestDeletionLifecycle:
         )
         log.info("  ✓ Rule lifetime set to -1 (expires immediately)")
 
-        # A tombstone set moments earlier in the same reaper cycle can still
-        # be missed on the first pass, so re-run daemons on every iteration.
-        run_deletion_daemons(RUCIO_SVC)
+        advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER)
 
-        def _xrd4_pfns():
-            replicas = rucio_client.list_replicas(
-                [{"scope": SCOPE, "name": name}], rse_expression="XRD4"
-            )
-            return [pfn for r in replicas for pfn in r.get("pfns", {}) if "xrd4" in pfn]
-
-        remaining = poll_until(
-            60, lambda: not _xrd4_pfns(), lambda: run_deletion_daemons(RUCIO_SVC)
+        removed = poll_until(
+            60,
+            lambda: rule_gone(rucio_client, rule_id),
+            lambda: advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER),
         )
-        assert remaining, (
-            f"Expected replica removed from catalogue on XRD4, found: {_xrd4_pfns()}"
+        assert removed, (
+            "Expected rule to be removed from catalogue on XRD4 (rule still exists)"
         )
         log.info("  ✓ Replica removed from Rucio catalogue on XRD4")
 
-        # Rucio delinks the catalogue row before the physical DELETE
-        # completes, so this is a real race window, not just eventual
-        # consistency — keep re-running daemons while polling.
         gone = poll_until(
             60,
             lambda: not replica_exists(dst_pfn, xrd4_write_token),
-            lambda: run_deletion_daemons(RUCIO_SVC),
+            lambda: run_deletion_daemons(RUCIO_SVC, rse="XRD4"),
         )
         assert gone, f"Expected file to be physically deleted from XRD4: {dst_pfn}"
         log.info("  ✓ File physically deleted from XRD4 storage")
@@ -139,7 +159,7 @@ class TestDeletionLifecycle:
         log.info("  ✓ Source replica on XRD3 intact")
 
     def test_did_deletion_via_undertaker(
-        self, rucio_client, teapots_ready, teapot_token
+        self, rucio_client, teapots_ready, teapot_token, xrd3_write_token
     ):
         """Replicate TEAPOT1→TEAPOT2, expire the DID, verify undertaker+reaper clean up.
 
@@ -147,28 +167,21 @@ class TestDeletionLifecycle:
         (undertaker path), which removes any unlocked rules on it as part
         of the same operation — DID expiration takes precedence over rule
         expiration per Rucio's deletion model.
-
-        Uses TEAPOT1/TEAPOT2 rather than XRD3/XRD4: reaper keeps a per-RSE
-        backoff after finding nothing to delete, and the preceding test
-        already exercises XRD3/XRD4. Uses https_pfn() rather than a raw
-        compute_pfn(): Teapot registers both davs and https, and reaper's
-        delete 401s on davs (Storm-WebDAV's DAV-plugin bearer-token handling
-        differs from its HTTP-plugin path on DELETE).
         """
         name = f"undertaker-deletion-test-{int(time.time())}"
         log.info("[ DID deletion lifecycle (undertaker)  name=%s ]", name)
 
-        src_pfn = https_pfn(rucio_client, "TEAPOT1", SCOPE, name)
-        dst_pfn = https_pfn(rucio_client, "TEAPOT2", SCOPE, name)
+        src_pfn = compute_pfn(rucio_client, "TEAPOT1", SCOPE, name)
+        dst_pfn = compute_pfn(rucio_client, "TEAPOT2", SCOPE, name)
 
         seed_content = b"undertaker-deletion-test\n"
-        webdav_delete(src_pfn, teapot_token)
-        resp = webdav_put(src_pfn, teapot_token, seed_content)
+        webdav_delete(pfn_to_https(src_pfn), teapot_token)
+        resp = webdav_put(pfn_to_https(src_pfn), teapot_token, seed_content)
         assert resp.status_code in {200, 201, 204}, (
             f"Seed PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
         )
-        assert webdav_get(src_pfn, teapot_token).status_code == 200, (
-            f"Seed not readable: GET {src_pfn}"
+        assert webdav_get(pfn_to_https(src_pfn), teapot_token).status_code == 200, (
+            f"Seed not readable: GET {pfn_to_https(src_pfn)}"
         )
 
         adler32 = "%08x" % (zlib.adler32(seed_content) & 0xFFFFFFFF)
@@ -190,28 +203,22 @@ class TestDeletionLifecycle:
         rucio_client.set_metadata(SCOPE, name, "lifetime", -1)
         log.info("  ✓ DID lifetime set to -1 (expires immediately)")
 
-        run_deletion_daemons(RUCIO_SVC)
-
-        def _teapot2_pfns():
-            replicas = rucio_client.list_replicas(
-                [{"scope": SCOPE, "name": name}], rse_expression="TEAPOT2"
-            )
-            return [
-                pfn for r in replicas for pfn in r.get("pfns", {}) if "teapot2" in pfn
-            ]
+        advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER)
 
         removed = poll_until(
-            60, lambda: not _teapot2_pfns(), lambda: run_deletion_daemons(RUCIO_SVC)
+            60,
+            lambda: rule_gone(rucio_client, rule_id),
+            lambda: advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER),
         )
         assert removed, (
-            f"Expected replica removed from catalogue on TEAPOT2, found: {_teapot2_pfns()}"
+            "Expected rule to be removed from catalogue on TEAPOT2 (rule still exists)"
         )
         log.info("  ✓ Replica removed from Rucio catalogue on TEAPOT2")
 
         gone = poll_until(
             60,
             lambda: not replica_exists(dst_pfn, teapot_token),
-            lambda: run_deletion_daemons(RUCIO_SVC),
+            lambda: run_deletion_daemons(RUCIO_SVC, rse="TEAPOT2"),
         )
         assert gone, f"Expected file to be physically deleted from TEAPOT2: {dst_pfn}"
         log.info("  ✓ File physically deleted from TEAPOT2 storage")
