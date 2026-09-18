@@ -32,6 +32,9 @@ from conftest import (
     webdav_propfind,
 )
 
+import os
+import subprocess
+
 TARGETS = {"teapot1": TEAPOT1_URL, "teapot2": TEAPOT2_URL}
 
 
@@ -135,3 +138,51 @@ def test_teapot_authenticated_write(name, url, teapots_ready):
         if del_r.status_code not in (200, 204):
             failures.append(f"{label}: DELETE HTTP {del_r.status_code}")
     assert not failures, f"{name}: " + "; ".join(failures)
+
+
+# ── gfal2-level scheme comparison (davs:// vs https://) ──────────────────
+# requests can't distinguish these — davs:// isn't a real URL scheme for it,
+# so any requests-based PUT/DELETE against it is identical to https://.
+# reaper's actual delete path goes through gfal2's protocol plugins, which
+# do differ by scheme — this shells out to the real gfal2 CLI to compare.
+
+
+def _gfal_rm(pfn: str, token: str) -> tuple[int, str]:
+    env = {"BEARER_TOKEN": token}
+    result = subprocess.run(
+        ["gfal-rm", pfn],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **env},
+        timeout=30,
+    )
+    return result.returncode, (result.stderr or result.stdout).strip()
+
+
+@pytest.mark.parametrize("name,url", TARGETS.items())
+def test_teapot_gfal2_delete_scheme_comparison(name, url, teapots_ready, teapot_token):
+    """Compares gfal-rm against davs:// vs https:// for the same file —
+    the actual mechanism reaper uses, unlike the requests-based probes
+    above which can't distinguish the two schemes at all."""
+    from urllib.parse import urlparse
+
+    host_port = urlparse(url).netloc  # e.g. teapot2:8081
+    path = f"/data/probe-gfal-delete-{name}"
+
+    for scheme in ("https", "davs"):
+        pfn = f"{scheme}://{host_port}{path}"
+        # seed via plain https PUT (works reliably — see existing write test)
+        put_r = requests.put(
+            f"https://{host_port}{path}",
+            data=b"probe",
+            headers={"Authorization": f"Bearer {teapot_token}"},
+            verify=False,
+            timeout=30,
+        )
+        assert put_r.status_code in (200, 201, 204), (
+            f"seed PUT failed for {scheme} probe: HTTP {put_r.status_code}"
+        )
+
+        rc, out = _gfal_rm(pfn, teapot_token)
+        print(f"  [{name}] gfal-rm {pfn} -> rc={rc} {out}")
+        assert rc == 0, f"{name}: gfal-rm failed on {scheme}://: {out}"
