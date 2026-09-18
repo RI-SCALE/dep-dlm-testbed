@@ -16,7 +16,6 @@ KCADM="/opt/keycloak/bin/kcadm.sh"
 KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
-declare -A EXCHANGE_SECRET=( [fts]=fts-secret [rucio]=rucio-secret )
 
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 
@@ -139,6 +138,14 @@ _fts_admin() {
     done
     echo "  ✗ FTS admin call failed after 3 attempts: $*" >&2
     return 1
+}
+
+_exchange_secret() {
+    case "$1" in
+        fts)   echo "fts-secret" ;;
+        rucio) echo "rucio-secret" ;;
+        *) echo "ERROR: unknown exchange requester '$1'" >&2; return 1 ;;
+    esac
 }
 
 # ── Infrastructure Readiness ─────────────────────────────────────
@@ -838,7 +845,7 @@ verify_token_exchange() {
     for rc in "${EXCHANGE_REQUESTERS[@]}"; do
         for aud in "${EXCHANGE_TARGETS[@]}"; do
             echo -n "  --- exchange as $rc -> $aud : "
-            _exec fts curl -sk -u "$rc:${EXCHANGE_SECRET[$rc]}" \
+            _exec fts curl -sk -u "$rc:$(_exchange_secret "$rc")" \
                 -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
                 -d "requested_token_type=urn:ietf:params:oauth:token-type:refresh_token" \
                 -d "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
