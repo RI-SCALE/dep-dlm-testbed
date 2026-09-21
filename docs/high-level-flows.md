@@ -118,18 +118,11 @@ RP->>RS: Mark replica removed from catalogue
 
 DID expiration path, as exercised by
 [test_rucio_deletion.py](../shared/tests/test_rucio_deletion.py):
-`set_metadata(key='lifetime', value=-1)` expires the DID; Undertaker deletes
-any unlocked rules on it (equivalent to the rule-based flow above) and
-removes the DID from the catalogue; Reaper physically deletes the resulting
-tombstoned replicas from storage.
-
-**NOTE:** DID expiration takes precedence over rule expiration, but locked
-rules are always protected regardless of DID state. By default Undertaker
-sets a *standard* (LRU) tombstone, not Obsolete — set
-`undertaker.purge_all_replicas = True` in `rucio.cfg` to force Obsolete
-tombstones instead. The testbed's Reaper runs `--greedy`, so this default
-is sufficient here: greedy mode deletes any eligible tombstone regardless of
-type.
+`set_metadata(key='lifetime', value=-1)` expires the DID; Undertaker
+deletes any unlocked rules on it (equivalent to the rule-based flow above).
+For DATASET/CONTAINER DIDs it also removes the DID row directly;
+for FILE DIDs the row removal is deferred to Reaper.
+Reaper physically deletes the resulting tombstoned replicas from storage.
 
 ```mermaid
 sequenceDiagram
@@ -141,22 +134,17 @@ sequenceDiagram
     participant SE as Storage (Bearer Auth)
     participant KC as Keycloak (IdP)
     User->>RS: set_metadata(scope, name, key='lifetime', value=-1)
-    NOTE over RS: DID expired_at set to past
-    UT->>RS: Poll for DIDs where expired_at < now()
-    UT->>RS: Check for locked rules on the DID
-    alt No locked rules
-        UT->>RS: Delete unlocked rules, release replica locks
-        NOTE over UT,RS: purge_all_replicas=False (default) → standard<br/>tombstone on replicas (or Obsolete if set True)
+    UT->>RS: Poll expired DIDs, delete unlocked rules, tombstone replicas
+    alt DATASET / CONTAINER
         UT->>RS: Remove DID from catalogue
-    else Locked rule exists
-        NOTE over UT,RS: DID retained — locked rules protect the DID from deletion
+    else FILE
+        NOTE over UT,RS: expired_at cleared only — row removal deferred to Reaper
     end
-    RP->>RS: Poll for replicas with eligible tombstone
-    RP->>KC: Request storage deletion token
+    RP->>RS: Poll tombstoned replicas
+    RP->>KC: Request deletion token
     KC-->>RP: Token
     RP->>SE: DELETE replica via davs://
-    SE-->>RP: Confirmed
-    RP->>RS: Mark replica removed from catalogue
+    RP->>RS: Mark replica removed<br/>(FILE DIDs: also remove DID row once replicas = 0)
 ```
 
 > For reference see the [official Rucio Deletion Overview](https://rucio.github.io/documentation/started/concepts/deletion_overview/).
