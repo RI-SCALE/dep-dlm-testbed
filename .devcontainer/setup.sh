@@ -143,13 +143,72 @@ install_helm_git() {
         return 0
     fi
 
-    helm plugin install https://github.com/aslafy-z/helm-git --verify=false
+    helm plugin install https://github.com/aslafy-z/helm-git
 
     if [[ ! -d "$plugin_dir" ]]; then
         echo -e "${RED}helm-git install failed — check the output above${NC}"
         return 1
     fi
     echo -e "${GREEN}helm-git installed${NC}\n"
+}
+
+install_kubectl() {
+    local KUBECTL_VERSION="v1.31.0"
+    echo -e "${BLUE}Installing kubectl $KUBECTL_VERSION...${NC}"
+    curl -Lo /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl"
+    chmod +x /usr/local/bin/kubectl
+    echo -e "${GREEN}kubectl: $(kubectl version --client --output=yaml | head -3)${NC}\n"
+}
+
+install_helm() {
+    local HELM_VERSION="v3.16.3"
+    echo -e "${BLUE}Installing Helm $HELM_VERSION...${NC}"
+    curl -Ls "https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz" \
+        | tar -xz -C /tmp
+    mv "/tmp/linux-${ARCH}/helm" /usr/local/bin/helm
+    chmod +x /usr/local/bin/helm
+    echo -e "${GREEN}helm: $(helm version --short)${NC}\n"
+}
+
+install_precommit() {
+    echo -e "${BLUE}Installing pre-commit...${NC}"
+    /opt/conda/envs/rucio/bin/pip install --no-cache-dir pre-commit \
+        || pip install --no-cache-dir pre-commit
+    echo -e "${GREEN}pre-commit: $(pre-commit --version)${NC}\n"
+}
+
+install_terraform() {
+    local TF_VERSION="1.15.8"
+    local TFLINT_VERSION="v0.64.0"
+    echo -e "${BLUE}Installing Terraform $TF_VERSION + tflint $TFLINT_VERSION...${NC}"
+
+    apt-get update -qq && apt-get install -y -qq unzip
+
+    curl -Ls -o /tmp/terraform.zip \
+        "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_${ARCH}.zip"
+    unzip -oq /tmp/terraform.zip -d /usr/local/bin
+    chmod +x /usr/local/bin/terraform
+
+    curl -Ls "https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_${ARCH}.zip" \
+        -o /tmp/tflint.zip
+    unzip -oq /tmp/tflint.zip -d /usr/local/bin
+    chmod +x /usr/local/bin/tflint
+
+    if ! command -v terraform > /dev/null 2>&1; then
+        echo -e "${RED}terraform install failed${NC}"; return 1
+    fi
+    echo -e "${GREEN}terraform: $(terraform version | head -1)  |  tflint: $(tflint --version)${NC}\n"
+}
+
+install_terraform_docs() {
+    local TFDOCS_VERSION="v0.20.0"
+    echo -e "${BLUE}Installing terraform-docs $TFDOCS_VERSION...${NC}"
+    curl -Ls "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-linux-${ARCH}.tar.gz" \
+        | tar -xz -C /tmp
+    mv /tmp/terraform-docs /usr/local/bin/terraform-docs
+    chmod +x /usr/local/bin/terraform-docs
+    echo -e "${GREEN}terraform-docs: $(terraform-docs --version)${NC}\n"
 }
 
 print_summary() {
@@ -163,14 +222,19 @@ print_summary() {
 # --- Execution ---
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║                 Kind Cluster Setup Script                   ║${NC}"
+echo -e "${BLUE}║                          Setup Script                        ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}\n"
 
 check_requirements
+install_kubectl
+install_helm
 install_kind
 install_yq
 install_rucio_gfal
 install_diagrams
 install_gcloud
 install_helm_git
+install_precommit
+install_terraform
+install_terraform_docs
 print_summary
