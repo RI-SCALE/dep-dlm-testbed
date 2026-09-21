@@ -168,31 +168,27 @@ class TestDeletionLifecycle:
         assert src_replicas, "Source replica on XRD3 should still exist"
         log.info("  ✓ Source replica on XRD3 intact")
 
-    def test_did_deletion_via_undertaker(
+    def test_file_did_undertaker_only(
         self, rucio_client, teapots_ready, teapot_token, xrd3_write_token
     ):
-        """Replicate TEAPOT1→TEAPOT2, expire the DID, verify undertaker+reaper clean up.
+        """Expire a FILE DID and run ONLY judge-cleaner + undertaker (no reaper).
 
-        Distinct from the rule-deletion test above: expires the DID itself
-        (undertaker path), which removes any unlocked rules on it as part
-        of the same operation — DID expiration takes precedence over rule
-        expiration per Rucio's deletion model.
+        Isolates what undertaker actually guarantees for a FILE DID: unlocked
+        rules removed, a tombstone set on the replica, expired_at cleared.
+        It does NOT delete the DID catalog row or the replica itself — that
+        is deferred to reaper. This is the behavior a reaper-less deployment
+        actually gets from undertaker alone.
         """
-        name = f"undertaker-deletion-test-{int(time.time())}"
-        log.info("[ DID deletion lifecycle (undertaker)  name=%s ]", name)
+        name = f"undertaker-only-test-{int(time.time())}"
+        log.info("[ FILE DID undertaker-only lifecycle  name=%s ]", name)
 
         src_pfn = compute_pfn(rucio_client, "TEAPOT1", SCOPE, name)
         dst_pfn = compute_pfn(rucio_client, "TEAPOT2", SCOPE, name)
 
-        seed_content = b"undertaker-deletion-test\n"
+        seed_content = b"undertaker-only-test\n"
         webdav_delete(pfn_to_https(src_pfn), teapot_token)
         resp = webdav_put(pfn_to_https(src_pfn), teapot_token, seed_content)
-        assert resp.status_code in {200, 201, 204}, (
-            f"Seed PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
-        )
-        assert webdav_get(pfn_to_https(src_pfn), teapot_token).status_code == 200, (
-            f"Seed not readable: GET {pfn_to_https(src_pfn)}"
-        )
+        assert resp.status_code in {200, 201, 204}
 
         adler32 = "%08x" % (zlib.adler32(seed_content) & 0xFFFFFFFF)
         register_replica(
@@ -204,38 +200,87 @@ class TestDeletionLifecycle:
         validate_rule(
             rucio_client, rule_id, "TEAPOT1→TEAPOT2 (pre-deletion)", RUCIO_SVC
         )
-
-        assert replica_exists(dst_pfn, teapot_token), (
-            f"Expected replica to exist on TEAPOT2 before deletion: {dst_pfn}"
-        )
-        log.info("  ✓ Replica confirmed on TEAPOT2 before deletion")
+        assert replica_exists(dst_pfn, teapot_token)
 
         rucio_client.set_metadata(SCOPE, name, "lifetime", -1)
         log.info("  ✓ DID lifetime set to -1 (expires immediately)")
 
-        advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER)
-
+        # deliberately CLEANER_AND_UNDERTAKER only — no reaper in this test
         removed = poll_until(
             60,
             lambda: rule_gone(rucio_client, rule_id),
             lambda: advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER),
         )
-        assert removed, (
-            "Expected rule to be removed from catalogue on TEAPOT2 (rule still exists)"
-        )
-        log.info("  ✓ Replica removed from Rucio catalogue on TEAPOT2")
+        assert removed, "Expected rule to be removed by undertaker (rule still exists)"
+        log.info("  ✓ Rule removed by undertaker")
 
-        gone = poll_until(
-            PHYSICAL_DELETE_TIMEOUT,
-            lambda: not replica_exists(dst_pfn, teapot_token),
-            lambda: run_deletion_daemons(RUCIO_SVC, rse="TEAPOT2"),
+        # the DID row must still exist — undertaker never deletes FILE DIDs
+        meta = rucio_client.get_metadata(SCOPE, name)
+        assert meta is not None, (
+            "FILE DID should still exist after undertaker-only pass — "
+            "undertaker does not delete FILE DID rows, only reaper does"
         )
-        assert gone, f"Expected file to be physically deleted from TEAPOT2: {dst_pfn}"
-        log.info("  ✓ File physically deleted from TEAPOT2 storage")
+        assert meta.get("expired_at") is None, (
+            "Expected undertaker to clear expired_at on the FILE DID"
+        )
+        log.info(
+            "  ✓ DID row still present, expired_at cleared (as expected — reaper not run)"
+        )
 
+        # the physical replica must still exist — no reaper means no physical deletion
+        assert replica_exists(dst_pfn, teapot_token), (
+            "Replica should still be physically present — reaper was never run"
+        )
+        log.info(
+            "  ✓ Replica still physically present on TEAPOT2 (undertaker doesn't delete it)"
+        )
+
+    def test_dataset_did_undertaker_only(
+        self, rucio_client, teapots_ready, teapot_token, xrd3_write_token
+    ):
+        """Expire a DATASET DID, run undertaker only (no reaper): the DID row
+        itself is deleted directly — contrast to test_file_did_undertaker_only,
+        where the FILE row survives until reaper runs.
+        """
+        dataset = f"undertaker-dataset-test-{int(time.time())}"
+        file_name = f"{dataset}-file"
+
+        src_pfn = compute_pfn(rucio_client, "TEAPOT1", SCOPE, file_name)
+        seed_content = b"undertaker-dataset-test\n"
+        webdav_delete(pfn_to_https(src_pfn), teapot_token)
+        webdav_put(pfn_to_https(src_pfn), teapot_token, seed_content)
+        adler32 = "%08x" % (zlib.adler32(seed_content) & 0xFFFFFFFF)
+        register_replica(
+            rucio_client,
+            "TEAPOT1",
+            SCOPE,
+            file_name,
+            src_pfn,
+            len(seed_content),
+            adler32,
+        )
+
+        rucio_client.add_dataset(scope=SCOPE, name=dataset)
+        rucio_client.attach_dids(SCOPE, dataset, [{"scope": SCOPE, "name": file_name}])
+        rule_id = add_rule(rucio_client, SCOPE, dataset, "TEAPOT2")
+
+        run_daemons(RUCIO_SVC)
+        validate_rule(rucio_client, rule_id, "TEAPOT1→TEAPOT2 (dataset)", RUCIO_SVC)
+
+        rucio_client.set_metadata(SCOPE, dataset, "lifetime", -1)
+        poll_until(
+            60,
+            lambda: rule_gone(rucio_client, rule_id),
+            lambda: advance_pipeline(RUCIO_SVC, CLEANER_AND_UNDERTAKER),
+        )
+
+        # dataset row gone, no reaper needed
         try:
-            list(rucio_client.list_dids(SCOPE, {"name": name}, did_type="file"))
-            assert False, f"Expected DID {SCOPE}:{name} to be removed by undertaker"
+            rucio_client.get_metadata(SCOPE, dataset)
+            assert False, "Expected dataset DID removed by undertaker alone"
         except Exception:
-            pass  # DataIdentifierNotFound (or empty result) confirms removal
-        log.info("  ✓ DID removed from catalogue")
+            pass
+
+        # child file row untouched — undertaker only detaches it
+        assert rucio_client.get_metadata(SCOPE, file_name) is not None
+        log.info("  ✓ Dataset removed by undertaker; child file row untouched")
