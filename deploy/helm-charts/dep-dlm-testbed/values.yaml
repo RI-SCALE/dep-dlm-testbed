@@ -180,6 +180,7 @@ rucio-daemons:
   judgeEvaluatorCount: 1
   judgeCleanerCount: 1
   reaperCount: 1
+  undertakerCount: 1
 
   # Fast cadence + correct activity so the testbed converges within the
   # test timeout. The chart defaults activities to "'test1' 'test2'", which
@@ -219,6 +220,11 @@ rucio-daemons:
     greedy: 1
     threads: 1
     sleepTime: 5
+    resources:
+      requests: { memory: "512Mi", cpu: "100m" }
+      limits:   { memory: "1Gi",   cpu: "500m" }
+  undertaker:
+    threads: 1
     resources:
       requests: { memory: "512Mi", cpu: "100m" }
       limits:   { memory: "1Gi",   cpu: "500m" }

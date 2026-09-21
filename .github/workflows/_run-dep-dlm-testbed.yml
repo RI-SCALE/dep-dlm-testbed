@@ -235,9 +235,13 @@ jobs:
           # Daemon diagnostics only relevant in daemon mode
           if [ "${{ inputs.daemon_mode }}" = "daemons" ]; then
             for d in conveyor-submitter conveyor-poller conveyor-finisher \
-                     judge-evaluator judge-cleaner reaper; do
+                     judge-evaluator judge-cleaner undertaker reaper; do
               echo "=== rucio-daemons-$d ==="
               kubectl -n dep-dlm-sandbox logs deploy/rucio-daemons-$d --tail=200 2>/dev/null || true
+              echo "=== rucio-daemons-$d (previous container, if restarted) ==="
+              kubectl -n dep-dlm-sandbox logs deploy/rucio-daemons-$d --previous --tail=200 2>/dev/null || true
+              echo "=== rucio-daemons-$d describe (postStart hook failure detail) ==="
+              kubectl -n dep-dlm-sandbox describe pod -l app=rucio-daemons-$d 2>/dev/null | grep -A10 "Events:" || true
             done
           fi
 
