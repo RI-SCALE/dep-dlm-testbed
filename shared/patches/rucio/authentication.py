@@ -1,0 +1,578 @@
+# Copyright European Organization for Nuclear Research (CERN) since 2012
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import datetime
+import hashlib
+import random
+import re
+import sys
+import traceback
+from base64 import b64decode
+import base64
+import json
+from typing import TYPE_CHECKING, Optional, Union, cast
+import logging
+
+import paramiko
+from dogpile.cache import make_region
+from dogpile.cache.api import NO_VALUE, NoValue
+from sqlalchemy import delete, null, or_, select
+
+from rucio.common.cache import MemcacheRegion
+from rucio.common.config import config_get_bool
+from rucio.common.exception import CannotAuthenticate
+from rucio.common.utils import chunks, date_to_str, generate_uuid
+from rucio.core.account import account_exists
+from rucio.db.sqla import models
+from rucio.db.sqla.constants import IdentityType
+from rucio.db.sqla.session import read_session, transactional_session
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from rucio.common.types import InternalAccount, TokenDict, TokenValidationDict
+
+
+def strip_x509_proxy_attributes(dn: str) -> str:
+    """Strip X509 proxy attributes from a DN.
+
+    When an X509 VOMS proxy certificate is produced, an additional Common Name
+    attribute is added to the subject of the original certificate.  Its value
+    can take different forms.  For proxy versions 3 and later (the default), the
+    value is a numeric.  For previous versions, the value is exclusively one of
+    'limited proxy' or 'proxy', depending on how it was produced (the most
+    trustworthy documentation on this seems to be the VOMS source code itself;
+    refer to the file sslutils.c).  Note that this addition might happen more
+    than once (e.g. if a limited proxy is used to produce a full proxy).
+
+    By default, the Apache server will return the DN in an RFC-compliant format,
+    which can look like this:
+        CN=John Doe,OU=Users,DC=example,DC=com
+    However, in case the LegacyDNStringFormat of mod_ssl is enabled, then it can
+    look like this instead:
+        /DC=com/DC=example/OU=Users/CN=John Doe
+    In the first case, the Common Name attributes added by VOMS are prepended,
+    whereas in the second case, they are appended.
+
+    The motivation for stripping these attributes is to avoid having to store
+    multiple DNs in the database (as different identities).
+    """
+    if dn.startswith("/"):
+        regexp = r"(/CN=(limited proxy|proxy|[0-9]+))+$"
+    else:
+        regexp = r"^(CN=(limited proxy|proxy|[0-9]+),)+"
+
+    return re.sub(regexp, "", dn)
+
+
+def token_key_generator(namespace, fni, **kwargs):
+    """:returns: generate key function"""
+
+    def generate_key(token, *, session: "Session"):
+        """:returns: token"""
+        return token
+
+    return generate_key
+
+
+def _hash_token_for_cache(token: str) -> str:
+    """
+    Hash token to create a safe cache key.
+
+    This prevents token exposure in cache and ensures consistent key length
+    (64 chars) that works with both Rucio tokens and long JWT tokens.
+
+    :param token: Authentication token to hash
+    :returns: SHA-256 hash of the token as a hex string (64 characters)
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+if config_get_bool("cache", "use_external_cache_for_auth_tokens", default=False):
+    TOKENREGION = MemcacheRegion(
+        expiration_time=900, function_key_generator=token_key_generator
+    )
+else:
+    TOKENREGION = make_region(function_key_generator=token_key_generator).configure(
+        "dogpile.cache.memory", expiration_time=900
+    )
+
+
+@transactional_session
+def get_auth_token_user_pass(
+    account: "InternalAccount",
+    username: str,
+    password: str,
+    appid: str,
+    ip: Optional[str] = None,
+    *,
+    session: "Session",
+) -> Optional["TokenDict"]:
+    """
+    Authenticate a Rucio account temporarily via username and password.
+
+    The token lifetime is 1 hour.
+
+    :param account: Account identifier as a string.
+    :param username: Username as a string.
+    :param password: SHA1 hash of the password as a string.
+    :param appid: The application identifier as a string.
+    :param ip: IP address of the client a a string.
+    :param session: The database session in use.
+
+    :returns: A dict with token and expires_at entries.
+    """
+
+    # Make sure the account exists
+    if not account_exists(account, session=session):
+        return None
+
+    query = select(models.Identity).where(
+        models.Identity.identity == username,
+        models.Identity.identity_type == IdentityType.USERPASS,
+    )
+    result = session.execute(query).scalar()
+
+    db_salt = result["salt"]
+    db_password = result["password"]
+
+    salted_password = db_salt + password.encode()
+    if db_password != hashlib.sha256(salted_password).hexdigest():
+        return None
+
+    # get account identifier
+    query = select(models.IdentityAccountAssociation).where(
+        models.IdentityAccountAssociation.identity == username,
+        models.IdentityAccountAssociation.identity_type == IdentityType.USERPASS,
+        models.IdentityAccountAssociation.account == account,
+    )
+    result = session.execute(query).scalar()
+
+    db_account = result["account"]
+
+    # remove expired tokens
+    __delete_expired_tokens_account(account=account, session=session)
+
+    # create new rucio-auth-token for account
+    tuid = generate_uuid()  # NOQA
+    token = f"{account}-{username}-{appid}-{tuid}"
+    new_token = models.Token(account=db_account, identity=username, token=token, ip=ip)
+    new_token.save(session=session)
+
+    return token_dictionary(new_token)
+
+
+@transactional_session
+def get_auth_token_x509(
+    account: "InternalAccount",
+    dn: str,
+    appid: str,
+    ip: Optional[str] = None,
+    *,
+    session: "Session",
+) -> Optional["TokenDict"]:
+    """
+    Authenticate a Rucio account temporarily via an x509 certificate.
+
+    The token lifetime is 1 hour.
+
+    :param account: Account identifier as a string.
+    :param dn: Client certificate distinguished name string, as extracted by Apache/mod_ssl.
+    :param id: The application identifier as a string.
+    :param ipaddr: IP address of the client as a string.
+    :param session: The database session in use.
+
+    :returns: A dict with token and expires_at entries.
+    """
+
+    # Make sure the account exists
+    if not account_exists(account, session=session):
+        return None
+
+    # remove expired tokens
+    __delete_expired_tokens_account(account=account, session=session)
+
+    # create new rucio-auth-token for account
+    tuid = generate_uuid()  # NOQA
+    token = f"{account}-{dn}-{appid}-{tuid}"
+    new_token = models.Token(account=account, identity=dn, token=token, ip=ip)
+    new_token.save(session=session)
+
+    return token_dictionary(new_token)
+
+
+@transactional_session
+def get_auth_token_gss(
+    account: "InternalAccount",
+    gsstoken: str,
+    appid: str,
+    ip: Optional[str] = None,
+    *,
+    session: "Session",
+) -> Optional["TokenDict"]:
+    """
+    Authenticate a Rucio account temporarily via a GSS token.
+
+    The token lifetime is 1 hour.
+
+    :param account: Account identifier as a string.
+    :param gsscred: GSS principal@REALM as a string.
+    :param appid: The application identifier as a string.
+    :param ip: IP address of the client as a string.
+    :param session: The database session in use.
+
+    :returns: A dict with token and expires_at entries.
+    """
+
+    # Make sure the account exists
+    if not account_exists(account, session=session):
+        return None
+
+    # remove expired tokens
+    __delete_expired_tokens_account(account=account, session=session)
+
+    # create new rucio-auth-token for account
+    tuid = generate_uuid()  # NOQA
+    token = f"{account}-{gsstoken}-{appid}-{tuid}"
+    new_token = models.Token(account=account, token=token, ip=ip)
+    new_token.save(session=session)
+
+    return token_dictionary(new_token)
+
+
+@transactional_session
+def get_auth_token_ssh(
+    account: "InternalAccount",
+    signature: str,
+    appid: str,
+    ip: Optional[str] = None,
+    *,
+    session: "Session",
+) -> Optional["TokenDict"]:
+    """
+    Authenticate a Rucio account temporarily via SSH key exchange.
+
+    The token lifetime is 1 hour.
+
+    :param account: Account identifier as a string.
+    :param signature: Response to server challenge signed with SSH private key as a base64 encoded string.
+    :param appid: The application identifier as a string.
+    :param ip: IP address of the client as a string.
+    :param session: The database session in use.
+
+    :returns: A dict with token and expires_at entries.
+    """
+
+    # decode the signature which must come in base64 encoded
+    try:
+        signature += "=" * ((4 - len(signature) % 4) % 4)  # adding required padding
+        decoded_signature = b64decode(signature)
+    except TypeError:
+        raise CannotAuthenticate(
+            f"Cannot authenticate to account {account} with malformed signature"
+        )
+
+    # Make sure the account exists
+    if not account_exists(account, session=session):
+        return None
+
+    # get all active challenge tokens for the requested account
+    query = select(models.Token).where(
+        models.Token.expired_at >= datetime.datetime.utcnow(),
+        models.Token.account == account,
+        models.Token.token.like("challenge-%"),
+    )
+    active_challenge_tokens = session.execute(query).scalars().all()
+
+    # get all identities for the requested account
+    query = select(models.IdentityAccountAssociation).where(
+        models.IdentityAccountAssociation.identity_type == IdentityType.SSH,
+        models.IdentityAccountAssociation.account == account,
+    )
+    identities = session.execute(query).scalars().all()
+
+    # no challenge tokens found
+    if not active_challenge_tokens:
+        return None
+
+    # try all available SSH identities for the account with the provided signature
+    match = False
+    for identity in identities:
+        data = identity["identity"].split()[1]
+        data += "=" * ((4 - len(data) % 4) % 4)  # adding required padding
+        pub_k = paramiko.RSAKey(data=b64decode(data))
+        for challenge_token in active_challenge_tokens:
+            if pub_k.verify_ssh_sig(
+                str(challenge_token["token"]).encode(),
+                paramiko.Message(decoded_signature),
+            ):
+                match = True
+                break
+        if match:
+            break
+
+    if not match:
+        return None
+
+    # remove expired tokens
+    __delete_expired_tokens_account(account=account, session=session)
+
+    # create new rucio-auth-token for account
+    tuid = generate_uuid()  # NOQA
+    token = f"{account}-ssh:pubkey-{appid}-{tuid}"
+    new_token = models.Token(account=account, token=token, ip=ip)
+    new_token.save(session=session)
+
+    return token_dictionary(new_token)
+
+
+@transactional_session
+def get_ssh_challenge_token(
+    account: "InternalAccount",
+    appid: str,
+    ip: Optional[str] = None,
+    *,
+    session: "Session",
+) -> Optional["TokenDict"]:
+    """
+    Prepare a challenge token for subsequent SSH public key authentication.
+
+    The challenge lifetime is fixed to 10 seconds.
+
+    :param account: Account identifier as a string.
+    :param appid: The application identifier as a string.
+    :param ip: IP address of the client as a string.
+
+    :returns: A dict with token and expires_at entries.
+    """
+
+    # Make sure the account exists
+    if not account_exists(account, session=session):
+        return None
+
+    # Cryptographically secure random number.
+    # This requires a /dev/urandom like device from the OS
+    rng = random.SystemRandom()
+    crypto_rand = rng.randint(0, sys.maxsize)
+
+    # give the client 10 seconds max to sign the challenge token
+    expiration = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
+    expiration_unix = expiration.strftime("%s")
+
+    challenge_token = f"challenge-{crypto_rand}-{account}-{expiration_unix}"
+
+    new_challenge_token = models.Token(
+        account=account, token=challenge_token, ip=ip, expired_at=expiration
+    )
+    new_challenge_token.save(session=session)
+
+    return token_dictionary(new_challenge_token)
+
+
+@transactional_session
+def redirect_auth_oidc(
+    auth_code: str, fetchtoken: bool = False, *, session: "Session"
+) -> Optional[str]:
+    """
+    Finds the Authentication URL in the Rucio DB oauth_requests table
+    and redirects user's browser to this URL.
+
+    :param auth_code: Rucio assigned code to redirect
+                      authorization securely to IdP via Rucio Auth server through a browser.
+    :param fetchtoken: If True, valid token temporarily saved in the oauth_requests table
+                       will be returned. If False, redirection URL is returned.
+    :param session: The database session in use.
+
+    :returns: result of the query (authorization URL or a
+              token if a user asks with the correct code) or None.
+              Exception thrown in case of an unexpected crash.
+
+    """
+    try:
+        query = select(models.OAuthRequest.redirect_msg).where(
+            models.OAuthRequest.access_msg == auth_code
+        )
+        redirect_result = session.execute(query).scalar()
+
+        if not redirect_result:
+            return None
+
+        if "http" not in redirect_result and fetchtoken:
+            # in this case the function check if the value is a valid token
+            vdict = validate_auth_token(redirect_result, session=session)
+            if vdict:
+                return redirect_result
+            return None
+        elif "http" in redirect_result and not fetchtoken:
+            # return redirection URL
+            return redirect_result
+    except Exception:
+        raise CannotAuthenticate(traceback.format_exc())
+
+
+def _claims_from_jwt(token: Optional[str]) -> dict:
+    """
+    Decode the payload of a JWT already validated by other means.
+
+    No signature check: the caller has matched this token against the
+    tokens table, so it was verified at issuance. Non-JWT tokens
+    (userpass, x509) return {}.
+    """
+    if not token or len(token.split(".")) != 3:
+        return {}
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:
+        logging.warning("Could not decode claims from token", exc_info=True)
+        return {}
+
+
+@read_session
+def query_token(token: str, *, session: "Session") -> Optional["TokenValidationDict"]:
+    """
+    Validate an authentication token using the database. This method will only be called
+    if no entry could be found in the according cache.
+
+    :param token: Authentication token as a variable-length string.
+    :param session: The database session in use.
+
+    :returns: dictionary { account: <account name>,
+                           identity: <identity>,
+                           lifetime: <token lifetime>,
+                           audience: <audience>,
+                           authz_scope: <authz_scope> }
+              if successful, None otherwise.
+    """
+    # Query the DB to validate token
+    query = select(
+        models.Token.account,
+        models.Token.identity,
+        models.Token.expired_at.label("lifetime"),
+        models.Token.audience,
+        models.Token.oidc_scope.label("authz_scope"),
+        models.Token.token,
+    ).where(
+        models.Token.token == token,
+        models.Token.expired_at > datetime.datetime.utcnow(),
+    )
+    result = session.execute(query).first()
+    if result:
+        value = result._asdict()
+        value["claims"] = _claims_from_jwt(value.pop("token"))
+        return cast("TokenValidationDict", value)
+    return None
+
+
+@transactional_session
+def validate_auth_token(token: str, *, session: "Session") -> "TokenValidationDict":
+    """
+    Validate an authentication token.
+
+    :param token: Authentication token as a variable-length string.
+
+    :returns: dictionary { account: <account name>,
+                           identity: <identity>,
+                           lifetime: <token lifetime>,
+                           audience: <audience>,
+                           authz_scope: <authz_scope> }
+              if successful
+    :raises: CannotAuthenticate if unsuccessful
+    """
+    if not token:
+        raise CannotAuthenticate("No token was passed!")
+
+    # Be gentle with bash variables, there can be whitespace
+    token = token.strip()
+
+    # SSH challenge tokens share this table but are nonces to be signed, not
+    # credentials, so they must never authenticate a request on their own.
+    if token.startswith("challenge-"):
+        raise CannotAuthenticate("Challenge tokens cannot be used for authentication.")
+
+    # Hash token for cache key to prevent exposure and handle long JWT tokens
+    cache_key = _hash_token_for_cache(token)
+
+    # Check if token can be found in cache region
+    value: Union[NoValue, "TokenValidationDict"] = TOKENREGION.get(cache_key)
+    if value is NO_VALUE:  # no cached entry found
+        # Query database using the original token (not the hash)
+        value = query_token(token, session=session)
+        if not value:
+            # identify JWT access token and validate
+            # & save it in Rucio if scope and audience are correct
+            if len(token.split(".")) == 3:
+                # imported here to avoid circular import
+                from rucio.core.oidc import validate_jwt
+
+                value = validate_jwt(token, session=session)
+            else:
+                raise CannotAuthenticate(traceback.format_exc())
+        # save token validation result in cache using hashed key
+        TOKENREGION.set(cache_key, value)
+    lifetime = value.get("lifetime", datetime.datetime(1970, 1, 1))  # type: ignore (value is narrowed to dict, but type-checker doesn't see it)
+    if lifetime < datetime.datetime.utcnow():  # check if expired
+        TOKENREGION.delete(cache_key)
+        raise CannotAuthenticate(
+            f"Token found but expired since {date_to_str(lifetime)}."
+        )
+    return cast("TokenValidationDict", value)
+
+
+def token_dictionary(token: models.Token) -> "TokenDict":
+    return {"token": token.token, "expires_at": token.expired_at}
+
+
+@transactional_session
+def __delete_expired_tokens_account(
+    account: "InternalAccount", *, session: "Session", check_refresh_token: bool = False
+) -> None:
+    """
+    Deletes expired tokens from the database.
+
+    :param account: Account to delete expired tokens.
+    :param session: The database session in use.
+    :param check_refresh_token: If True, also deletes tokens where the
+                                refresh token (if it exists) has expired.
+    """
+    where_clauses = [
+        models.Token.expired_at < datetime.datetime.utcnow(),
+        models.Token.account == account,
+    ]
+
+    # refresh token check if the option is enabled
+    if check_refresh_token:
+        where_clauses.append(
+            or_(
+                models.Token.refresh_expired_at == null(),
+                models.Token.refresh_expired_at < datetime.datetime.utcnow(),
+            )
+        )
+
+    select_query = (
+        select(models.Token.token)
+        .where(*where_clauses)
+        .with_for_update(skip_locked=True)
+    )
+
+    tokens = session.execute(select_query).scalars().all()
+
+    for chunk in chunks(tokens, 100):
+        delete_query = (
+            delete(models.Token)
+            .prefix_with("/*+ INDEX(TOKENS_ACCOUNT_EXPIRED_AT_IDX) */")
+            .where(models.Token.token.in_(chunk))
+        )
+        session.execute(delete_query)

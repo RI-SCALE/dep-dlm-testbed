@@ -508,6 +508,10 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
 	  python3 - < shared/tests/probe_fts_xrootd.py
 
+.PHONY: test-authz-personas
+test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
+
 ## Terraform
 
 tf-fmt: ## Format Terraform files
