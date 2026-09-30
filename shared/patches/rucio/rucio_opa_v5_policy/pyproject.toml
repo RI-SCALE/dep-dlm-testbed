@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rucio-opa-v5-policy"
+version = "0.1.0"
+description = "Phase 5 — Rucio policy package (OPA as PDP, OIDC token-native authorisation via URN entitlements)"
+authors = [{ name = "someone", email = "placeholder@cern.ch" }]
+requires-python = ">=3.9"
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = ["rucio>=35.0.0", "pytest>=7.0", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+extend-exclude = ["src/rucio_authz_client"]
