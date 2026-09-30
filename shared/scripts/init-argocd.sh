@@ -198,6 +198,7 @@ main() {
   render_testbed_configmaps        # from common.sh
   seed_vault                       # from common.sh
   bootstrap_rucio_db               # from common.sh
+  ingest_opa_policies              # from common.sh
   apply_gateway_root
   report
 }

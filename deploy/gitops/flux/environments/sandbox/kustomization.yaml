@@ -13,6 +13,7 @@ resources:
   - ../../components/rucio-server.yaml
   - ../../components/rucio-daemons.yaml
   - ../../components/rucio-client.yaml
+  - ../../components/opa.yaml
 configMapGenerator:
   - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
   - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
@@ -23,6 +24,7 @@ configMapGenerator:
   - { name: teapot1-values, namespace: flux-system, files: [ teapot1.yaml=../../../base/values/teapot1.yaml ] }
   - { name: teapot2-values, namespace: flux-system, files: [ teapot2.yaml=../../../base/values/teapot2.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
+  - { name: opa-values,           namespace: flux-system, files: [ opa.yaml=../../../base/values/opa.yaml ] }
 generatorOptions:
   disableNameSuffixHash: true
 patches:

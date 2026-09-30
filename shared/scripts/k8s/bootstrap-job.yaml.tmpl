@@ -31,8 +31,15 @@ spec:
             - { name: secrets, mountPath: /opt/rucio/etc/alembic.ini,     subPath: alembic.ini }
             - { name: secrets, mountPath: /opt/rucio/etc/idpsecrets.json, subPath: idpsecrets.json }
             - { name: bootstrap, mountPath: /scripts/bootstrap-db.py, subPath: rucio--bootstrap-db.py }
+            # Policy package named in rucio.cfg's [policy] package, mounted into
+            # site-packages (same as base/values/rucio-{server,daemons}.yaml).
+            - { name: patches, mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py,   subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py }
+            - { name: patches, mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py, subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py }
+            - { name: patches, mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py, subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py }
       volumes:
         - name: secrets
           secret: { secretName: testbed-secrets }
         - name: bootstrap
           configMap: { name: testbed-scripts, defaultMode: 0755 }
+        - name: patches
+          configMap: { name: testbed-patches }

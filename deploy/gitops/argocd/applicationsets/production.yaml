@@ -28,7 +28,7 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/integrate-opa-policy-package-authz
                   ref: values
           - name: rucio-daemons
             spec:
@@ -38,17 +38,27 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/production/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/integrate-opa-policy-package-authz
                   ref: values
           - name: fts
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/integrate-opa-policy-package-authz
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/production/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: main
+                  targetRevision: feat/integrate-opa-policy-package-authz
+                  ref: values
+          - name: opa
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/integrate-opa-policy-package-authz
+                  path: deploy/helm-charts/opa
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/opa.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: feat/integrate-opa-policy-package-authz
                   ref: values
   template:
     metadata:
