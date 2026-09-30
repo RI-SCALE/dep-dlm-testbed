@@ -34,15 +34,15 @@ DEFAULT_RSE_TYPES = [
     "USERDISK",
 ]
 
-# URN entitlement strings -> privilege level. Ported from
-# opa-policy-package's phase6 ENTITLEMENT_POLICY (direct-mode subset —
-# no DEP-persona URNs, since those belong to opa-policy-package's own
-# entitlement model, not this testbed's).
 ENTITLEMENT_POLICY = {
     "urn:example:aai.example.org:group:rucio-admins:role=member": "admin",
     "urn:example:aai.example.org:group:atlas-production:role=member": "admin",
     "urn:example:aai.example.org:group:rucio-users:role=member": "user",
     "urn:example:aai.example.org:group:atlas-users:role=member": "user",
+    # DEP personas
+    "urn:example:aai.example.org:group:dep-operator:role=member": "admin",
+    "urn:example:aai.example.org:group:dep-end-user:role=member": "user",
+    "urn:example:aai.example.org:group:model-developer:role=member": "user",
 }
 
 

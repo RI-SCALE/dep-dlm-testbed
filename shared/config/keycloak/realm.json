@@ -46,10 +46,10 @@
       "directAccessGrantsEnabled": true,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
-        "wlcg", "fts",
+        "wlcg", "fts", "entitlements",
         "storage.read", "storage.modify",
         "storage.read:/data", "storage.modify:/data",
-        "storage.read:/", "storage.modify:/"
+        "storage.read:/", "storage.modify:/", "pep:rucio"
       ],
       "optionalClientScopes": [
         "offline_access",
@@ -183,10 +183,18 @@
       "credentials": [
         { "type": "password", "value": "secret", "temporary": false }
       ],
-      "groups": [ "/rucio/users", "/atlas/users" ]
+      "groups": [ "/rucio/users", "/atlas/users" ],
+      "attributes": {
+        "entitlements": [
+          "urn:example:aai.example.org:group:rucio-users:role=member",
+          "urn:example:aai.example.org:group:atlas-users:role=member"
+        ],
+        "acr": ["https://refeds.org/profile/mfa"]
+      }
     },
     {
       "username": "adminuser",
+      "id": "7f3d9c21-8b64-4e5a-9f02-1d6c4a8e37b5",
       "enabled": true,
       "firstName": "Admin",
       "lastName": "User",
@@ -197,7 +205,59 @@
       "credentials": [
         { "type": "password", "value": "admin123", "temporary": false }
       ],
-      "groups": [ "/rucio/admins", "/atlas/production" ]
+      "groups": [ "/rucio/admins", "/atlas/production" ],
+      "attributes": {
+        "entitlements": [
+          "urn:example:aai.example.org:group:rucio-admins:role=member",
+          "urn:example:aai.example.org:group:atlas-production:role=member"
+        ],
+        "acr": ["https://refeds.org/profile/mfa"]
+      }
+    },
+    {
+      "username": "depoperator",
+      "id": "9a1c2e4d-6b3f-4a8e-9d5c-1f7a3b5e8c2d",
+      "enabled": true,
+      "firstName": "DEP", "lastName": "Operator",
+      "email": "depoperator@rucio", "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["offline_access"],
+      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "groups": [],
+      "attributes": {
+        "entitlements": ["urn:example:aai.example.org:group:dep-operator:role=member"],
+        "acr": ["https://refeds.org/profile/mfa"]
+      }
+    },
+    {
+      "username": "dependuser",
+      "id": "3e7b9f1a-2c4d-4e6f-8a0b-5d9c3e7f1a2b",
+      "enabled": true,
+      "firstName": "DEP", "lastName": "End User",
+      "email": "dependuser@rucio", "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["offline_access"],
+      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "groups": [],
+      "attributes": {
+        "entitlements": ["urn:example:aai.example.org:group:dep-end-user:role=member"],
+        "acr": ["https://refeds.org/profile/mfa"]
+      }
+    },
+    {
+      "username": "modeldeveloper",
+      "id": "6d4a8c2e-9f1b-4c3d-a7e5-2b8f4d6a9c1e",
+      "enabled": true,
+      "firstName": "Model", "lastName": "Developer",
+      "email": "modeldeveloper@rucio", "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["offline_access"],
+      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "groups": [],
+      "attributes": {
+        "entitlements": ["urn:example:aai.example.org:group:model-developer:role=member"],
+        "acr": ["https://refeds.org/profile/mfa"]
+      }
     },
     {
       "username": "service-account-rucio",
@@ -208,6 +268,41 @@
     }
   ],
   "clientScopes": [
+    {
+      "name": "entitlements",
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "entitlements",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "entitlements",
+            "claim.name": "entitlements",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "aggregate.attrs": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "acr-from-attribute",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "acr",
+            "claim.name": "acr",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "aggregate.attrs": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
     {
       "name": "wlcg",
       "protocol": "openid-connect",
@@ -255,6 +350,7 @@
       ]
     },
     { "name": "fts", "protocol": "openid-connect" },
+    { "name": "pep:rucio", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" } },
     { "name": "storage.read", "protocol": "openid-connect" },
     { "name": "storage.modify", "protocol": "openid-connect" },
     { "name": "storage.read:/data", "protocol": "openid-connect" },

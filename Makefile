@@ -295,7 +295,7 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
 
-## IdP token verification
+## AuthN / AuthZ
 
 .PHONY: verify-idp-token
 verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
@@ -312,6 +312,12 @@ verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT
 	      --scope "openid profile email offline_access eduperson_entitlement" ;; \
 	  *) echo "Unknown SCOPE_PROFILE=$(SCOPE_PROFILE), expected egi-dev or ls-aai-dev"; exit 1 ;; \
 	esac
+
+check-claims: ## Decode entitlements/acr claims for every realm user (or USER=<name>)
+	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:8080 $(if $(USER),--user $(USER))
+
+ingest-policies: ## Push authz.rego + data into the running OPA (idempotent)
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181
 
 ## Lifecycle
 

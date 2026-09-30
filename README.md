@@ -172,7 +172,7 @@ make test-rucio-transfers
 dep-dlm-testbed
 
   RUNTIME    = compose    (compose | k8s)
-  TOKEN_MODE = unmanaged (managed | unmanaged)
+  TOKEN_MODE = managed (managed | unmanaged)
   DAEMON_MODE = direct (direct | daemons)
   GITOPS_ENV = sandbox (sandbox | staging | production)
   K8S_NAMESPACE = dep-dlm-sandbox
@@ -190,8 +190,10 @@ Setup
   certs                Generate CA and host certificates
   init                 Init testbed accounts, RSEs, OIDC seed
 
-IdP token verification
+AuthN / AuthZ
   verify-idp-token     Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
+  check-claims         Decode entitlements/acr claims for every realm user (or USER=<name>)
+  ingest-policies      Push authz.rego + data into the running OPA (idempotent)
 
 Lifecycle
   start                Start the stack
