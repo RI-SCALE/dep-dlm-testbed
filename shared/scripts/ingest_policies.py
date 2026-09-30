@@ -22,9 +22,18 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-# Repo root is the script's great-grandparent:
-# <root>/shared/scripts/ingest_policies.py
-REPO_ROOT = Path(__file__).resolve().parents[2]
+
+def _default_rego_path() -> Path:
+    """Best-effort default for local/host runs. In containers the caller
+    always passes --rego-path explicitly (see opa-init's compose command),
+    so this only needs to work when the script runs from its real
+    checked-out location."""
+    here = Path(__file__).resolve()
+    try:
+        return here.parents[2] / "shared" / "config" / "opa" / "authz.rego"
+    except IndexError:
+        return Path("authz.rego")
+
 
 DEFAULT_RSE_TYPES = [
     "DATADISK",
@@ -133,7 +142,7 @@ def main() -> None:
     parser.add_argument(
         "--rego-path",
         type=Path,
-        default=REPO_ROOT / "shared" / "config" / "opa" / "authz.rego",
+        default=_default_rego_path(),
         help="override the Rego file (default: %(default)s)",
     )
     args = parser.parse_args()
