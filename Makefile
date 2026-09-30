@@ -313,11 +313,29 @@ verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT
 	  *) echo "Unknown SCOPE_PROFILE=$(SCOPE_PROFILE), expected egi-dev or ls-aai-dev"; exit 1 ;; \
 	esac
 
+.PHONY: check-claims
 check-claims: ## Decode entitlements/acr claims for every realm user (or USER=<name>)
+ifeq ($(RUNTIME),compose)
 	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:8080 $(if $(USER),--user $(USER))
+else
+	@$(KUBECTL) port-forward svc/keycloak 18080:8080 >/dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null" EXIT; \
+	sleep 2; \
+	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:18080 $(if $(USER),--user $(USER))
+endif
 
+.PHONY: ingest-policies
 ingest-policies: ## Push authz.rego + data into the running OPA (idempotent)
+ifeq ($(RUNTIME),compose)
 	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181
+else
+	@$(KUBECTL) port-forward svc/opa 18181:8181 >/dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null" EXIT; \
+	sleep 2; \
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181
+endif
 
 ## Lifecycle
 
