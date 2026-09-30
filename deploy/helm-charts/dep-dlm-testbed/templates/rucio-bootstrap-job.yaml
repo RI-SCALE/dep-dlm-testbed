@@ -32,6 +32,8 @@ spec:
             - |
               set -e
               # Wait until ruciodb's Postgres port answers.
+              cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy
+              pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy
               for i in $(seq 1 30); do
                 if python3 -c "import socket; socket.create_connection(('${DB_HOST}', 5432), timeout=2).close()" 2>/dev/null; then
                   echo "  ✓ ${DB_HOST} reachable"
@@ -56,6 +58,18 @@ spec:
               subPath: idpsecrets.json
             - name: bootstrap
               mountPath: /scripts
+            - name: policy-pyproject
+              mountPath: /policy-package/rucio_opa_v5_policy/pyproject.toml
+              subPath: rucio--rucio_opa_v5_policy--pyproject.toml
+            - name: policy-init
+              mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/__init__.py
+              subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+            - name: policy-client
+              mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/opa_client.py
+              subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+            - name: policy-permission
+              mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/permission.py
+              subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
       volumes:
         - name: rucio-cfg
           secret:
@@ -64,4 +78,28 @@ spec:
           configMap:
             name: testbed-scripts
             defaultMode: 0755
+        - name: policy-pyproject
+          configMap:
+            name: testbed-patches
+            items:
+              - key: rucio--rucio_opa_v5_policy--pyproject.toml
+                path: rucio--rucio_opa_v5_policy--pyproject.toml
+        - name: policy-init
+          configMap:
+            name: testbed-patches
+            items:
+              - key: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+                path: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+        - name: policy-client
+          configMap:
+            name: testbed-patches
+            items:
+              - key: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+                path: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+        - name: policy-permission
+          configMap:
+            name: testbed-patches
+            items:
+              - key: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
+                path: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
 {{- end }}

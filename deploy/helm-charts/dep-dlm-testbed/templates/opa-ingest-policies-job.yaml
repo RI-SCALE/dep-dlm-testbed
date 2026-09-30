@@ -1,0 +1,54 @@
+{{- /*
+  Compose's opa-init runs as a one-shot dependency gate before rucio-server
+  starts. Kubernetes has no Deployment-level "wait for Job" primitive, so
+  this runs as a post-install/post-upgrade hook, before rucio-bootstrap-db
+  (hookWeight lower than that Job's weight "5"). Hooks run only after
+  non-hook resources are *created*, not necessarily *ready*, so a fresh
+  install can have rucio-server come up before this Job completes —
+  query_opa() fails closed on any connection error, so the effect is a
+  brief window of spurious denials, not a wrong allow.
+*/}}
+{{- if .Values.opa.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opa-init
+  labels:
+    app.kubernetes.io/name: dep-dlm-testbed
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": {{ .Values.opa.initJob.hookWeight | quote }}
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: opa-init
+          image: "{{ .Values.opa.initJob.image.repository }}:{{ .Values.opa.initJob.image.tag }}"
+          workingDir: /app
+          command:
+            - sh
+            - -c
+            - |
+              until python -c "import urllib.request; urllib.request.urlopen('http://opa:{{ .Values.opa.service.port }}/health')" 2>/dev/null; do sleep 1; done
+              python ingest_policies.py --opa-url http://opa:{{ .Values.opa.service.port }} --rego-path /app/authz.rego
+          volumeMounts:
+            - name: scripts
+              mountPath: /app/ingest_policies.py
+              subPath: ingest_policies.py
+            - name: configs
+              mountPath: /app/authz.rego
+              subPath: authz.rego
+      volumes:
+        - name: scripts
+          configMap:
+            name: testbed-scripts
+            defaultMode: 0755
+        - name: configs
+          configMap:
+            name: testbed-configs
+{{- end }}

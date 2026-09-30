@@ -71,3 +71,9 @@ dependencies:
     repository: "file://../teapot"
     alias: teapot2
     condition: teapot2.enabled
+
+  - name: opa
+    version: "0.1.0"
+    repository: "file://../opa"
+    alias: opa
+    condition: opa.enabled

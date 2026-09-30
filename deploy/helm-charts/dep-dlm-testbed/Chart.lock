@@ -29,5 +29,8 @@ dependencies:
 - name: teapot
   repository: file://../teapot
   version: 0.1.0
-digest: sha256:fb2f4e940401c968543827badc509303639f3855deef0ce69578bc58c985dc49
-generated: "2026-09-03T11:51:25.921491719Z"
+- name: opa
+  repository: file://../opa
+  version: 0.1.0
+digest: sha256:709f0169288c63523be531ebda8edf8edc145e3438f07fa6e502cdf447cd208a
+generated: "2026-09-30T15:16:28.042592589Z"
