@@ -358,6 +358,36 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
 
+  opa:
+    image: openpolicyagent/opa:1.8.0
+    hostname: opa
+    ports:
+      - "8181:8181"
+    networks:
+      - dep-dlm-testbed
+    command: run --server --log-level info --addr=0.0.0.0:8181
+    # OPA's distroless image has no shell/wget/curl — healthcheck
+    # omitted here too; opa-init polls OPA directly instead.
+
+  opa-init:
+    image: python:3.11-slim
+    hostname: opa-init
+    depends_on:
+      - opa
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/ingest_policies.py:/app/ingest_policies.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/opa/authz.rego:/app/authz.rego:ro
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        until python -c "import urllib.request; urllib.request.urlopen('http://opa:8181/health')" 2>/dev/null; do sleep 1; done
+        python ingest_policies.py --opa-url http://opa:8181 --rego-path /app/authz.rego
+    restart: "no"
+
 networks:
   dep-dlm-testbed:
     name: compose-net
