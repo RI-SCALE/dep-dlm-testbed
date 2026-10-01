@@ -96,9 +96,7 @@ ruciodb:
           - /bin/bash
           - -c
           - |
-            update-ca-trust extract &&
-            cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
-            pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
+            update-ca-trust extract
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -169,22 +167,20 @@ ruciodb:
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
       subPath: rucio--common.py
 
-    # policy package
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-pyproject
-      mountPath: /policy-package/rucio_opa_v5_policy/pyproject.toml
-      subPath: rucio--rucio_opa_v5_policy--pyproject.toml
+    # Policy package, mounted straight into site-packages rather than
+    # pip-installed in postStart: postStart runs concurrently with the
+    # entrypoint, so Rucio can import the package before an install finishes.
     - configMapFullName: testbed-patches
       volumeName: opa-policy-init
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/__init__.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-client
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/opa_client.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-permission
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/permission.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
 
 
@@ -203,9 +199,7 @@ rucio-daemons:
           - /bin/bash
           - -c
           - |
-            update-ca-trust extract &&
-            cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
-            pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
+            update-ca-trust extract
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -333,22 +327,21 @@ rucio-daemons:
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
       subPath: rucio--common.py
 
-    # policy package
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-pyproject
-      mountPath: /policy-package/rucio_opa_v5_policy/pyproject.toml
-      subPath: rucio--rucio_opa_v5_policy--pyproject.toml
+    # Policy package, mounted straight into site-packages rather than
+    # pip-installed in postStart: postStart runs concurrently with the
+    # entrypoint, and daemons import it (via rucio.common.schema) before an
+    # install could finish, crash-looping on PolicyPackageNotFound.
     - configMapFullName: testbed-patches
       volumeName: opa-policy-init
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/__init__.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-client
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/opa_client.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-permission
-      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/permission.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py
       subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
 
 # FTS
