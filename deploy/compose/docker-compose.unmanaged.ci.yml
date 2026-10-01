@@ -229,6 +229,10 @@ services:
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
+      - OPA_URL=http://opa:8181
+      - OPA_POLICY_PATH=vo/authz/v5/allow
+      - OPA_TIMEOUT=2
+      - RUCIO_OPA_DEBUG_INPUT=1
     ports:
       - "8090:80"
     depends_on:
@@ -238,18 +242,23 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_started
+      opa-init:
+        condition: service_completed_successfully
     networks:
       - dep-dlm-testbed
     entrypoint:
       - bash
       - -c
       - |
-        update-ca-trust extract
+        update-ca-trust extract &&
+        cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
+        pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
         python3 /scripts/rucio/bootstrap-db.py &&
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy:/policy-package/rucio_opa_v5_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
@@ -263,6 +272,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/scripts/rucio/bootstrap-db.py:/scripts/rucio/bootstrap-db.py:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/ping"]
@@ -315,17 +326,24 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_started
+      opa-init:
+        condition: service_completed_successfully
     networks:
       - dep-dlm-testbed
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
       # daemon image expects the daemon name + args via env
       - RUCIO_ENABLE_LOGS=True
+      - OPA_URL=http://opa:8181
+      - OPA_POLICY_PATH=vo/authz/v5/allow
+      - OPA_TIMEOUT=2
     entrypoint:
       - bash
       - -c
       - |
-        update-ca-trust extract
+        update-ca-trust extract &&
+        cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
+        pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         rucio-conveyor-submitter --sleep-time 5 &
@@ -337,7 +355,7 @@ services:
         rucio-undertaker --sleep-time 5 &
         wait
     volumes:
-      # identical to the `rucio` service
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy:/policy-package/rucio_opa_v5_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
@@ -351,6 +369,38 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
+
+  opa:
+    image: openpolicyagent/opa:1.8.0-static
+    hostname: opa
+    ports:
+      - "8181:8181"
+    networks:
+      - dep-dlm-testbed
+    command: run --server --log-level info --addr=0.0.0.0:8181
+    # OPA's distroless image has no shell/wget/curl — healthcheck
+    # omitted here too; opa-init polls OPA directly instead.
+
+  opa-init:
+    image: python:3.11-slim
+    hostname: opa-init
+    depends_on:
+      - opa
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/scripts/ingest_policies.py:/app/ingest_policies.py:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/opa/authz.rego:/app/authz.rego:ro
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        until python -c "import urllib.request; urllib.request.urlopen('http://opa:8181/health')" 2>/dev/null; do sleep 1; done
+        python ingest_policies.py --opa-url http://opa:8181 --rego-path /app/authz.rego
+    restart: "no"
 
 networks:
   dep-dlm-testbed:

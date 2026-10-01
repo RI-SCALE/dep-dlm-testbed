@@ -1,0 +1,1 @@
+SUPPORTED_VERSION = [">=35.0.0"]

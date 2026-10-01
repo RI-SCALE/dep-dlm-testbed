@@ -73,6 +73,9 @@ undertaker:
 additionalEnvs:
   - name: REQUESTS_CA_BUNDLE
     value: /etc/pki/tls/certs/ca-bundle.crt
+  - { name: OPA_URL,            value: http://opa:8181 }
+  - { name: OPA_POLICY_PATH,    value: vo/authz/v5/allow }
+  - { name: OPA_TIMEOUT,        value: "2" }
 
 secretMounts:
   - secretFullName: testbed-certs
@@ -124,3 +127,27 @@ configMounts:
     volumeName: rse-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
     subPath: rucio--rse.py
+  - configMapFullName: testbed-patches
+    volumeName: authentication-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/authentication.py
+    subPath: rucio--authentication.py
+  - configMapFullName: testbed-patches
+    volumeName: common-patch
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
+    subPath: rucio--common.py
+  # Policy package, mounted straight into site-packages rather than
+  # pip-installed in postStart: postStart runs concurrently with the
+  # entrypoint, and daemons import it (via rucio.common.schema) before an
+  # install could finish, crash-looping on PolicyPackageNotFound.
+  - configMapFullName: testbed-patches
+    volumeName: opa-policy-init
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py
+    subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+  - configMapFullName: testbed-patches
+    volumeName: opa-policy-client
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py
+    subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+  - configMapFullName: testbed-patches
+    volumeName: opa-policy-permission
+    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py
+    subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py

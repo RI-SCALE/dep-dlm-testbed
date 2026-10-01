@@ -1770,6 +1770,25 @@ def __get_keyvalues_from_claims(token: str, keys=None):
         raise CannotAuthenticate(traceback.format_exc()) from error
 
 
+def _raw_jwt_payload(jwt_str: str) -> dict:
+    """
+    Decode a JWT payload without flattening list claims.
+
+    __get_keyvalues_from_claims() runs values through val_to_space_sep_str(),
+    which is right for scope/aud but collapses multi-valued claims like
+    entitlements and wlcg.groups into one space-joined string.
+    """
+    import base64
+    import json
+
+    try:
+        payload = jwt_str.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except Exception:
+        return {}
+
+
 @read_session
 def __get_rucio_jwt_dict(jwt: str, account=None, *, session: "Session"):
     """
@@ -1815,6 +1834,7 @@ def __get_rucio_jwt_dict(jwt: str, account=None, *, session: "Session"):
             "lifetime": expiry_date,
             "audience": audience,
             "authz_scope": scope,
+            "claims": _raw_jwt_payload(jwt),
         }
         return value
     except Exception:

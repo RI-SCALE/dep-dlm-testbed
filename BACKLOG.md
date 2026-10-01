@@ -44,4 +44,4 @@
 ## Authorization
 
 - [ ] Storage authorization hardening (XRootD SciTokens + Teapot Storm-WebDAV): VO-based Teapot mapping via `eduperson_entitlements` — configure Keycloak to issue `eduperson_entitlement` claims alongside `wlcg.groups` and demonstrate Teapot's VO mapping mode as an alternative to FILE mapping (requires group membership claims not available on the current service account token path). Investigate whether equivalent group/entitlement-based authorization exists for XRootD SciTokens (current understanding: scope-based only).
-- [ ] Integrate authorization for this testbed by reusing [opa-policy-package's](https://github.com/mgajek-cern/opa-policy-package/tree/main) Rego policy bundles and OIDC/Keycloak integration, rather than rebuilding authorization logic here.
+- [x] Integrate authorization for this testbed by reusing [opa-policy-package's](https://github.com/mgajek-cern/opa-policy-package/tree/main) Rego policy bundles and OIDC/Keycloak integration, rather than rebuilding authorization logic here.

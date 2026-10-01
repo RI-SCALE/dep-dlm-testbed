@@ -96,7 +96,9 @@ ruciodb:
           - /bin/bash
           - -c
           - |
-            update-ca-trust extract
+            update-ca-trust extract &&
+            cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
+            pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -104,6 +106,14 @@ ruciodb:
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
       value: /etc/pki/tls/certs/ca-bundle.crt
+    - name: OPA_URL
+      value: http://opa:8181
+    - name: OPA_POLICY_PATH
+      value: vo/authz/v5/allow
+    - name: OPA_TIMEOUT
+      value: "2"
+    - name: RUCIO_OPA_DEBUG_INPUT
+      value: "1"
 
   secretMounts:
     # Same directory mount as the GSI server
@@ -150,6 +160,32 @@ ruciodb:
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
+    - configMapFullName: testbed-patches
+      volumeName: authentication-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/authentication.py
+      subPath: rucio--authentication.py
+    - configMapFullName: testbed-patches
+      volumeName: common-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
+      subPath: rucio--common.py
+
+    # policy package
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-pyproject
+      mountPath: /policy-package/rucio_opa_v5_policy/pyproject.toml
+      subPath: rucio--rucio_opa_v5_policy--pyproject.toml
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-init
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/__init__.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-client
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/opa_client.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-permission
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/permission.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
 
 
 rucio-daemons:
@@ -167,7 +203,9 @@ rucio-daemons:
           - /bin/bash
           - -c
           - |
-            update-ca-trust extract
+            update-ca-trust extract &&
+            cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
+            pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
             dnf -y install yum-utils epel-release.noarch &&
             dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
               python3-gfal2-util gfal2-plugin-http --skip-broken ||
@@ -234,6 +272,14 @@ rucio-daemons:
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
       value: /etc/pki/tls/certs/ca-bundle.crt
+    - name: OPA_URL
+      value: http://opa:8181
+    - name: OPA_POLICY_PATH
+      value: vo/authz/v5/allow
+    - name: OPA_TIMEOUT
+      value: "2"
+    - name: RUCIO_OPA_DEBUG_INPUT
+      value: "1"
 
   secretMounts:
     - secretFullName: testbed-certs
@@ -278,6 +324,32 @@ rucio-daemons:
       volumeName: rse-patch
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/rse.py
       subPath: rucio--rse.py
+    - configMapFullName: testbed-patches
+      volumeName: authentication-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/core/authentication.py
+      subPath: rucio--authentication.py
+    - configMapFullName: testbed-patches
+      volumeName: common-patch
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
+      subPath: rucio--common.py
+
+    # policy package
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-pyproject
+      mountPath: /policy-package/rucio_opa_v5_policy/pyproject.toml
+      subPath: rucio--rucio_opa_v5_policy--pyproject.toml
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-init
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/__init__.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-client
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/opa_client.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+    - configMapFullName: testbed-patches
+      volumeName: opa-policy-permission
+      mountPath: /policy-package/rucio_opa_v5_policy/src/rucio_opa_v5_policy/permission.py
+      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
 
 # FTS
 
@@ -872,3 +944,13 @@ teapot2:
       mountPath: /usr/share/teapot/teapot.py
       subPath: teapot--teapot.py
       readOnly: true
+
+opa:
+  enabled: true
+  service:
+    port: 8181
+  initJob:
+    image:
+      repository: python
+      tag: "3.11-slim"
+    hookWeight: "3"   # before rucio-bootstrap-db (weight "5")

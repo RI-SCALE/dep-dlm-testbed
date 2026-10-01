@@ -295,7 +295,7 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
 
-## IdP token verification
+## AuthN / AuthZ
 
 .PHONY: verify-idp-token
 verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
@@ -312,6 +312,30 @@ verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT
 	      --scope "openid profile email offline_access eduperson_entitlement" ;; \
 	  *) echo "Unknown SCOPE_PROFILE=$(SCOPE_PROFILE), expected egi-dev or ls-aai-dev"; exit 1 ;; \
 	esac
+
+.PHONY: check-claims
+check-claims: ## Decode entitlements/acr claims for every realm user (or USER=<name>)
+ifeq ($(RUNTIME),compose)
+	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:8080 $(if $(USER),--user $(USER))
+else
+	@$(KUBECTL) port-forward svc/keycloak 18080:8080 >/dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null" EXIT; \
+	sleep 2; \
+	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:18080 $(if $(USER),--user $(USER))
+endif
+
+.PHONY: ingest-policies
+ingest-policies: ## Push authz.rego + data into the running OPA (idempotent)
+ifeq ($(RUNTIME),compose)
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181
+else
+	@$(KUBECTL) port-forward svc/opa 18181:8181 >/dev/null 2>&1 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null" EXIT; \
+	sleep 2; \
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181
+endif
 
 ## Lifecycle
 
@@ -501,6 +525,10 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
 	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
 	  python3 - < shared/tests/probe_fts_xrootd.py
+
+.PHONY: test-authz-personas
+test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
 
 ## Terraform
 

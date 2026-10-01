@@ -212,6 +212,27 @@ bootstrap_rucio_db() {
     --db-host "$rucio_db_host" --skip-service-check --generate-scripts-secret
 }
 
+# ingest_opa_policies — load authz.rego + data into OPA, rendered from the
+# umbrella chart's opa-init Job (same single-source pattern as
+# render_testbed_configmaps / bootstrap_rucio_db). The Job itself polls
+# OPA's /health, so no separate wait on the opa Deployment is needed.
+#
+# Requires globals: SEED APP_NS REPO_ROOT CORE_WAIT_TIMEOUT
+ingest_opa_policies() {
+  if [[ "$SEED" -eq 0 ]]; then
+    log "Skipping OPA policy ingest (--no-seed)"
+    return 0
+  fi
+  log "Ingesting OPA policies into ${APP_NS}"
+  # Job specs are immutable — a re-run with changed content would fail to apply.
+  kubectl -n "$APP_NS" delete job opa-init --ignore-not-found
+  helm template testbed "${REPO_ROOT}/deploy/helm-charts/dep-dlm-testbed" \
+    --show-only templates/opa-ingest-policies-job.yaml \
+    | kubectl apply -n "$APP_NS" -f -
+  wait_for_job "$APP_NS" opa-init "$CORE_WAIT_TIMEOUT" \
+    "OPA policy ingest failed — every has_permission() call will deny until it succeeds"
+}
+
 # ensure_helm_chart_deps [<chart_dir>]
 # Installs the helm-git plugin (needed for git+https:// chart sources —
 # see Chart.yaml's rucio-server/rucio-daemons dependencies), registers the

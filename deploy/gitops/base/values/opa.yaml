@@ -1,0 +1,8 @@
+fullnameOverride: opa
+image:
+  tag: "1.8.0-static"   # same as compose's openpolicyagent/opa:1.8.0
+service:
+  port: 8181
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits:   { memory: 256Mi }

@@ -12,6 +12,14 @@ OIDC_SEED_SCOPE="openid offline_access aud:rucio storage.read storage.modify wlc
 
 SEED_ACCOUNTS=( root ddmlab )
 
+AUTHZ_TEST_USERS=(
+    "adminuser:admin123:adminuser"
+    "randomaccount:secret:randomaccount"
+    "depoperator:secret:depoperator"
+    "dependuser:secret:dependuser"
+    "modeldeveloper:secret:modeldeveloper"
+)
+
 KCADM="/opt/keycloak/bin/kcadm.sh"
 KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
@@ -185,6 +193,11 @@ setup_accounts_and_identities() {
     ra account add --type USER --email randomaccount@rucio randomaccount || true
     ra account add-attribute randomaccount --key admin --value True || true
 
+    ra account add --type USER --email adminuser@rucio adminuser || true
+    ra account add --type USER --email depoperator@rucio depoperator || true
+    ra account add --type USER --email dependuser@rucio dependuser || true
+    ra account add --type USER --email modeldeveloper@rucio modeldeveloper || true
+
     local grant_mode
     grant_mode=$(_grant_mode_for_profile)
     if [ "$grant_mode" != "password" ]; then
@@ -256,6 +269,91 @@ try:
 except Exception as e:
     print(f'  ⚠ Registration failed: {e}')
 "
+}
+
+setup_authz_test_identities() {
+    local grant_mode
+    grant_mode=$(_grant_mode_for_profile)
+    if [ "$grant_mode" != "password" ]; then
+        echo "  Skipping authz test identity registration (grant_mode=$grant_mode for $OIDC_ISSUER)."
+        return 0
+    fi
+
+    local entry username password account
+    for entry in "${AUTHZ_TEST_USERS[@]}"; do
+        IFS=: read -r username password account <<< "$entry"
+        _exec rucio-server env \
+            AUTHZ_USERNAME="$username" AUTHZ_PASSWORD="$password" AUTHZ_ACCOUNT="$account" \
+            AUTHZ_SCOPE="${OIDC_EXPECTED_SCOPE:-$OIDC_SEED_SCOPE} entitlements" \
+            OIDC_TOKEN_URL="$OIDC_TOKEN_URL" \
+            OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-rucio}" OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-rucio-secret}" \
+            python3 -c "
+import urllib.request, urllib.parse, json, base64, os, sys
+from rucio.core.identity import add_account_identity
+from rucio.core import oidc
+from rucio.common.types import InternalAccount
+from rucio.common import exception
+
+username      = os.environ['AUTHZ_USERNAME']
+account       = os.environ['AUTHZ_ACCOUNT']
+password      = os.environ['AUTHZ_PASSWORD']
+scope         = os.environ['AUTHZ_SCOPE']
+client_id     = os.environ['OIDC_CLIENT_ID']
+client_secret = os.environ['OIDC_CLIENT_SECRET']
+token_url     = os.environ['OIDC_TOKEN_URL']
+
+data = urllib.parse.urlencode({
+    'grant_type': 'password',
+    'username': username,
+    'password': password,
+    'scope': scope,
+}).encode()
+_auth = base64.b64encode((client_id + ':' + client_secret).encode()).decode()
+req = urllib.request.Request(token_url, data=data,
+                             headers={'Authorization': 'Basic ' + _auth})
+
+try:
+    token = json.loads(urllib.request.urlopen(req).read())['access_token']
+except urllib.error.HTTPError as e:
+    print('  ✗ Token request failed for ' + username + ': HTTP ' + str(e.code) + ' ' + e.read().decode()[:200])
+    sys.exit(1)
+
+claims = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '=='))
+identity = oidc.oidc_identity_string(claims['sub'], claims['iss'])
+
+if 'entitlements' not in claims:
+    print('  ⚠ ' + username + ': no entitlements claim — check the entitlements client scope on the rucio client')
+
+try:
+    add_account_identity(identity, 'OIDC', InternalAccount(account), account + '@rucio')
+    print('  ✓ ' + username + ' → ' + account + ': ' + identity)
+except exception.Duplicate:
+    print('  ✓ ' + username + ' → ' + account + ' already mapped')
+except Exception as e:
+    msg = str(e).lower()
+    if 'duplicate key' in msg or 'already exists' in msg or 'unique constraint' in msg:
+        print('  ✓ ' + username + ' → ' + account + ' already mapped (pre-existing)')
+    else:
+        raise
+print('      entitlements = ' + str(claims.get('entitlements')))
+"
+    done
+}
+
+assert_identities_unambiguous() {
+    echo "=== Checking OIDC identity → account mapping ==="
+    local dupes
+    dupes=$(_exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+      "SELECT identity || ' → ' || count(*) || ' accounts'
+         FROM account_map WHERE identity_type='OIDC'
+        GROUP BY identity HAVING count(*) > 1;")
+    [ -n "$dupes" ] && { echo "  ⚠ subjects mapped to multiple accounts:"; printf '      %s\n' "${dupes//$'\n'/$'\n      '}"; } \
+                 || echo "  ✓ every OIDC subject maps to exactly one account"
+    if [ -n "$dupes" ]; then
+        echo "    Expected for the seeding subject (root/ddmlab/randomaccount share it via seed_subject_tokens)."
+        echo "    If an authz test subject (adminuser/depoperator/dependuser/modeldeveloper) appears here,"
+        echo "    its token resolves ambiguously in validate_jwt() and the test is meaningless."
+    fi
 }
 
 # ── Subject-token seeding (managed-mode token exchange) ──────────
@@ -724,16 +822,29 @@ setup_scopes_and_quotas() {
     ra scope add --account ddmlab --scope ddmlab || true
     ra scope add --account randomaccount --scope randomaccount || true
 
+    # DEP persona self-service scopes (design-008). adminuser/depoperator
+    # need none — they exercise the admin/privileged path only, same as
+    # root/ddmlab. dependuser/modeldeveloper need their own-name scope for
+    # authz.rego's _perm_add_did ownership clause to match
+    # (input.kwargs.scope in input.kwargs.owned_scopes), exercised by
+    # test_authz_personas.py::TestPersonaScopeOwnership.
+    ra scope add --account dependuser --scope dependuser || true
+    ra scope add --account modeldeveloper --scope modeldeveloper || true
+
     for rse in XRD3 XRD4; do
         ra account set-limits root "$rse" -1 || true
         ra account set-limits randomaccount "$rse" -1 || true
         ra account set-limits ddmlab "$rse" -1 || true
+        ra account set-limits dependuser "$rse" -1 || true
+        ra account set-limits modeldeveloper "$rse" -1 || true
     done
 
     for rse in TEAPOT1 TEAPOT2; do
         ra account set-limits root "$rse" -1 || true
         ra account set-limits randomaccount "$rse" -1 || true
         ra account set-limits ddmlab "$rse" -1 || true
+        ra account set-limits dependuser "$rse" -1 || true
+        ra account set-limits modeldeveloper "$rse" -1 || true
     done
 }
 
@@ -878,6 +989,7 @@ main() {
         fi
         configure_rses
         cleanup_session_tokens
+        setup_authz_test_identities
     fi
 
     if [ "${GITOPS_ENV:-sandbox}" != "sandbox" ]; then
@@ -889,6 +1001,7 @@ main() {
 
     setup_scopes_and_quotas
     setup_fts_oidc_provider
+    assert_identities_unambiguous
 
     echo -e "\n=== Initialization Complete ==="
 }

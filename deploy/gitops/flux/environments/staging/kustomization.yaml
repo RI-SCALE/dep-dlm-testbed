@@ -6,10 +6,12 @@ resources:
   - ../../components/fts.yaml
   - ../../components/rucio-server.yaml
   - ../../components/rucio-daemons.yaml
+  - ../../components/opa.yaml
 configMapGenerator:
   - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
   - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
+  - { name: opa-values,           namespace: flux-system, files: [ opa.yaml=../../../base/values/opa.yaml ] }
   # Staging-specific overlays, layered on top of base via a second
   # valuesFrom entry (patches below) — same role as ArgoCD's second
   # entry in applicationsets/staging.yaml's helm.valueFiles list. Without
