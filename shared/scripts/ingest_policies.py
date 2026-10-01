@@ -76,9 +76,15 @@ POLICY = PolicySpec(
     data={
         "vo/policy": {
             "known_rse_types": DEFAULT_RSE_TYPES,
-            # XRD3/XRD4/TEAPOT1/TEAPOT2 don't follow the NAME_TYPE
-            # convention; allowlisted rather than relaxing it globally.
-            "allowlisted_rse_names": ["XRD3", "XRD4", "TEAPOT1", "TEAPOT2"],
+            # XRD3/XRD4/TEAPOT1/TEAPOT2 and COPERNICUS_S3 don't follow the
+            # NAME_TYPE convention; allowlisted rather than relaxing it globally.
+            "allowlisted_rse_names": [
+                "XRD3",
+                "XRD4",
+                "TEAPOT1",
+                "TEAPOT2",
+                "COPERNICUS_S3",
+            ],
         },
         "vo/entitlement_policy": ENTITLEMENT_POLICY,
     },
