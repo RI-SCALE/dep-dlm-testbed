@@ -1,94 +1,42 @@
 # dep-dlm-testbed
 
-[![Lint](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/lint.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/lint.yml)
-[![EGI Check-In (dev)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/egi-dev.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/egi-dev.yml)
-[![LS AAI (dev)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/ls-aai-dev.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/ls-aai-dev.yml)
-[![Local](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.yml)
-[![Local (full)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/local.full.yml)
-[![GitOps (ArgoCD)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-argocd.yml)
-[![GitOps (Flux)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/gitops-flux.yml)
-[![Deploy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-staging.yml)
-[![Deploy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-apply-production.yml)
-[![Destroy (staging)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-staging.yml)
-[![Destroy (production)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml/badge.svg)](https://github.com/RI-SCALE/dep-dlm-testbed/actions/workflows/terraform-destroy-production.yml)
+Experimental validation environment for the DEP DLM architecture: Rucio, FTS3, XRootD, Teapot WebDAV, Keycloak and OPA, validating OIDC token orchestration, TPC transfers and rule lifecycles end to end. Validated patterns are promoted into production-focused repositories.
 
-This repository serves as the experimental validation environment for the DEP DLM architecture. It is intended to validate architectural assumptions, integration patterns, and deployment and operational procedures across identity providers, storage systems, and deployment environments; validated patterns may subsequently be promoted into production-focused repositories.
+Every scenario is validated in CI: Compose and Kubernetes, the local Keycloak plus EGI Check-In and LS AAI, Argo CD and Flux and Terraform deploys to staging and production. See [Actions](https://github.com/RI-SCALE/dep-dlm-testbed/actions) for the status of each workflow.
 
-It provides a self-contained DLM testbed with Rucio, FTS3, XRootD, Teapot WebDAV and Keycloak for validating end-to-end OIDC token orchestration, TPC transfers, dataset operations and replication-rule lifecycles across Docker Compose and Kubernetes (`amd64`/`arm64`), with GitOps-based deployment via Argo CD or Flux across sandbox, staging and production environments.
+## What's inside
 
-The testbed supports both managed and unmanaged token flows and integrates with external OIDC providers beyond the bundled Keycloak, including EGI Check-In and LS AAI / Perun, as well as external storage backends including S3 (e.g. Copernicus Data Space). It can be extended to validate data discovery, popularity and preparation services end-to-end.
-
-The testbed also applies minimal source patches to upstream components (e.g. Rucio, FTS3, gfal2, davix and Teapot) to validate features not yet upstream, providing a realistic environment for prototyping and testing changes end-to-end before they land upstream. Patches, their rationale and the surrounding architectural decisions are documented in [docs/patches.md](./docs/patches.md), [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/).
-
-## Backlog
-
-Tracked future improvements and planned work items are maintained in [BACKLOG.md](./BACKLOG.md).
+- **Runtimes:** Docker Compose and Kubernetes (`amd64`/`arm64`), GitOps via Argo CD or Flux across sandbox, staging and production
+- **Identity:** bundled Keycloak, EGI Check-In and LS AAI / Perun; managed and unmanaged token flows
+- **Authorisation:** Rucio delegates permission checks to OPA via a Rego policy package ([design-doc-004](./docs/design/design-doc-004-direct-opa-integration.md))
+- **Storage:** XRootD, Teapot WebDAV and S3 (Copernicus Data Space)
+- **Upstream patches:** minimal patches to Rucio, FTS3, gfal2, davix and Teapot for features not yet upstream — see [docs/patches.md](./docs/patches.md), with decisions in [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/)
 
 ## Quick start
 
-The recommended setup is to use the provided [dev container](./.devcontainer/devcontainer.json). This requires:
-- [Docker](https://docs.docker.com/engine/install/) installed on your system
-- An IDE with dev container support (e.g. [VS Code with the devcontainer plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers))
-
-### Docker Compose
+Use the provided [dev container](./.devcontainer/devcontainer.json). It needs [Docker](https://docs.docker.com/engine/install/) and an IDE with dev container support (e.g. [VS Code with the Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)).
 
 ```bash
-# 1. Generate certificates
-make certs
+make certs                  # generate CA and host certificates
 
-export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
-export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
-export RUNTIME=compose
+export RUNTIME=compose      # compose | k8s (Helm chart)
+export TOKEN_MODE=managed   # FTS token mode: managed | unmanaged
+export DAEMON_MODE=direct   # direct | daemons
 
-# 2. Start the stack
-make start
-
-# 3. Initialize DEP DLM testbed
-make init
-
-# 4. Run tests
+make start                  # start the stack
+make init                   # accounts, RSEs, OIDC seed, OPA policies
 make test-rucio-transfers
 make test-rucio-deletion
-
-# 5. Stop the stack and remove volumes
-make stop
+make stop                   # stop and remove volumes / PVCs
 ```
 
-### Kubernetes
-
-```bash
-# 1. Generate certificates
-make certs
-
-export TOKEN_MODE=managed # FTS token mode. Viable options: [managed, unmanaged]
-export DAEMON_MODE=direct # Daemon mode. Viable options: [direct, daemons]
-export RUNTIME=k8s
-
-# 2. Install the Helm chart
-make start
-
-# 3. Initialize DEP DLM testbed
-make init
-
-# 4. Run tests
-make test-rucio-transfers
-make test-rucio-deletion
-
-# 5. Stop the stack and remove volumes
-make stop
-```
+## Scenarios
 
 ### Copernicus S3 transfers
 
-`test-copernicus-transfers` validates an S3 source (Copernicus Data Space) →
-WebDAV destination streamed copy. It requires `S3_ACCESS_KEY`/`S3_SECRET_KEY`
-for the Copernicus endpoint and self-skips at init when they are unset.
-Refer to the following [link](https://documentation.dataspace.copernicus.eu/APIs/S3.html)
-for instructions on setting up an S3 account and generating the credentials required
-to access Copernicus Data Space EO Data.
+`test-copernicus-transfers` validates a streamed copy from an S3 source (Copernicus Data Space) to a WebDAV destination. It needs `S3_ACCESS_KEY`/`S3_SECRET_KEY` for the Copernicus endpoint ([how to get them](https://documentation.dataspace.copernicus.eu/APIs/S3.html)) and self-skips at init when they are unset.
 
-Export them **before `make init` and the test**. Init creates the S3 RSE and
-FTS cloud-storage rows from these credentials and the test reads them back:
+Export them **before `make init`**: init creates the S3 RSE and the FTS cloud-storage rows from them and the test reads them back.
 
 ```bash
 export S3_ACCESS_KEY=... S3_SECRET_KEY=...
@@ -96,61 +44,41 @@ make init
 make test-copernicus-transfers
 ```
 
-### EGI Check-In (scope profile: egi-dev)
+### External identity providers
 
-Copy `envs/egi-dev.env.example` to `envs/egi-dev.env`, fill in your EGI
-Check-In `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
+| Scope profile | Env file | `TOKEN_MODE` |
+|---|---|---|
+ | `egi-dev` (EGI Check-In) | `envs/egi-dev.env` | `unmanaged` — `resource=` is supported on token exchange; `requested_token_type=refresh_token` is currently unsupported ([runbook 02](./docs/runbooks/02-bring-your-own-idp.md)) |
+| `ls-aai-dev` (LS AAI) | `envs/ls-aai-dev.env` | `managed` or `unmanaged` |
+
+Copy `envs/<profile>.env.example` to `envs/<profile>.env` and fill in your `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
 
 ```bash
-source envs/egi-dev.env
+PROFILE=egi-dev             # or ls-aai-dev
+source envs/$PROFILE.env
 
-# Substitute your credentials into idpsecrets.json
-cp shared/config/rucio/egi-dev/idpsecrets.json.example shared/config/rucio/egi-dev/idpsecrets.json
-
+# Substitute your client credentials into idpsecrets.json
+cp shared/config/rucio/$PROFILE/idpsecrets.json.example shared/config/rucio/$PROFILE/idpsecrets.json
 sed -i \
   -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
   -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
-  shared/config/rucio/egi-dev/idpsecrets.json
+  shared/config/rucio/$PROFILE/idpsecrets.json
 
-export TOKEN_MODE=unmanaged #  managed mode isn't viable against egi-dev — EGI doesn't honor resource= on token-exchange; see runbook 02
-export DAEMON_MODE=direct
-export RUNTIME=k8s
-
+export RUNTIME=k8s DAEMON_MODE=direct TOKEN_MODE=unmanaged   # see table
 make start
 make init
 
-# Map a valid user identity within EGI-Dev to the seeded rucio account
+# Map your identity at the IdP to the seeded Rucio account
+kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
+  rucio-admin identity add --type OIDC \
+    --id "SUB=<your-sub>, ISS=<issuer>" --account randomaccount --email <your-email>
+
+# e.g. for egi-dev
 kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
   rucio-admin identity add --type OIDC \
     --id "SUB=aa886829a0a894933008498cfe62264d899422f55b408560a259311776f0e519@egi.eu, ISS=https://aai-dev.egi.eu/auth/realms/egi" --account randomaccount --email marvin.gajek@cern.ch
 
-make test-rucio-transfers
-```
-
-### LS AAI (scope profile: ls-aai-dev)
-
-Copy `envs/ls-aai-dev.env.example` to `envs/ls-aai-dev.env`, fill in your LS AAI
-`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
-
-```bash
-source envs/ls-aai-dev.env
-
-# Substitute your credentials into idpsecrets.json
-cp shared/config/rucio/ls-aai-dev/idpsecrets.json.example shared/config/rucio/ls-aai-dev/idpsecrets.json
-
-sed -i \
-  -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
-  -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
-  shared/config/rucio/ls-aai-dev/idpsecrets.json
-
-export TOKEN_MODE=managed # or unmanaged
-export DAEMON_MODE=direct
-export RUNTIME=k8s
-
-make start
-make init
-
-# Map a valid user identity within LS AAI to the seeded rucio account
+# e.g. for ls-aai
 kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
   rucio-admin identity add --type OIDC \
     --id "SUB=28f7bc3a2d32a4a722f6eb24f77f7fbe42eb6471@lifescience-ri.eu, ISS=https://login.aai.lifescience-ri.eu/oidc/" --account randomaccount --email marvin.gajek@cern.ch
@@ -158,15 +86,11 @@ kubectl -n dep-dlm-sandbox exec deploy/rucio-server -c rucio-server -- \
 make test-rucio-transfers
 ```
 
-> **NOTE:** the LS AAI test-phase environment requires the authenticating
-> user to be a member of the `Life Science Community - Test Environment`
-> VO before login succeeds — if `rucio whoami` (or a browser login against
-> `login.aai.lifescience-ri.eu`) returns an access-denied page listing
-> required organizational units, register at
-> `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
-> with the same identity first; propagation can take a few minutes.
+Issuers: `https://aai-dev.egi.eu/auth/realms/egi` (egi-dev), `https://login.aai.lifescience-ri.eu/oidc/` (ls-aai-dev).
 
-## Make Targets
+> **LS AAI:** the test environment requires membership of the `Life Science Community - Test Environment` VO before login succeeds. If `rucio whoami` or a browser login returns an access-denied page, register at `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test` with the same identity; propagation can take a few minutes.
+
+## Make targets
 
 ```bash
 dep-dlm-testbed
@@ -222,6 +146,7 @@ Tests
   probe-xrootd         XRootD probe with SciTokens
   probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
   probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
+  test-authz-personas  Authz entitlement-tier test across DEP persona accounts
 
 Terraform
   tf-fmt               Format Terraform files
@@ -246,6 +171,7 @@ Cleanup
   cleanup              Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) created by init/tests
 ```
 
-## Documentation
+## Documentation and backlog
 
-See [docs](./docs/)
+- [docs/](./docs/) — runbooks, design documents, ADRs and patches
+- [BACKLOG.md](./BACKLOG.md) — tracked improvements and planned work

@@ -1,5 +1,4 @@
 # Runbook 2 — Bring Your Own IdP
-
 ## Purpose
 Point Rucio/FTS/RSEs at an external OIDC issuer (EGI Check-In, LS AAI,
 Keycloak). Where issuer/audience/client/scopes land, and the two flows
@@ -72,7 +71,8 @@ Not self-service; for whoever has Federation Registry access.
 1. Manage Services → register/reconfigure → **OIDC**.
 2. Application Type: `Web`.
 3. Grant Types: `client credentials` + `authorization code` (+ `token-exchange`
-   only if attempting `token_strategy=exchange` — currently non-viable, see below).
+   only if attempting `token_strategy=exchange` — currently non-viable because
+   refresh tokens can't be obtained via exchange, see below).
 4. Token Endpoint Auth: `Client Secret over HTTP Basic`.
 5. Scope: `openid`, `profile`, `offline_access`, `eduperson_entitlement`, `read:/`, `write:/`.
 6. Redirect URI(s): `http://localhost:8090/auth/oidc_{redirect,code,token}`
@@ -84,7 +84,8 @@ Not self-service; for whoever has Federation Registry access.
 9. `client_id`/`client_secret` → the real `idpsecrets.json` (create it from
    `idpsecrets.json.example` first — see Prerequisites).
 
-No per-RSE clients needed for `client_credentials`; would be needed for `exchange`.
+No per-RSE clients needed: `resource=` on `client_credentials` (and, since the
+Check-In upgrade, on `token-exchange`) sets the audience per RSE.
 
 ## Creating the client — LS AAI
 Not self-service — `support@aai.lifescience-ri.eu` or Federation Registry.
@@ -99,8 +100,9 @@ Not self-service — `support@aai.lifescience-ri.eu` or Federation Registry.
    `capabilities.scope_map` maps storage scopes → `""`,
    `capabilities.fts_client_scope = "openid"`, `capabilities.drop_scopes = []`.
    See `docs/patches.md` → "Per-issuer OIDC capabilities".
-4. `resource=` honored on both `client_credentials` and `token_exchange`
-   (unlike EGI — only the former) — this is what makes `exchange` viable here.
+4. `resource=` honored on both `client_credentials` and `token_exchange`, and
+   token exchange can issue refresh tokens — the latter is what makes
+   `exchange` viable here and not (yet) on EGI.
 5. Identity must belong to `Life Science Community - Test Environment` —
    register at `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
    first if you see an access-denied org-unit page.
@@ -155,13 +157,20 @@ key, `rucio.cfg` `issuer`/`admin_issuer`, Teapot `trusted_OP`, XRootD
 Daemon flow selects the server cfg to ship:
 `server.client-credentials.cfg` or `server.token-exchange.cfg`.
 
-**`token_strategy=exchange` is non-viable against EGI Check-In Dev.**
-`resource=` isn't honored on `token-exchange` (only `client_credentials`/
-`authorization_code`/`refresh_token`/`device`); exchange only supports
-`audience=` matching a *registered client_id*, and no per-RSE clients exist →
-exchanged token has no `aud` claim → storage rejects it. **Use
-`token_strategy=client_credentials`** (`TOKEN_MODE=unmanaged`) for `egi-dev`.
-CI confirms: `managed` → `invalid_client`/"Audience not found"; `unmanaged` passes.
+**`token_strategy=exchange` is still non-viable against EGI Check-In Dev —
+for a different reason than before.** Since the Check-In upgrade, `resource=`
+*is* honored on `token-exchange`, so an exchanged access token now carries
+the RSE as `aud`. What's missing is a refresh token: exchanging with
+`requested_token_type=urn:ietf:params:oauth:token-type:refresh_token` returns
+`invalid_request` / `"requested_token_type unsupported"`. Managed mode needs
+one — Rucio only reuses a cached exchange token that has a `refresh_token`,
+and FTS's `TokenExchangeExecutor` fails with `"Failed to get refresh token"`
+without it. **Use `token_strategy=client_credentials`** (`TOKEN_MODE=unmanaged`)
+for `egi-dev`. Whether refresh-token exchange can be enabled per client or
+isn't supported by Check-In is open with EGI; re-test with
+`shared/scripts/verify-idp-token.sh` before switching. (Before the upgrade, CI
+failed `managed` with `invalid_client`/"Audience not found"; that symptom is
+no longer expected.)
 
 **`token_strategy=exchange` IS viable against LS AAI** (both token modes pass
 full suite), via three fixes: `rse.py`'s `determine_scope_for_rse()` always
@@ -170,8 +179,8 @@ a cached token for exchange if it has a `refresh_token`; FTS's
 `TokenExchangeExecutor.cpp` recognizes `OidcResourceIndicatorProfile=="lsaai"`
 and extracts the URI from `token.audience` rather than assuming `http(s)://`.
 Also: RFC 8693 requests need explicit `requested_token_type` for LS AAI
-(handled in `oidc.py`'s `__exchange_token_oidc`). Doesn't change the EGI
-conclusion — different, IdP-side gap.
+(handled in `oidc.py`'s `__exchange_token_oidc`). The remaining EGI gap is
+the IdP-side refresh-token exchange above, not these fixes.
 
 **Daemons may mount a different `idpsecrets` secret than the server** — update
 the one actually mounted:
@@ -228,7 +237,8 @@ the one actually mounted:
    below that) — `deploy/compose/Dockerfile.teapot`'s `STORM_VERSION`.
 5. `TOKEN_MODE=managed` + LS AAI: confirm FTS image has the
    `TokenExchangeExecutor` fixes, or `"[TokenExchange] Failed to get refresh
-   token... HTTP 400"` even with correct Rucio-side config.
+   token... HTTP 400"` even with correct Rucio-side config. The same message
+   on EGI is the IdP-side gap described above, not a missing fix.
 
 ## Verification
 
@@ -255,6 +265,23 @@ r = requests.post(cfg['issuer']+'/protocol/openid-connect/token',
 print(r.status_code)
 tok = r.json()['access_token']; p = tok.split('.')[1]; p += '=' * (-len(p) % 4)
 print('scope:', json.loads(base64.urlsafe_b64decode(p)).get('scope'))"
+```
+
+EGI token exchange — `resource=` works; the refresh-token request is the one
+expected to fail (`requested_token_type unsupported`):
+```bash
+TE=https://aai-dev.egi.eu/auth/realms/egi/protocol/openid-connect/token
+SUBJECT=$(curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
+  -d grant_type=client_credentials -d scope=openid -d resource=https://fts.example.org/ \
+  "$TE" | jq -r .access_token)
+for type in access_token refresh_token; do
+  curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
+    -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+    -d subject_token="$SUBJECT" \
+    -d subject_token_type=urn:ietf:params:oauth:token-type:access_token \
+    -d requested_token_type=urn:ietf:params:oauth:token-type:$type \
+    -d resource=https://xrd3.example.org/ -d scope=openid "$TE" | jq -c '{error, error_description, issued_token_type}'
+done
 ```
 
 LS AAI equivalent (discovery-resolved token endpoint):
