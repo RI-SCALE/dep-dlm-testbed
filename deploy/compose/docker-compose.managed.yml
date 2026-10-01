@@ -379,7 +379,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
 
   opa:
-    image: openpolicyagent/opa:1.8.0
+    image: openpolicyagent/opa:1.8.0-static
     hostname: opa
     ports:
       - "8181:8181"

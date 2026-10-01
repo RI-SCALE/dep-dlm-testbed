@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: openpolicyagent/opa
   pullPolicy: IfNotPresent
-  tag: "1.8.0"
+  tag: "1.8.0-static"
 
 imagePullSecrets: []
 nameOverride: ""
