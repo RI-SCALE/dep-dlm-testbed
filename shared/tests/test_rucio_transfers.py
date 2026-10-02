@@ -25,6 +25,7 @@ import logging
 import time
 import zlib
 from urllib.parse import urlparse
+import pytest
 
 from conftest import (
     TEAPOT1_URL,
@@ -47,6 +48,8 @@ log = logging.getLogger("test-transfers")
 SCOPE = "ddmlab"
 RUCIO_SVC = "rucio-server"
 
+# XRootD warm-up for every test in the module (session-scoped: runs once).
+pytestmark = pytest.mark.usefixtures("xrootd_ready")
 
 # ── XRootD SciTokens: XRD3 → XRD4 ───────────────────────────────────────
 

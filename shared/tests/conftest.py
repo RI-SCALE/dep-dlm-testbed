@@ -16,6 +16,7 @@ import zlib
 import pytest
 import requests
 import urllib3
+from urllib.parse import urlparse
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -660,13 +661,21 @@ def webdav_warm_up(
     token: str,
     retries: int = 6,
     interval: int = 10,
+    depth: str = "1",
+    any_status: bool = False,
 ) -> None:
-    log.info("=== Warming up %s Storm-WebDAV instance ===", label)
+    """Retry a PROPFIND until the endpoint answers.
+
+    Teapot (default): wait for 207 — the Storm-WebDAV JVM is up and serving.
+    XRootD (any_status=True): any HTTP response will do — the point is that
+    the first token was validated and the issuer's keys are now cached.
+    """
+    log.info("=== Warming up %s ===", label)
     resp = None
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
-            resp = webdav_propfind(f"{base_url}{path}", token)
+            resp = webdav_propfind(f"{base_url}{path}", token, depth=depth)
         except requests.exceptions.RequestException as e:
             last_exc = e
             log.info(
@@ -678,8 +687,8 @@ def webdav_warm_up(
             )
             time.sleep(interval)
             continue
-        if resp.status_code == 207:
-            log.info("  ✓ %s Storm-WebDAV ready (HTTP 207)", label)
+        if resp.status_code == 207 or any_status:
+            log.info("  ✓ %s ready (HTTP %s)", label, resp.status_code)
             return
         log.info(
             "  [%d] %s returned HTTP %s — retrying in %ds",
@@ -836,6 +845,29 @@ def teapots_ready(teapot_token):
     """Warm up both Teapot Storm-WebDAV JVMs before any transfer test runs."""
     webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token)
     webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token)
+    return True
+
+
+@pytest.fixture(scope="session")
+def xrootd_ready(rucio_client, xrd3_write_token, xrd4_write_token):
+    """Warm up XRD3/XRD4 before any transfer test runs.
+
+    The first token an XRootD endpoint validates makes its SciTokens plugin
+    fetch the issuer's discovery document and JWKS. Against an external IdP
+    (LS AAI, EGI) that can exceed the 30 s timeout of the per-test WebDAV
+    calls. The endpoint is derived from a real PFN, so this also works
+    against external validation storage.
+    """
+    for rse, token in (("XRD3", xrd3_write_token), ("XRD4", xrd4_write_token)):
+        url = urlparse(pfn_to_https(compute_pfn(rucio_client, rse, "ddmlab", "warmup")))
+        webdav_warm_up(
+            f"{url.scheme}://{url.netloc}",
+            "/data/",
+            rse.lower(),
+            token,
+            depth="0",
+            any_status=True,
+        )
     return True
 
 
