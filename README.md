@@ -24,7 +24,7 @@ export TOKEN_MODE=managed   # FTS token mode: managed | unmanaged
 export DAEMON_MODE=direct   # direct | daemons
 
 make start                  # start the stack
-make init                   # accounts, RSEs, OIDC seed, OPA policies
+make init                   # accounts, RSEs, OIDC seed
 make test-rucio-transfers
 make test-rucio-deletion
 make stop                   # stop and remove volumes / PVCs
