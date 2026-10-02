@@ -211,6 +211,15 @@ install_terraform_docs() {
     echo -e "${GREEN}terraform-docs: $(terraform-docs --version)${NC}\n"
 }
 
+install_opa() {
+    local OPA_VERSION="v1.21.1"
+    echo -e "${BLUE}Installing OPA...${NC}"
+    curl -L -o /usr/local/bin/opa "https://openpolicyagent.org/downloads/${OPA_VERSION}/opa_linux_${ARCH}"
+    chmod +x /usr/local/bin/opa
+    echo -e "${GREEN}OPA: $(opa version | head -n 1)${NC}\n"
+}
+
+
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                    Sample Commands                           ║${NC}"
@@ -237,4 +246,5 @@ install_helm_git
 install_precommit
 install_terraform
 install_terraform_docs
+install_opa
 print_summary

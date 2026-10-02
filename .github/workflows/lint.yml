@@ -29,6 +29,9 @@ jobs:
           fi
       - name: Install pre-commit
         run: pip install pre-commit
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: 1.21.1
       - name: Run pre-commit hooks
         run: pre-commit run --all-files
 

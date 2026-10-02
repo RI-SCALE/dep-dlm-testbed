@@ -530,6 +530,19 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
 	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
 
+## Rego
+
+.PHONY: test-rego
+test-rego: ## Rego unit tests (all phases, no stack needed)
+	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
+	opa test shared/config/opa -v
+
+.PHONY: fmt-rego
+fmt-rego: ## Format all Rego files in place (fixes the opa-fmt pre-commit hook)
+	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
+	opa fmt -w shared/config/opa
+	opa check --strict shared/config/opa
+
 ## Terraform
 
 tf-fmt: ## Format Terraform files

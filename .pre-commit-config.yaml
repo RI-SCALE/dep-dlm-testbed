@@ -64,3 +64,16 @@ repos:
         language: system
         files: \.tf$
         pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: opa-fmt
+        name: opa fmt
+        entry: opa fmt --list --fail
+        language: system
+        files: \.rego$
+      - id: opa-check
+        name: opa check
+        entry: opa check --strict
+        language: system
+        files: \.rego$
