@@ -257,14 +257,12 @@ services:
       - -c
       - |
         update-ca-trust extract &&
-        cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
-        pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
         python3 /scripts/rucio/bootstrap-db.py &&
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy:/policy-package/rucio_opa_v5_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy/src/rucio_opa_v5_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
@@ -348,8 +346,6 @@ services:
       - -c
       - |
         update-ca-trust extract &&
-        cp -r /policy-package/rucio_opa_v5_policy /tmp/rucio-opa-v5-policy &&
-        pip install -q --force-reinstall --no-deps /tmp/rucio-opa-v5-policy &&
         dnf -y install yum-utils epel-release.noarch &&
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         rucio-conveyor-submitter --sleep-time 5 &
@@ -361,7 +357,7 @@ services:
         rucio-undertaker --sleep-time 5 &
         wait
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy:/policy-package/rucio_opa_v5_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy/src/rucio_opa_v5_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
