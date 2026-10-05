@@ -119,6 +119,7 @@ AuthN / AuthZ
   verify-idp-token     Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
   check-claims         Decode entitlements/acr claims for every realm user (or USER=<name>)
   ingest-policies      Push authz.rego and data (incl. ODRL policies) into the running OPA (idempotent)
+  fetch-odrl-policies  Print the DEP ODRL policies from the WP4 policy repository. Needs ODRL_CLIENT_SECRET.
 
 Lifecycle
   start                Start the stack
