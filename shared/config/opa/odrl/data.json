@@ -1,0 +1,12 @@
+{"policies": [{
+  "uid": "urn:dep-dlm:rucio-tiers", "type": "Set",
+  "permission": [
+    {"action": "rucio:admin", "target": "https://dep-dlm.example.org/rucio",
+     "assignee": "urn:example:aai.example.org:group:dep-operator:role=member",
+     "constraint": [{"leftOperand": "acr", "operator": "eq", "rightOperand": "https://refeds.org/profile/mfa"}]},
+    {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
+     "assignee": "urn:example:aai.example.org:group:dep-end-user:role=member"},
+    {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
+     "assignee": "urn:example:aai.example.org:group:model-developer:role=member"}
+  ]
+}]}

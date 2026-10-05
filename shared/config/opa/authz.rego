@@ -334,7 +334,12 @@ _is_expression(expr) if contains(expr, "|")
 _acr_satisfied if not data.vo.policy.required_acr
 _acr_satisfied if input.token.acr == data.vo.policy.required_acr
 
-# Privilege — derived from the entitlements claim.
+# Privilege — the tier comes from the ODRL evaluator (data.dep) when
+# tier_source is "odrl", else from the entitlements claim as before.
+
+_rucio_target := data.vo.policy.rucio_target if {
+	data.vo.policy.rucio_target
+} else := "https://dep-dlm.example.org/rucio"
 
 default _is_privileged := false
 
@@ -345,7 +350,21 @@ _is_privileged if {
 	_has_privilege_level("admin")
 }
 
+# ODRL: ask the vendored evaluator whether the token holds the tier.
+# Its input shape is {action, resource.id, token}; acr constraints in the
+# ODRL policy are enforced there, so required_acr can stay unset.
 _has_privilege_level(level) if {
+	data.vo.policy.tier_source == "odrl"
+	data.dep.allow with input as {
+		"action": concat(":", ["rucio", level]),
+		"resource": {"id": _rucio_target},
+		"token": input.token,
+	}
+}
+
+# Default: entitlement → tier map (bundle-driven, hardcoded fallback).
+_has_privilege_level(level) if {
+	not data.vo.policy.tier_source == "odrl"
 	entitlement := input.token.entitlements[_]
 	_entitlement_privilege(entitlement) == level
 }

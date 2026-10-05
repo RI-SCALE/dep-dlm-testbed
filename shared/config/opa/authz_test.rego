@@ -310,3 +310,40 @@ test_model_developer_is_user_tier if {
 }
 
 test_dep_personas_unknown_without_bundle if not _ok("depoperator", "del_rse", [_dep_operator], {})
+
+# ── Tier from the vendored ODRL evaluator (tier_source = "odrl") ─────────
+
+_target := "https://dep-dlm.example.org/rucio"
+
+_odrl := {"policies": [{"uid": "urn:test:tiers", "type": "Set", "permission": [
+	{
+		"action": "rucio:admin", "target": _target, "assignee": _dep_operator,
+		"constraint": [{"leftOperand": "acr", "operator": "eq", "rightOperand": _mfa}],
+	},
+	{"action": "rucio:user", "target": _target, "assignee": _dep_end_user},
+]}]}
+
+test_odrl_operator_with_mfa_is_admin if {
+	_ok_acr("depoperator", "del_rse", [_dep_operator], _mfa, {}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
+
+test_odrl_operator_without_mfa_is_not_admin if {
+	not _ok("depoperator", "del_rse", [_dep_operator], {}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
+
+test_odrl_end_user_is_user_tier if {
+	not _ok("dependuser", "del_rse", [_dep_end_user], {}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+	_ok("dependuser", "add_replicas", [_dep_end_user], {"rse": "CERN_DATADISK", "files": _owned_files, "owned_scopes": _both_owned}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
+
+test_odrl_unlisted_entitlement_gets_no_tier if {
+	not _ok(_owned, "add_replicas", [_user], {"rse": "CERN_DATADISK", "files": _owned_files, "owned_scopes": _both_owned}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
+
+test_odrl_root_still_bootstraps if {
+	_root_ok("del_rse", {}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
+
+test_odrl_ownership_unaffected if {
+	_ok("dependuser", "add_did", [_dep_end_user], {"scope": _owned, "name": "f", "owned_scopes": [_owned]}) with data.vo.policy.tier_source as "odrl" with data.dep.odrl as _odrl
+}
