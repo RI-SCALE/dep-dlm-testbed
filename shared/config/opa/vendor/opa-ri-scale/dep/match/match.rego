@@ -1,0 +1,29 @@
+package dep.match
+
+import data.dep.match.action_is_matched
+import data.dep.match.assegnee_is_matched
+import data.dep.match.constraint.constraint_is_matched
+import data.dep.match.target_is_matched
+import data.dep.utils.parsed_policies
+import rego.v1
+
+rule_is_matched(rule) if {
+	action_is_matched(rule)
+	target_is_matched(rule)
+	assegnee_is_matched(rule)
+	constraint_is_matched(rule)
+}
+
+# Policies with a matching permission.
+matched_policies contains policy if {
+	some policy in parsed_policies
+	some rule in policy.permission
+	rule_is_matched(rule)
+}
+
+# Any matching prohibition denies, whatever permissions match.
+prohibited if {
+	some policy in parsed_policies
+	some rule in policy.prohibition
+	rule_is_matched(rule)
+}

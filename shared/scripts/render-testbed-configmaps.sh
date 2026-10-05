@@ -48,16 +48,22 @@ preflight() {
 }
 
 render_and_apply() {
-  log "Rendering testbed-configs/patches/scripts/tests (scopeProfile=${SCOPE_PROFILE} tokenMode=${TOKEN_MODE}) into ${K8S_NAMESPACE}"
+  log "Rendering testbed-configs/patches/scripts/tests and OPA ConfigMaps (scopeProfile=${SCOPE_PROFILE} tokenMode=${TOKEN_MODE}) into ${K8S_NAMESPACE}"
+  # opa-evaluator: vendored ODRL evaluator, loaded by the OPA pod at start-up
+  #   (base/values/opa.yaml mounts it at /policies/dep).
+  # opa-policies:  authz.rego + ODRL policies, pushed by the opa-init Job
+  #   (ingest_opa_policies in common.sh).
   helm template testbed "$CHART_DIR" \
     --show-only templates/testbed-configs.yaml \
     --show-only templates/testbed-patches.yaml \
     --show-only templates/testbed-scripts.yaml \
     --show-only templates/testbed-tests.yaml \
+    --show-only templates/opa-evaluator.yaml \
+    --show-only templates/opa-policies-cm.yaml \
     --set global.scopeProfile="$SCOPE_PROFILE" \
     --set global.tokenMode="$TOKEN_MODE" \
     | kubectl apply --server-side --force-conflicts -n "$K8S_NAMESPACE" -f -
-  log "testbed-configs/testbed-patches/testbed-scripts/testbed-tests applied."
+  log "testbed-configs/patches/scripts/tests, opa-evaluator and opa-policies applied."
 }
 
 # ── Main Entry Point ────────────────────────────────────────────────────────

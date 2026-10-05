@@ -1,0 +1,22 @@
+{{- /*
+  authz.rego and the ODRL policies (odrl/…) for opa-init to push. The vendored
+  evaluator is in opa-evaluator (loaded by the OPA pod at start-up). ConfigMap
+  keys can't contain "/", so paths are flattened to "__" here and restored by
+  the Job's `items` mapping.
+*/}}
+{{- if .Values.opa.enabled }}
+{{- $prefix := "files/configs/opa/" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policies
+  labels:
+    app.kubernetes.io/name: dep-dlm-testbed
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+{{- range $path, $_ := .Files.Glob "files/configs/opa/{authz.rego,odrl/*.json}" }}
+  {{ trimPrefix $prefix $path | replace "/" "__" }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}

@@ -381,9 +381,11 @@ services:
       - "8181:8181"
     networks:
       - dep-dlm-testbed
-    command: run --server --log-level info --addr=0.0.0.0:8181
-    # OPA's distroless image has no shell/wget/curl — healthcheck
-    # omitted here too; opa-init polls OPA directly instead.
+    volumes:
+      # Vendored ODRL evaluator, loaded at start-up: its modules call each
+      # other's functions cyclically, which the policy API can't ingest one by one.
+      - ${TESTBED_HOST_SOURCE}/shared/config/opa/vendor/opa-ri-scale/dep:/policies/dep:ro
+    command: run --server --log-level info --addr=0.0.0.0:8181 --ignore '*_test.rego' /policies/dep
 
   opa-init:
     image: python:3.11-slim
@@ -394,14 +396,14 @@ services:
       - dep-dlm-testbed
     volumes:
       - ${TESTBED_HOST_SOURCE}/shared/scripts/ingest_policies.py:/app/ingest_policies.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/opa/authz.rego:/app/authz.rego:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/opa:/app/opa:ro
     working_dir: /app
     command:
       - sh
       - -c
       - |
         until python -c "import urllib.request; urllib.request.urlopen('http://opa:8181/health')" 2>/dev/null; do sleep 1; done
-        python ingest_policies.py --opa-url http://opa:8181 --rego-path /app/authz.rego
+        python ingest_policies.py --opa-url http://opa:8181 --opa-dir /app/opa
     restart: "no"
 
 networks:

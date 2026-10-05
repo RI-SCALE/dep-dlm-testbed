@@ -947,3 +947,14 @@ opa:
       repository: python
       tag: "3.11-slim"
     hookWeight: "3"   # before rucio-bootstrap-db (weight "5")
+  extraArgs:
+    - --ignore=..*
+    - /policies/dep
+  volumes:
+    - name: evaluator
+      configMap:
+        name: opa-evaluator
+  volumeMounts:
+    - name: evaluator
+      mountPath: /policies/dep
+      readOnly: true

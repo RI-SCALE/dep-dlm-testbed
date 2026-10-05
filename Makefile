@@ -52,6 +52,10 @@ TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
+# opa-ri-scale ODRL evaluator, vendored into shared/config/opa/vendor/ (see VENDORED.md)
+OPA_RI_SCALE_REPO ?= https://github.com/mgajek-cern/opa-ri-scale.git
+OPA_RI_SCALE_REF  ?= vendor-2026-10-05
+
 # Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
 # import — previously duplicated across all four targets, which is how
 # userpass_password ended up present in three of them and silently
@@ -295,6 +299,15 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./shared/scripts/init-testbed.sh
 
+.PHONY: vendor-opa-ri-scale
+vendor-opa-ri-scale: ## Re-vendor the opa-ri-scale ODRL evaluator at OPA_RI_SCALE_REF
+	rm -rf /tmp/ors shared/config/opa/vendor/opa-ri-scale/dep
+	git clone -q --depth 1 --branch $(OPA_RI_SCALE_REF) $(OPA_RI_SCALE_REPO) /tmp/ors
+	mkdir -p shared/config/opa/vendor/opa-ri-scale
+	cp -r /tmp/ors/OPA/src/dep shared/config/opa/vendor/opa-ri-scale/dep
+	rm -f shared/config/opa/vendor/opa-ri-scale/dep/data.yaml shared/config/opa/vendor/opa-ri-scale/dep/demo.yaml
+	opa test shared/config/opa -v
+
 ## AuthN / AuthZ
 
 .PHONY: verify-idp-token
@@ -326,15 +339,15 @@ else
 endif
 
 .PHONY: ingest-policies
-ingest-policies: ## Push authz.rego + data into the running OPA (idempotent)
+ingest-policies: ## Push authz.rego and data (incl. ODRL policies) into the running OPA (idempotent)
 ifeq ($(RUNTIME),compose)
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181 --opa-dir shared/config/opa
 else
 	@$(KUBECTL) port-forward svc/opa 18181:8181 >/dev/null 2>&1 & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null" EXIT; \
 	sleep 2; \
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181 --opa-dir shared/config/opa
 endif
 
 ## Lifecycle

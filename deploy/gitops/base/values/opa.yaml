@@ -6,3 +6,16 @@ service:
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits:   { memory: 256Mi }
+# Vendored ODRL evaluator (ConfigMap opa-evaluator, rendered from the umbrella
+# chart), loaded at start-up: the policy API can't ingest its cyclic modules.
+extraArgs:
+  - --ignore=..*
+  - /policies/dep
+volumes:
+  - name: evaluator
+    configMap:
+      name: opa-evaluator
+volumeMounts:
+  - name: evaluator
+    mountPath: /policies/dep
+    readOnly: true
