@@ -40,6 +40,10 @@ OIDC_TEAPOT_AUD_SCOPE ?=
 OIDC_GRANT_TYPE       ?= password
 OIDC_EXPECTED_SCOPE   ?=
 
+# WP4 ODRL policy repository — read-only client (client_credentials, policies:read)
+ODRL_CLIENT_ID     ?= 39b16c41-267f-46a8-984d-6adea53a7f0b
+ODRL_CLIENT_SECRET ?=
+
 # Terraform
 #
 # GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, and the networking values
@@ -349,6 +353,13 @@ else
 	sleep 2; \
 	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181 --opa-dir shared/config/opa
 endif
+
+.PHONY: fetch-odrl-policies
+fetch-odrl-policies: ## Print the DEP ODRL policies from the WP4 policy repository. Needs ODRL_CLIENT_SECRET.
+	@[ -n "$(ODRL_CLIENT_SECRET)" ] || \
+	  { echo "ERROR: ODRL_CLIENT_SECRET must be set (EGI Check-in dev client with policies:read)"; exit 1; }
+	@ODRL_CLIENT_ID='$(ODRL_CLIENT_ID)' ODRL_CLIENT_SECRET='$(ODRL_CLIENT_SECRET)' \
+	  ./shared/scripts/fetch-odrl-policies.sh
 
 ## Lifecycle
 
