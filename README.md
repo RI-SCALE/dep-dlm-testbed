@@ -113,11 +113,12 @@ Help
 Setup
   certs                Generate CA and host certificates
   init                 Init testbed accounts, RSEs, OIDC seed
+  vendor-opa-ri-scale  Re-vendor the opa-ri-scale ODRL evaluator at OPA_RI_SCALE_REF
 
 AuthN / AuthZ
   verify-idp-token     Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
   check-claims         Decode entitlements/acr claims for every realm user (or USER=<name>)
-  ingest-policies      Push authz.rego + data into the running OPA (idempotent)
+  ingest-policies      Push authz.rego and data (incl. ODRL policies) into the running OPA (idempotent)
 
 Lifecycle
   start                Start the stack
@@ -147,6 +148,10 @@ Tests
   probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
   probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
   test-authz-personas  Authz entitlement-tier test across DEP persona accounts
+
+Rego
+  test-rego            Rego unit tests (all phases, no stack needed)
+  fmt-rego             Format all Rego files in place (fixes the opa-fmt pre-commit hook)
 
 Terraform
   tf-fmt               Format Terraform files

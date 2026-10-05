@@ -1,0 +1,24 @@
+{{- /*
+  Vendored opa-ri-scale ODRL evaluator, loaded by the OPA pod at start-up
+  (`opa run … /policies/dep`): its modules call each other's functions
+  cyclically, so the policy API can't ingest them one by one. Keys are
+  flattened — OPA identifies modules by package, not file path.
+*/}}
+{{- if .Values.opa.enabled }}
+{{- $prefix := "files/configs/opa/vendor/opa-ri-scale/dep/" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-evaluator
+  labels:
+    app.kubernetes.io/name: dep-dlm-testbed
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+{{- range $path, $_ := .Files.Glob (printf "%s**.rego" $prefix) }}
+{{- if not (hasSuffix "_test.rego" $path) }}
+  {{ trimPrefix $prefix $path | replace "/" "__" }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

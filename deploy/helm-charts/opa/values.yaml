@@ -47,3 +47,8 @@ volumeMounts: []
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# Appended to the default `opa run --server …` args, e.g. paths to load at
+# start-up. Set `args` instead to replace the defaults entirely.
+extraArgs: []
+args: []

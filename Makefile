@@ -339,15 +339,15 @@ else
 endif
 
 .PHONY: ingest-policies
-ingest-policies: ## Push authz.rego + data into the running OPA (idempotent)
+ingest-policies: ## Push authz.rego and data (incl. ODRL policies) into the running OPA (idempotent)
 ifeq ($(RUNTIME),compose)
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181 --opa-dir shared/config/opa
 else
 	@$(KUBECTL) port-forward svc/opa 18181:8181 >/dev/null 2>&1 & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null" EXIT; \
 	sleep 2; \
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181
+	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181 --opa-dir shared/config/opa
 endif
 
 ## Lifecycle

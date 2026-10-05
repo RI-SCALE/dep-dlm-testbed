@@ -9,6 +9,7 @@
   brief window of spurious denials, not a wrong allow.
 */}}
 {{- if .Values.opa.enabled }}
+{{- $prefix := "files/configs/opa/" }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -20,7 +21,7 @@ metadata:
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": {{ .Values.opa.initJob.hookWeight | quote }}
-    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 6
   template:
@@ -35,20 +36,25 @@ spec:
             - -c
             - |
               until python -c "import urllib.request; urllib.request.urlopen('http://opa:{{ .Values.opa.service.port }}/health')" 2>/dev/null; do sleep 1; done
-              python ingest_policies.py --opa-url http://opa:{{ .Values.opa.service.port }} --rego-path /app/authz.rego
+              python ingest_policies.py --opa-url http://opa:{{ .Values.opa.service.port }} --opa-dir /app/opa
           volumeMounts:
             - name: scripts
               mountPath: /app/ingest_policies.py
               subPath: ingest_policies.py
-            - name: configs
-              mountPath: /app/authz.rego
-              subPath: authz.rego
+            - name: opa-policies
+              mountPath: /app/opa
+              readOnly: true
       volumes:
         - name: scripts
           configMap:
             name: testbed-scripts
             defaultMode: 0755
-        - name: configs
+        - name: opa-policies
           configMap:
-            name: testbed-configs
+            name: opa-policies
+            items:
+            {{- range $path, $_ := .Files.Glob "files/configs/opa/{authz.rego,odrl/*.json}" }}
+              - key: {{ trimPrefix $prefix $path | replace "/" "__" }}
+                path: {{ trimPrefix $prefix $path }}
+            {{- end }}
 {{- end }}
