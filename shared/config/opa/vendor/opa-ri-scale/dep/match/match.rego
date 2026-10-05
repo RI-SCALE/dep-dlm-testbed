@@ -1,10 +1,10 @@
 package dep.match
 
+import data.dep.utils.parsed_policies
 import data.dep.match.action_is_matched
+import data.dep.match.target_is_matched
 import data.dep.match.assegnee_is_matched
 import data.dep.match.constraint.constraint_is_matched
-import data.dep.match.target_is_matched
-import data.dep.utils.parsed_policies
 import rego.v1
 
 rule_is_matched(rule) if {

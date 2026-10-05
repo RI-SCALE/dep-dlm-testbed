@@ -8,6 +8,6 @@ default set_is_valid(_) := false
 _policy_types := {"Set", "Policy"}
 
 set_is_valid(policy) if {
-	policy_class_is_valid(policy)
-	policy.type in _policy_types
+    policy_class_is_valid(policy)
+    policy.type in _policy_types
 }

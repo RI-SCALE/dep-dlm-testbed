@@ -6,6 +6,6 @@ import rego.v1
 default permission_is_valid(_) := false
 
 permission_is_valid(rule) if {
-	rule_class_is_valid(rule)
-	rule.target
+    rule_class_is_valid(rule)
+    rule.target
 }
