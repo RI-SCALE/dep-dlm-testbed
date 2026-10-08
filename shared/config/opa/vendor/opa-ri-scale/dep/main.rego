@@ -1,6 +1,7 @@
 package dep
 
-import data.dep.match.matched_policies
+import data.dep.match.matched_permissions
+import data.dep.match.matched_prohibitions
 import data.dep.validation.policy.policy_is_valid
 import data.dep.validation.rule.rule_is_valid
 
@@ -14,9 +15,9 @@ allow if {
 }
 
 allow if {
-    not data.override.allow
-    count(matched_policies) > 0
-    not data.dep.match.prohibited
+	not data.override.allow
+	count(matched_permissions) > 0
+	count(matched_prohibitions) == 0
 }
 
 allow_and_valid if {
@@ -26,7 +27,7 @@ allow_and_valid if {
 allow_and_valid if {
     not data.override.allow
     allow
-    some policy in matched_policies
+    some policy in matched_permissions
     policy_is_valid(policy)
     rule_is_valid(policy)
 }

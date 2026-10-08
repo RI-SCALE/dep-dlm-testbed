@@ -15,14 +15,14 @@ rule_is_matched(rule) if {
 }
 
 # Policies with a matching permission.
-matched_policies contains policy if {
+matched_permissions contains policy if {
 	some policy in parsed_policies
 	some rule in policy.permission
 	rule_is_matched(rule)
 }
 
-# Any matching prohibition denies, whatever permissions match.
-prohibited if {
+# Policies with a matching prohibition; any match denies.
+matched_prohibitions contains policy if {
 	some policy in parsed_policies
 	some rule in policy.prohibition
 	rule_is_matched(rule)
