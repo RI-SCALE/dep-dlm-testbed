@@ -11,8 +11,19 @@ constraint_is_matched(rule) if not rule.constraint
 # Every constraint must hold; an unknown leftOperand or operator fails closed.
 constraint_is_matched(rule) if {
 	rule.constraint
-	every c in rule.constraint { _holds(c) }
+	every constraint in rule.constraint {
+		_holds(constraint)
+	}
 }
 
-_holds(c) if { c.leftOperand == "acr"; c.operator == "eq"; acr_is_matched(c) }
-_holds(c) if { c.leftOperand in {"entitlement", "entitlements"}; c.operator == "eq"; entitlement_is_matched(c) }
+_holds(constraint) if {
+	constraint.leftOperand == "acr"
+	constraint.operator == "eq"
+	acr_is_matched(constraint)
+}
+
+_holds(constraint) if {
+	constraint.leftOperand in {"entitlement", "entitlements"}
+	constraint.operator == "eq"
+	entitlement_is_matched(constraint)
+}

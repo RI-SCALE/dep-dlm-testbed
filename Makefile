@@ -58,7 +58,7 @@ TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV)
 
 # opa-ri-scale ODRL evaluator, vendored into shared/config/opa/vendor/ (see VENDORED.md)
 OPA_RI_SCALE_REPO ?= https://github.com/mgajek-cern/opa-ri-scale.git
-OPA_RI_SCALE_REF  ?= vendor-2026-10-05
+OPA_RI_SCALE_REF  ?= vendor-2026-10-08
 
 # Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
 # import — previously duplicated across all four targets, which is how
