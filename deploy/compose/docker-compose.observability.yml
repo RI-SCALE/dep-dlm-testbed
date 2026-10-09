@@ -20,7 +20,7 @@ services:
   rucio-daemons-metrics:
     image: rucio/rucio-daemons:release-41.2.1
     hostname: rucio-daemons-metrics
-    profiles: ["observability"]
+    profiles: ["daemons"]
     networks:
       - dep-dlm-testbed
     environment:
@@ -52,7 +52,6 @@ services:
   fts-exporter:
     image: burningalchemist/sql_exporter:0.24.9
     hostname: fts-exporter
-    profiles: ["observability"]
     command: ["-config.file=/etc/sql_exporter/sql_exporter.yml"]
     depends_on:
       ftsdb:
