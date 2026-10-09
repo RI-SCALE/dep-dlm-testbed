@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -295,8 +295,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Submissions to FTS",
-      "description": "Files Rucio submitted to FTS per second, by result.",
+      "title": "Submissions to FTS (per 5 min)",
+      "description": "Files Rucio submitted to FTS in each 5-minute window, by result.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -304,18 +304,20 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (state) (rate(rucio_transfertool_fts3_submission_total[$__rate_interval]))",
+          "expr": "sum by (state) (increase(rucio_transfertool_fts3_submission_total[5m]))",
           "legendFormat": "{{state}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "min": 0,
           "custom": {
+            "drawStyle": "bars",
             "lineWidth": 2,
-            "fillOpacity": 0,
+            "fillOpacity": 80,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -343,8 +345,8 @@
     },
     {
       "type": "timeseries",
-      "title": "FTS status polling",
-      "description": "Bulk status queries from the conveyor poller to FTS, by result.",
+      "title": "FTS status polling (per 5 min)",
+      "description": "Bulk status queries from the conveyor poller to FTS in each 5-minute window, by result.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -352,18 +354,20 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (state) (rate(rucio_transfertool_fts3_bulk_query_total[$__rate_interval]))",
+          "expr": "sum by (state) (increase(rucio_transfertool_fts3_bulk_query_total[5m]))",
           "legendFormat": "{{state}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "min": 0,
           "custom": {
+            "drawStyle": "bars",
             "lineWidth": 2,
-            "fillOpacity": 0,
+            "fillOpacity": 80,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -391,8 +395,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Request state updates",
-      "description": "Transfer requests the poller updated from FTS state.",
+      "title": "Request state updates (per 5 min)",
+      "description": "Transfer requests the poller updated from FTS state in each 5-minute window.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -400,18 +404,20 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (updated) (rate(rucio_daemons_conveyor_poller_update_request_state_total[$__rate_interval]))",
+          "expr": "sum by (updated) (increase(rucio_daemons_conveyor_poller_update_request_state_total[5m]))",
           "legendFormat": "updated={{updated}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "short",
           "min": 0,
           "custom": {
+            "drawStyle": "bars",
             "lineWidth": 2,
-            "fillOpacity": 0,
+            "fillOpacity": 80,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -448,12 +454,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_transfer_time_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_transfer_time_bucket[15m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_transfer_time_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_transfer_time_bucket[15m])))",
           "legendFormat": "p95"
         }
       ],
@@ -462,9 +468,11 @@
           "unit": "s",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -501,12 +509,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_wait_time_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_wait_time_bucket[15m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_wait_time_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_wait_time_bucket[15m])))",
           "legendFormat": "p95"
         }
       ],
@@ -515,9 +523,11 @@
           "unit": "s",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -576,9 +586,11 @@
           "unit": "short",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "normal"
             }
@@ -624,9 +636,11 @@
           "unit": "short",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -672,9 +686,11 @@
           "unit": "bytes",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -724,12 +740,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[15m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[15m])))",
           "legendFormat": "p95"
         }
       ],
@@ -738,9 +754,11 @@
           "unit": "s",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -777,12 +795,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[15m])))",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[15m])))",
           "legendFormat": "p95"
         }
       ],
@@ -791,9 +809,11 @@
           "unit": "s",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
@@ -830,7 +850,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(rucio_core_oidc_token_cache_hit_total[$__rate_interval])) / (sum(rate(rucio_core_oidc_token_cache_hit_total[$__rate_interval])) + sum(rate(rucio_core_oidc_token_cache_miss_total[$__rate_interval])))",
+          "expr": "sum(increase(rucio_core_oidc_token_cache_hit_total[15m])) / (sum(increase(rucio_core_oidc_token_cache_hit_total[15m])) + sum(increase(rucio_core_oidc_token_cache_miss_total[15m])))",
           "legendFormat": "hit ratio"
         }
       ],
@@ -839,9 +859,11 @@
           "unit": "percentunit",
           "min": 0,
           "custom": {
+            "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "mode": "none"
             }
