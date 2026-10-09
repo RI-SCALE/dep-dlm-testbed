@@ -1,0 +1,16 @@
+# sql_exporter for the FTS database (design-doc-005). FTS has no Prometheus
+# endpoint; its transfer state lives in MySQL (t_file), so we query it.
+global:
+  scrape_timeout: 10s
+  min_interval: 15s
+  max_connections: 2
+  max_idle_connections: 1
+
+target:
+  # Compose test credentials, same as the ruciodb service. Kubernetes reads
+  # the DSN from a secret instead.
+  data_source_name: "postgres://rucio:rucio@ruciodb:5432/rucio?sslmode=disable"
+  collectors: [rucio]
+
+collector_files:
+  - "*.collector.yml"

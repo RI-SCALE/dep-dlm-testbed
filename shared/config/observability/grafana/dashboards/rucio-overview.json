@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -20,7 +20,7 @@
         "name": "service",
         "label": "Service",
         "type": "custom",
-        "query": "rucio-server,rucio-daemons,fts,ftsdb,teapot1,teapot2,xrd3,xrd4,keycloak,opa",
+        "query": "rucio-server,rucio-daemons,ruciodb,fts,ftsdb,teapot1,teapot2,xrd3,xrd4,keycloak,opa",
         "current": {
           "text": "rucio-server",
           "value": "rucio-server"
@@ -106,7 +106,74 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 6,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Rucio DB exporter",
+      "description": "rucio-db-exporter can query the Rucio database.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"rucio-db\"}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
         "h": 4
       }
     },
@@ -169,18 +236,18 @@
           ]
         }
       },
-      "id": 3,
+      "id": 4,
       "gridPos": {
-        "x": 6,
+        "x": 8,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       }
     },
     {
       "type": "stat",
-      "title": "FTS files in flight",
-      "description": "Files in FTS not yet finished, failed or cancelled.",
+      "title": "Transfer efficiency (last hour)",
+      "description": "Finished / (finished + failed) over all links, as on WLCG transfer dashboards.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -188,7 +255,63 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(fts_files_active) or vector(0)",
+          "expr": "(sum(fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum(fts_files_completed_1h{state=\"FAILED\"})) / sum(fts_files_completed_1h{state=~\"FINISHED|FAILED\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "no transfers",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Stuck rules",
+      "description": "Rules the judge gave up on until repaired; the main user-visible failure.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rucio_rules{state=\"STUCK\"}) or vector(0)",
           "instant": true
         }
       ],
@@ -200,18 +323,19 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
-          },
-          "color": {
-            "mode": "thresholds"
           }
         }
       },
       "options": {
-        "colorMode": "none",
+        "colorMode": "background",
         "graphMode": "none",
         "textMode": "value",
         "reduceOptions": {
@@ -220,11 +344,11 @@
           ]
         }
       },
-      "id": 4,
+      "id": 6,
       "gridPos": {
-        "x": 12,
+        "x": 16,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       }
     },
@@ -272,23 +396,336 @@
           ]
         }
       },
-      "id": 5,
+      "id": 7,
       "gridPos": {
-        "x": 18,
+        "x": 20,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       }
     },
     {
       "type": "row",
-      "title": "Rucio transfers",
+      "title": "Rules and requests (Rucio database)",
       "collapsed": false,
       "panels": [],
-      "id": 6,
+      "id": 8,
       "gridPos": {
         "x": 0,
         "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Rules by state",
+      "description": "Replication rules per state. REPLICATING is the backlog, STUCK needs attention.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (state) (rucio_rules)",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Oldest open rule",
+      "description": "Age of the oldest REPLICATING or STUCK rule. Growth means the backlog is not draining.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (state) (rucio_rules_oldest_open_age_seconds)",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 8,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Rule completion time (last hour)",
+      "description": "Creation to OK for rules that became OK in the last hour: what users wait for.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (stat) (rucio_rules_completed_1h_seconds)",
+          "legendFormat": "{{stat}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 16,
+        "y": 6,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transfer requests by state",
+      "description": "Rucio transfer requests not yet archived, per state (QUEUED waits for the submitter).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (state) (rucio_transfer_requests{state!=\"DONE\"})",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queued requests per destination",
+      "description": "Requests waiting in Rucio before submission, per destination RSE.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (dest_rse) (rucio_transfer_requests{state=~\"QUEUED|WAITING|PREPARING\"})",
+          "legendFormat": "{{dest_rse}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Storage used per RSE",
+      "description": "Bytes Rucio accounts on each RSE. Needs the abacus-rse daemon.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (rse) (rucio_rse_used_bytes)",
+          "legendFormat": "{{rse}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "Rucio and FTS interaction",
+      "collapsed": false,
+      "panels": [],
+      "id": 15,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
         "w": 24,
         "h": 1
       }
@@ -335,11 +772,11 @@
           "sort": "desc"
         }
       },
-      "id": 7,
+      "id": 16,
       "gridPos": {
         "x": 0,
-        "y": 6,
-        "w": 8,
+        "y": 23,
+        "w": 6,
         "h": 8
       }
     },
@@ -385,11 +822,11 @@
           "sort": "desc"
         }
       },
-      "id": 8,
+      "id": 17,
       "gridPos": {
-        "x": 8,
-        "y": 6,
-        "w": 8,
+        "x": 6,
+        "y": 23,
+        "w": 6,
         "h": 8
       }
     },
@@ -435,73 +872,18 @@
           "sort": "desc"
         }
       },
-      "id": 9,
+      "id": 18,
       "gridPos": {
-        "x": 16,
-        "y": 6,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Transfer duration",
-      "description": "Submission to completion of finished transfers. Buckets start at 10 s.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_transfer_time_bucket[15m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_transfer_time_bucket[15m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 10,
-      "gridPos": {
-        "x": 0,
-        "y": 14,
-        "w": 12,
+        "x": 12,
+        "y": 23,
+        "w": 6,
         "h": 8
       }
     },
     {
       "type": "timeseries",
       "title": "Queue wait before submission",
-      "description": "Time a request waited in Rucio before it was submitted to FTS.",
+      "description": "Time a request waited in Rucio before submission. Buckets start at 10 s, so short waits read as 5-10 s.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -527,7 +909,7 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -545,31 +927,31 @@
           "sort": "desc"
         }
       },
-      "id": 11,
+      "id": 19,
       "gridPos": {
-        "x": 12,
-        "y": 14,
-        "w": 12,
+        "x": 18,
+        "y": 23,
+        "w": 6,
         "h": 8
       }
     },
     {
       "type": "row",
-      "title": "FTS",
+      "title": "FTS links",
       "collapsed": false,
       "panels": [],
-      "id": 12,
+      "id": 20,
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 31,
         "w": 24,
         "h": 1
       }
     },
     {
       "type": "timeseries",
-      "title": "Files in flight by state",
-      "description": "Current non-terminal files in the FTS database.",
+      "title": "Transfer efficiency per link (last hour)",
+      "description": "Finished / (finished + failed) per link: the headline WLCG link metric.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -577,70 +959,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (state) (fts_files_active)",
-          "legendFormat": "{{state}}"
+          "expr": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})",
+          "legendFormat": "{{source_se}} → {{dest_se}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percentunit",
           "min": 0,
+          "max": 1,
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 13,
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Completed per link (last hour)",
-      "description": "Rolling one-hour count of finished, failed and cancelled files per link.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source_se, dest_se, state) (fts_files_completed_1h)",
-          "legendFormat": "{{source_se}} → {{dest_se}} {{state}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -658,17 +991,67 @@
           "sort": "desc"
         }
       },
-      "id": 14,
+      "id": 21,
       "gridPos": {
-        "x": 8,
-        "y": 23,
+        "x": 0,
+        "y": 32,
         "w": 8,
         "h": 8
       }
     },
     {
       "type": "timeseries",
-      "title": "Bytes finished per link (last hour)",
+      "title": "Throughput per link (last hour)",
+      "description": "Transferred bytes per second of transfer time, files finished in the last hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source_se, dest_se) (fts_throughput_1h_bytes)",
+          "legendFormat": "{{source_se}} → {{dest_se}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 22,
+      "gridPos": {
+        "x": 8,
+        "y": 32,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Volume per link (last hour)",
       "description": "Rolling one-hour volume of successfully transferred bytes.",
       "datasource": {
         "type": "prometheus",
@@ -690,7 +1073,7 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -708,23 +1091,281 @@
           "sort": "desc"
         }
       },
-      "id": 15,
+      "id": 23,
       "gridPos": {
         "x": 16,
-        "y": 23,
+        "y": 32,
         "w": 8,
         "h": 8
       }
     },
     {
-      "type": "row",
-      "title": "Rules and tokens",
-      "collapsed": false,
-      "panels": [],
-      "id": 16,
+      "type": "timeseries",
+      "title": "Files in flight by state",
+      "description": "Current non-terminal files in the FTS database (the FTS queue).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (state) (fts_files_active)",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 24,
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transfer duration per link (last hour)",
+      "description": "FTS tx_duration of files finished in the last hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (source_se, dest_se) (fts_transfer_seconds_1h{stat=\"avg\"})",
+          "legendFormat": "avg {{source_se}} → {{dest_se}}"
+        },
+        {
+          "refId": "B",
+          "expr": "max by (source_se, dest_se) (fts_transfer_seconds_1h{stat=\"max\"})",
+          "legendFormat": "max {{source_se}} → {{dest_se}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 25,
+      "gridPos": {
+        "x": 8,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Optimizer concurrency per link",
+      "description": "Concurrent transfers the FTS optimizer allows per link; it backs off when a link degrades.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source_se, dest_se) (fts_optimizer_active)",
+          "legendFormat": "{{source_se}} → {{dest_se}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 26,
+      "gridPos": {
+        "x": 16,
+        "y": 40,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Failures by category (last hour)",
+      "description": "Failed files grouped by error category, as in the ATLAS DDM error views.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (category) (fts_failures_1h)",
+          "legendFormat": "{{category}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 27,
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 8,
+        "h": 8
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top failure reasons (last hour)",
+      "description": "Ten most frequent FTS failure messages, truncated to 150 characters.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fts_failure_reasons_1h",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "Value": "files"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "files",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "id": 28,
+      "gridPos": {
+        "x": 8,
+        "y": 48,
+        "w": 16,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "Rules and tokens (Rucio server)",
+      "collapsed": false,
+      "panels": [],
+      "id": 29,
+      "gridPos": {
+        "x": 0,
+        "y": 56,
         "w": 24,
         "h": 1
       }
@@ -758,7 +1399,7 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -776,10 +1417,10 @@
           "sort": "desc"
         }
       },
-      "id": 17,
+      "id": 30,
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 57,
         "w": 8,
         "h": 8
       }
@@ -813,7 +1454,7 @@
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -831,10 +1472,10 @@
           "sort": "desc"
         }
       },
-      "id": 18,
+      "id": 31,
       "gridPos": {
         "x": 8,
-        "y": 32,
+        "y": 57,
         "w": 8,
         "h": 8
       }
@@ -858,12 +1499,13 @@
         "defaults": {
           "unit": "percentunit",
           "min": 0,
+          "max": 1,
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 0,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": 600000,
             "stacking": {
               "mode": "none"
             }
@@ -881,10 +1523,10 @@
           "sort": "desc"
         }
       },
-      "id": 19,
+      "id": 32,
       "gridPos": {
         "x": 16,
-        "y": 32,
+        "y": 57,
         "w": 8,
         "h": 8
       }
@@ -894,10 +1536,10 @@
       "title": "Logs",
       "collapsed": false,
       "panels": [],
-      "id": 20,
+      "id": 33,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 65,
         "w": 24,
         "h": 1
       }
@@ -920,10 +1562,10 @@
         "wrapLogMessage": true,
         "sortOrder": "Descending"
       },
-      "id": 21,
+      "id": 34,
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 66,
         "w": 24,
         "h": 10
       }
@@ -947,10 +1589,10 @@
         "wrapLogMessage": true,
         "sortOrder": "Descending"
       },
-      "id": 22,
+      "id": 35,
       "gridPos": {
         "x": 0,
-        "y": 51,
+        "y": 76,
         "w": 24,
         "h": 10
       }
