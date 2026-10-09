@@ -11,8 +11,14 @@ SCOPE_PROFILE ?= local
 DAEMON_MODE ?= direct
 SERVICES   ?=
 
+OBSERVABILITY ?= 0
+
 COMPOSE_FILE  ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
-COMPOSE       := docker compose -f $(COMPOSE_FILE)
+COMPOSE_OBS_FILE := deploy/compose/docker-compose.observability.yml
+COMPOSE_OBS   := $(if $(filter 1,$(OBSERVABILITY)),-f $(COMPOSE_OBS_FILE),)
+COMPOSE       := docker compose -f $(COMPOSE_FILE) $(COMPOSE_OBS)
+# Teardown targets every profile and the overlay, whatever flags start used.
+COMPOSE_ALL   := docker compose --profile '*' -f $(COMPOSE_FILE) -f $(COMPOSE_OBS_FILE)
 
 HELM_CHART    := deploy/helm-charts/dep-dlm-testbed
 HELM_RELEASE  ?= testbed
@@ -267,6 +273,18 @@ else
   EXEC_FTS := docker exec -i compose-fts-1
 endif
 
+ifeq ($(filter $(OBSERVABILITY),0 1),)
+$(error OBSERVABILITY must be '0' or '1', got '$(OBSERVABILITY)')
+endif
+
+ifeq ($(RUNTIME),compose)
+  PROMETHEUS_URL ?= http://prometheus:9090
+  LOKI_URL       ?= http://loki:3100
+else
+  PROMETHEUS_URL ?= http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+  LOKI_URL       ?= http://loki.monitoring.svc:3100
+endif
+
 ## Help
 
 .PHONY: help
@@ -281,9 +299,10 @@ help: ## Show this help
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
 	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
 	@echo '  TF_ENV = $(TF_ENV)'
+	@echo ' OBSERVABILITY = $(OBSERVABILITY) (0 | 1)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"] [OBSERVABILITY=0|1]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
@@ -374,13 +393,14 @@ else
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
 	--set global.daemonMode=$(DAEMON_MODE) \
 	--set global.scopeProfile=$(SCOPE_PROFILE) \
+	--set observability.enabled=$(if $(filter 1,$(OBSERVABILITY)),true,false) \
 	$(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
 stop: ## Stop the stack, remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) down -v
+	$(COMPOSE_ALL) down -v --remove-orphans
 else
 	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
@@ -503,6 +523,18 @@ helm-lint: ## Lint the umbrella chart
 .PHONY: helm-template
 helm-template: ## Render manifests without installing
 	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
+
+## Observability
+
+.PHONY: obs-urls
+obs-urls: ## Print observability UIs (needs OBSERVABILITY=1)
+	@echo "Grafana     http://localhost:3000"
+	@echo "Prometheus  http://localhost:9090"
+	@echo "Loki        http://localhost:3100"
+
+.PHONY: test-observability
+test-observability: ## Observability smoke test: Prometheus targets up, Loki has logs
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) PROMETHEUS_URL=$(PROMETHEUS_URL) LOKI_URL=$(LOKI_URL) DAEMON_MODE=$(DAEMON_MODE) pytest /tests/test_observability.py -v"
 
 ## Tests
 
@@ -698,7 +730,7 @@ userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches 
 
 .PHONY: clear-artifacts
 clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
-	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
+	$(COMPOSE_ALL) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \
