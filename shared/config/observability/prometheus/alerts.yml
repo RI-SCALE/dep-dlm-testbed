@@ -23,6 +23,24 @@ groups:
           summary: "Rucio daemon metrics unavailable"
           description: "No metrics from {{ $labels.instance }} for 5 minutes."
 
+      - alert: RucioDbMetricsDown
+        expr: up{job="rucio-db"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio database metrics unavailable"
+          description: "rucio-db-exporter cannot query the Rucio database for 5 minutes."
+
+      - alert: RucioRulesStuck
+        expr: sum(rucio_rules{state="STUCK"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio has stuck replication rules"
+          description: "{{ $value }} rules are STUCK; check rule errors and FTS failure reasons."
+
       - alert: FtsMetricsDown
         expr: up{job="fts"} == 0
         for: 5m

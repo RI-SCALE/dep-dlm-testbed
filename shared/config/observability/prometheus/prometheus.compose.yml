@@ -30,6 +30,11 @@ scrape_configs:
     static_configs:
       - targets: ["fts-exporter:9399"]
 
+  - job_name: rucio-db
+    # sql_exporter over the Rucio database (rules, requests, RSE usage).
+    static_configs:
+      - targets: ["rucio-db-exporter:9399"]
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

@@ -59,7 +59,19 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter:/etc/sql_exporter:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter/fts:/etc/sql_exporter:ro
+
+  rucio-db-exporter:
+    image: burningalchemist/sql_exporter:0.24.9
+    hostname: rucio-db-exporter
+    command: ["-config.file=/etc/sql_exporter/sql_exporter.yml"]
+    depends_on:
+      ruciodb:
+        condition: service_healthy
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter/rucio:/etc/sql_exporter:ro
 
   prometheus:
     image: prom/prometheus:v3.1.0

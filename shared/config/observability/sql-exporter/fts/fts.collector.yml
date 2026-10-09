@@ -1,0 +1,125 @@
+# FTS transfer metrics from t_file (columns per FTS schema 10.x).
+collector_name: fts
+
+metrics:
+  - metric_name: fts_files_active
+    type: gauge
+    help: "Files not yet in a terminal state, per state and link."
+    key_labels: [state, source_se, dest_se]
+    values: [files]
+    query: |
+      SELECT file_state AS state,
+             COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COUNT(*) AS files
+      FROM t_file
+      WHERE file_state IN ('SUBMITTED', 'READY', 'ACTIVE', 'STAGING', 'STARTED',
+                           'ON_HOLD', 'ON_HOLD_STAGING', 'TOKEN_PREP')
+      GROUP BY file_state, source_se, dest_se
+
+  - metric_name: fts_files_completed_1h
+    type: gauge
+    help: "Files that reached a terminal state in the last hour, per state and link."
+    key_labels: [state, source_se, dest_se]
+    values: [files]
+    query: |
+      SELECT file_state AS state,
+             COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COUNT(*) AS files
+      FROM t_file
+      WHERE file_state IN ('FINISHED', 'FAILED', 'CANCELED')
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY file_state, source_se, dest_se
+
+  - metric_name: fts_bytes_finished_1h
+    type: gauge
+    help: "Bytes of files finished successfully in the last hour, per link."
+    key_labels: [source_se, dest_se]
+    values: [bytes]
+    query: |
+      SELECT COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COALESCE(SUM(filesize), 0) AS bytes
+      FROM t_file
+      WHERE file_state = 'FINISHED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY source_se, dest_se
+
+  # Link quality as shown on WLCG/FTS dashboards: efficiency, throughput,
+  # duration, failure categories, optimizer concurrency.
+  - metric_name: fts_transfer_seconds_1h
+    type: gauge
+    help: "Transfer duration of files finished in the last hour, per link."
+    key_labels: [source_se, dest_se]
+    value_label: stat
+    values: [avg, max]
+    query: |
+      SELECT COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             AVG(tx_duration) AS avg,
+             MAX(tx_duration) AS max
+      FROM t_file
+      WHERE file_state = 'FINISHED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY source_se, dest_se
+
+  - metric_name: fts_throughput_1h_bytes
+    type: gauge
+    help: "Bytes per second of transfer time for files finished in the last hour, per link."
+    key_labels: [source_se, dest_se]
+    values: [throughput]
+    query: |
+      SELECT COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COALESCE(SUM(filesize) / NULLIF(SUM(tx_duration), 0), 0) AS throughput
+      FROM t_file
+      WHERE file_state = 'FINISHED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY source_se, dest_se
+
+  - metric_name: fts_failures_1h
+    type: gauge
+    help: "Files that failed in the last hour, per link and error category."
+    key_labels: [source_se, dest_se, category]
+    values: [files]
+    query: |
+      SELECT COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             CASE
+               WHEN reason LIKE '%checksum%' OR reason LIKE '%CHECKSUM%' THEN 'checksum'
+               WHEN reason LIKE '%No such file%' OR reason LIKE '%404%' OR reason LIKE '%ENOENT%' THEN 'source missing'
+               WHEN reason LIKE '%ermission%' OR reason LIKE '%403%' OR reason LIKE '%401%'
+                    OR reason LIKE '%EACCES%' OR reason LIKE '%token%' THEN 'auth'
+               WHEN reason LIKE '%xists%' OR reason LIKE '%EEXIST%' THEN 'destination exists'
+               WHEN reason LIKE '%imeout%' OR reason LIKE '%TIMEOUT%' OR reason LIKE '%timed out%' THEN 'timeout'
+               WHEN reason LIKE '%onnection%' OR reason LIKE '%ECONNREFUSED%' THEN 'connection'
+               ELSE 'other'
+             END AS category,
+             COUNT(*) AS files
+      FROM t_file
+      WHERE file_state = 'FAILED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY source_se, dest_se, category
+
+  - metric_name: fts_failure_reasons_1h
+    type: gauge
+    help: "Ten most frequent failure messages in the last hour (truncated)."
+    key_labels: [reason]
+    values: [files]
+    query: |
+      SELECT LEFT(COALESCE(reason, ''), 150) AS reason, COUNT(*) AS files
+      FROM t_file
+      WHERE file_state = 'FAILED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY LEFT(COALESCE(reason, ''), 150)
+      ORDER BY files DESC
+      LIMIT 10
+
+  - metric_name: fts_optimizer_active
+    type: gauge
+    help: "Concurrent transfers the FTS optimizer allows per link."
+    key_labels: [source_se, dest_se]
+    values: [active]
+    query: |
+      SELECT source_se, dest_se, active FROM t_optimizer

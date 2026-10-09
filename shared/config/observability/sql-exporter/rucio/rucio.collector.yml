@@ -1,0 +1,72 @@
+# Rucio rule and request state (tables per Rucio 41.x models; timestamps are UTC).
+collector_name: rucio
+
+metrics:
+  - metric_name: rucio_rules
+    type: gauge
+    help: "Replication rules per state."
+    key_labels: [state]
+    values: [rules]
+    query: |
+      SELECT CASE state WHEN 'R' THEN 'REPLICATING' WHEN 'O' THEN 'OK'
+                        WHEN 'S' THEN 'STUCK' WHEN 'U' THEN 'SUSPENDED'
+                        WHEN 'W' THEN 'WAITING_APPROVAL' WHEN 'I' THEN 'INJECT'
+                        ELSE state::text END AS state,
+             COUNT(*) AS rules
+      FROM rules
+      GROUP BY state
+
+  - metric_name: rucio_rules_oldest_open_age_seconds
+    type: gauge
+    help: "Age of the oldest rule that is still replicating or stuck."
+    key_labels: [state]
+    values: [age]
+    query: |
+      SELECT CASE state WHEN 'R' THEN 'REPLICATING' ELSE 'STUCK' END AS state,
+             EXTRACT(EPOCH FROM timezone('utc', now()) - MIN(created_at)) AS age
+      FROM rules
+      WHERE state IN ('R', 'S')
+      GROUP BY state
+
+  - metric_name: rucio_rules_completed_1h_seconds
+    type: gauge
+    help: "Creation to OK time of rules that became OK in the last hour."
+    value_label: stat
+    values: [avg, max]
+    query: |
+      SELECT COALESCE(AVG(EXTRACT(EPOCH FROM updated_at - created_at)), 0) AS avg,
+             COALESCE(MAX(EXTRACT(EPOCH FROM updated_at - created_at)), 0) AS max
+      FROM rules
+      WHERE state = 'O'
+        AND updated_at > timezone('utc', now()) - INTERVAL '1 hour'
+
+  - metric_name: rucio_transfer_requests
+    type: gauge
+    help: "Transfer requests per state and destination RSE."
+    key_labels: [state, dest_rse]
+    values: [requests]
+    query: |
+      SELECT CASE r.state WHEN 'Q' THEN 'QUEUED' WHEN 'G' THEN 'SUBMITTING'
+                          WHEN 'S' THEN 'SUBMITTED' WHEN 'F' THEN 'FAILED'
+                          WHEN 'D' THEN 'DONE' WHEN 'L' THEN 'LOST'
+                          WHEN 'N' THEN 'NO_SOURCES' WHEN 'O' THEN 'ONLY_TAPE_SOURCES'
+                          WHEN 'A' THEN 'SUBMISSION_FAILED' WHEN 'M' THEN 'MISMATCH_SCHEME'
+                          WHEN 'U' THEN 'SUSPEND' WHEN 'W' THEN 'WAITING'
+                          WHEN 'P' THEN 'PREPARING' ELSE r.state::text END AS state,
+             COALESCE(s.rse, '') AS dest_rse,
+             COUNT(*) AS requests
+      FROM requests r
+      LEFT JOIN rses s ON s.id = r.dest_rse_id
+      WHERE r.request_type = 'T'
+      GROUP BY r.state, s.rse
+
+  - metric_name: rucio_rse_used_bytes
+    type: gauge
+    help: "Bytes Rucio accounts on each RSE (filled by abacus-rse)."
+    key_labels: [rse]
+    values: [used]
+    query: |
+      SELECT s.rse AS rse, COALESCE(u.used, 0) AS used
+      FROM rse_usage u
+      JOIN rses s ON s.id = u.rse_id
+      WHERE u.source = 'rucio' AND NOT s.deleted
