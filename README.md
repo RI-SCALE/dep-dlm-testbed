@@ -8,7 +8,7 @@ Every scenario is validated in CI: Compose and Kubernetes, the local Keycloak pl
 
 - **Runtimes:** Docker Compose and Kubernetes (`amd64`/`arm64`), GitOps via Argo CD or Flux across sandbox, staging and production
 - **Identity:** bundled Keycloak, EGI Check-In and LS AAI / Perun; managed and unmanaged token flows
-- **Authorisation:** Rucio delegates permission checks to OPA via a Rego policy package ([design-doc-004](./docs/design/design-doc-004-direct-opa-integration.md))
+- **Authorisation:** Rucio delegates permission checks to OPA via a Rego policy package
 - **Storage:** XRootD, Teapot WebDAV and S3 (Copernicus Data Space)
 - **Upstream patches:** minimal patches to Rucio, FTS3, gfal2, davix and Teapot for features not yet upstream — see [docs/patches.md](./docs/patches.md), with decisions in [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/)
 
