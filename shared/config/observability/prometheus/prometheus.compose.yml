@@ -25,6 +25,11 @@ scrape_configs:
     static_configs:
       - targets: ["rucio-daemons-metrics:8080"]
 
+  - job_name: fts
+    # sql_exporter over the FTS database (t_file).
+    static_configs:
+      - targets: ["fts-exporter:9399"]
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

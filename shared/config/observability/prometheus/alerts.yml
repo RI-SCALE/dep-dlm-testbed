@@ -22,3 +22,32 @@ groups:
         annotations:
           summary: "Rucio daemon metrics unavailable"
           description: "No metrics from {{ $labels.instance }} for 5 minutes."
+
+      - alert: FtsMetricsDown
+        expr: up{job="fts"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FTS database metrics unavailable"
+          description: "fts-exporter cannot query the FTS database for 5 minutes."
+
+      - alert: FtsSubmissionFailures
+        expr: sum(increase(rucio_transfertool_fts3_submission_total{state="failure"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio failed to submit transfers to FTS"
+          description: "{{ $value }} file submissions to FTS failed in the last 15 minutes."
+
+      - alert: FtsTransferFailureRatioHigh
+        expr: |
+          sum by (source_se, dest_se) (fts_files_completed_1h{state="FAILED"})
+            / sum by (source_se, dest_se) (fts_files_completed_1h) > 0.2
+          and sum by (source_se, dest_se) (fts_files_completed_1h) >= 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High FTS failure ratio on {{ $labels.source_se }} -> {{ $labels.dest_se }}"
+          description: "{{ $value | humanizePercentage }} of transfers on this link failed in the last hour."
