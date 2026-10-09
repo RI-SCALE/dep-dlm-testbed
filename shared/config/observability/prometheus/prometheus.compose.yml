@@ -1,0 +1,30 @@
+# Prometheus scrape config for Docker Compose (design-doc-005, phase 1).
+# Keep job names "rucio-server" and "rucio-daemons": the tests and the
+# Kubernetes ServiceMonitors rely on them.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: rucio-server
+    # Needs `metrics` in [api] endpoints of rucio.cfg.
+    metrics_path: /metrics/
+    # Rucio's Flask view sends text/html, which Prometheus 3 rejects otherwise.
+    fallback_scrape_protocol: PrometheusText0.0.4
+    # Direct-mode --run-once daemons leave many multiprocess files to aggregate.
+    scrape_timeout: 30s
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["rucio-server:80"]
+
+  - job_name: rucio-daemons
+    # Exporter sidecar; only runs with DAEMON_MODE=daemons.
+    static_configs:
+      - targets: ["rucio-daemons-metrics:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

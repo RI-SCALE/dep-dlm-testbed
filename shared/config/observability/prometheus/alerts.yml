@@ -1,0 +1,24 @@
+# Basic alert rules (design-doc-005: alerting beyond basics is a non-goal).
+# Shared by Compose (rule_files) and Kubernetes (PrometheusRule wrapper).
+# No Alertmanager in the Compose stack: alerts show in the Prometheus UI.
+groups:
+  - name: dep-dlm-rucio
+    rules:
+      - alert: RucioServerDown
+        expr: up{job="rucio-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "rucio-server metrics endpoint unreachable"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 2 minutes."
+
+      - alert: RucioDaemonsMetricsDown
+        # Fires in DAEMON_MODE=direct too, where no daemons run; expected there.
+        expr: up{job="rucio-daemons"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio daemon metrics unavailable"
+          description: "No metrics from {{ $labels.instance }} for 5 minutes."

@@ -1,0 +1,11 @@
+# Load every dashboard JSON from /var/lib/grafana/dashboards (design-doc-005).
+apiVersion: 1
+
+providers:
+  - name: dep-dlm
+    folder: DEP DLM
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

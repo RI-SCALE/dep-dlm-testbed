@@ -1,0 +1,122 @@
+# Observability overlay (design-doc-005), merged by `make start OBSERVABILITY=1`.
+
+services:
+  # Rucio writes multiprocess metrics here; the server serves them at /metrics/.
+  # mode=1777: httpd workers (apache) and bootstrap-db.py (root) both write.
+  rucio-server:
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    tmpfs:
+      - /tmp/prometheus:mode=1777
+
+  # All daemons share one container, so they write to a shared directory
+  # that rucio-daemons-metrics exposes (per-process ports would clash).
+  rucio-daemons:
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    volumes:
+      - rucio-daemons-prom:/tmp/prometheus
+
+  rucio-daemons-metrics:
+    image: rucio/rucio-daemons:release-41.2.1
+    hostname: rucio-daemons-metrics
+    profiles: ["observability"]
+    networks:
+      - dep-dlm-testbed
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    volumes:
+      - rucio-daemons-prom:/tmp/prometheus
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
+      - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
+    entrypoint:
+      - python3
+      - -c
+      - |
+        import time
+        from prometheus_client import CollectorRegistry, multiprocess, start_http_server
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        start_http_server(8080, registry=registry)
+        while True:
+            time.sleep(3600)
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    hostname: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/prometheus/prometheus.compose.yml:/etc/prometheus/prometheus.yml:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - dep-dlm-obs-prometheus:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    hostname: grafana
+    environment:
+      # Local testbed only.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - dep-dlm-obs-grafana:/var/lib/grafana
+
+  loki:
+    image: grafana/loki:3.3.2
+    hostname: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - dep-dlm-obs-loki:/loki
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    hostname: alloy
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/alloy/config.compose.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  dep-dlm-testbed:
+    name: compose-net
+
+volumes:
+  rucio-daemons-prom:
+  dep-dlm-obs-prometheus:
+  dep-dlm-obs-grafana:
+  dep-dlm-obs-loki:
