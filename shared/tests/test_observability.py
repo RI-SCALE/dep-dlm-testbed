@@ -2,7 +2,7 @@
 
 Runs inside the rucio-client container/pod like the other tests.
 Contract with shared/config/observability/:
-  - Prometheus scrape jobs are named "rucio-server" and "rucio-daemons".
+  - Prometheus scrape jobs are named "rucio-server" and "fts".
   - Alloy labels every log stream with service=<compose service / app name>.
 """
 
@@ -16,7 +16,6 @@ import pytest
 
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI_URL = os.environ.get("LOKI_URL", "http://loki:3100")
-DAEMON_MODE = os.environ.get("DAEMON_MODE", "direct")
 TIMEOUT_S = int(os.environ.get("OBSERVABILITY_TIMEOUT", "180"))
 
 
@@ -42,27 +41,22 @@ def _wait_for(check, what):
     pytest.fail(f"{what} not satisfied after {TIMEOUT_S}s (last error: {last})")
 
 
-def _expected_jobs():
-    jobs = ["rucio-server"]
-    # Daemons only run long-lived (and expose metrics) in DAEMON_MODE=daemons.
-    if DAEMON_MODE == "daemons":
-        jobs.append("rucio-daemons")
-    return jobs
-
-
-@pytest.mark.parametrize("job", _expected_jobs())
+@pytest.mark.parametrize("job", ["rucio-server", "fts"])
 def test_prometheus_target_up(job):
     def check():
         data = _get(f"{PROMETHEUS_URL}/api/v1/targets", {"state": "active"})
         targets = [
             t for t in data["data"]["activeTargets"] if t["labels"].get("job") == job
         ]
-        return targets and all(t["health"] == "up" for t in targets)
+        if not (targets and all(t["health"] == "up" for t in targets)):
+            raise RuntimeError([t.get("lastError") for t in targets])
+        return True
 
     _wait_for(check, f"Prometheus job {job!r} up")
 
 
-@pytest.mark.parametrize("job", _expected_jobs())
+# FTS series only exist once t_file has rows, so only Rucio is checked here.
+@pytest.mark.parametrize("job", ["rucio-server"])
 def test_prometheus_has_rucio_series(job):
     # A reachable but empty endpoint would still be "up"; require real series.
     query = f'count({{job="{job}", __name__!~"up|scrape_.*"}})'

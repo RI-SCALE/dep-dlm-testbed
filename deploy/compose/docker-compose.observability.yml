@@ -48,6 +48,20 @@ services:
         while True:
             time.sleep(3600)
 
+  # FTS has no Prometheus endpoint; this queries its transfer state in MySQL.
+  fts-exporter:
+    image: burningalchemist/sql_exporter:0.24.9
+    hostname: fts-exporter
+    profiles: ["observability"]
+    command: ["-config.file=/etc/sql_exporter/sql_exporter.yml"]
+    depends_on:
+      ftsdb:
+        condition: service_healthy
+    networks:
+      - dep-dlm-testbed
+    volumes:
+      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter:/etc/sql_exporter:ro
+
   prometheus:
     image: prom/prometheus:v3.1.0
     hostname: prometheus

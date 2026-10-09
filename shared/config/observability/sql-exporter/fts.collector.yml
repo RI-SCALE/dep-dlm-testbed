@@ -1,0 +1,47 @@
+# FTS transfer metrics from t_file (columns per FTS schema 10.x).
+collector_name: fts
+
+metrics:
+  - metric_name: fts_files_active
+    type: gauge
+    help: "Files not yet in a terminal state, per state and link."
+    key_labels: [state, source_se, dest_se]
+    values: [files]
+    query: |
+      SELECT file_state AS state,
+             COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COUNT(*) AS files
+      FROM t_file
+      WHERE file_state IN ('SUBMITTED', 'READY', 'ACTIVE', 'STAGING', 'STARTED',
+                           'ON_HOLD', 'ON_HOLD_STAGING', 'TOKEN_PREP')
+      GROUP BY file_state, source_se, dest_se
+
+  - metric_name: fts_files_completed_1h
+    type: gauge
+    help: "Files that reached a terminal state in the last hour, per state and link."
+    key_labels: [state, source_se, dest_se]
+    values: [files]
+    query: |
+      SELECT file_state AS state,
+             COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COUNT(*) AS files
+      FROM t_file
+      WHERE file_state IN ('FINISHED', 'FAILED', 'CANCELED')
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY file_state, source_se, dest_se
+
+  - metric_name: fts_bytes_finished_1h
+    type: gauge
+    help: "Bytes of files finished successfully in the last hour, per link."
+    key_labels: [source_se, dest_se]
+    values: [bytes]
+    query: |
+      SELECT COALESCE(source_se, '') AS source_se,
+             COALESCE(dest_se, '') AS dest_se,
+             COALESCE(SUM(filesize), 0) AS bytes
+      FROM t_file
+      WHERE file_state = 'FINISHED'
+        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
+      GROUP BY source_se, dest_se
