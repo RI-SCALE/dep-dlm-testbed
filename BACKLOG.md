@@ -45,3 +45,12 @@
 
 - [ ] Storage authorization hardening (XRootD SciTokens + Teapot Storm-WebDAV): VO-based Teapot mapping via `eduperson_entitlements` — configure Keycloak to issue `eduperson_entitlement` claims alongside `wlcg.groups` and demonstrate Teapot's VO mapping mode as an alternative to FILE mapping (requires group membership claims not available on the current service account token path). Investigate whether equivalent group/entitlement-based authorization exists for XRootD SciTokens (current understanding: scope-based only).
 - [x] Integrate authorization for this testbed by reusing [opa-policy-package's](https://github.com/mgajek-cern/opa-policy-package/tree/main) Rego policy bundles and OIDC/Keycloak integration, rather than rebuilding authorization logic here.
+
+## FTS 4
+
+- [ ] Evaluate and migrate the testbed from FTS3 to [FTS4](https://gitlab.cern.ch/fts/fts) once a stable release is tagged (its container setup is still marked experimental and development-only)
+    - [ ] Replace the single `fts` container and MySQL `ftsdb` with FTS4's split services (scheduler, staging scheduler, transfer, tape, ActiveMQ, REST, web UI) on PostgreSQL, in Compose and the Helm charts
+    - [ ] Re-check each FTS patch against FTS4 (`middleware.py`, `openidconnect.py`, `tokenproviders.py`, `JobBuilder.py`, `cloudStorage.py`/`cloud.py`): drop patches FTS4 makes unnecessary, port the rest, and update `docs/patches.md`
+    - [ ] Check the FTS REST calls in `init-testbed.sh` (`/config/token_providers`, `/config/cloud_storage`, `/config/se`) against the FTS4 REST API
+    - [ ] Port the FTS observability collector (`sql-exporter/fts`) from MySQL to the FTS4 PostgreSQL schema, and compare it with FTS4's own monitoring
+    - [ ] Run the existing e2e transfer tests (managed and unmanaged token modes, Copernicus S3 source) against FTS4 for every IdP profile
