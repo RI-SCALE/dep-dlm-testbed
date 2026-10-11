@@ -70,3 +70,19 @@ metrics:
       FROM rse_usage u
       JOIN rses s ON s.id = u.rse_id
       WHERE u.source = 'rucio' AND NOT s.deleted
+
+  # SLI for the rule-latency SLO: rules that became OK in the last hour,
+  # split by whether they took at most 30 minutes from creation.
+  - metric_name: rucio_rules_completed_1h_by_target
+    type: gauge
+    help: "Rules that became OK in the last hour, by whether they met the 30-minute latency target."
+    key_labels: [within_target]
+    values: [rules]
+    query: |
+      SELECT CASE WHEN EXTRACT(EPOCH FROM updated_at - created_at) <= 1800
+                  THEN 'true' ELSE 'false' END AS within_target,
+             COUNT(*) AS rules
+      FROM rules
+      WHERE state = 'O'
+        AND updated_at > timezone('utc', now()) - INTERVAL '1 hour'
+      GROUP BY 1

@@ -38,7 +38,8 @@ GitOps blueprint, not just the sandbox.
 - A MONIT-scale pipeline (Kafka, HDFS, long-term analytics). Too heavy for
   RI-SCALE's scale.
 - Long-term retention or capacity planning. Defaults only.
-- Alerting beyond a few basic rules (daemon down, transfer failure ratio).
+- SLAs or on-call commitments. SLOs are internal targets for the testbed;
+  agreements with partners are out of scope.
 - Usage reporting for credits (covered by ADR-005).
 
 ## Design
@@ -59,10 +60,23 @@ the wiring differs:
 | Dashboards | Grafana file provisioning | Grafana ConfigMap sidecar |
 
 **Phase 1: Metrics**
-- Prometheus, Grafana and Alertmanager.
-- Enable Rucio metrics via `[monitor]` in `rucio.cfg` (and the upstream
-  chart's monitoring values on Kubernetes).
-- Dashboards: daemon health, rule states, API request rates.
+- Prometheus and Grafana (Alertmanager only on Kubernetes).
+- Rucio metrics: `metrics` in `[api] endpoints` of `rucio.cfg`, with
+  `PROMETHEUS_MULTIPROC_DIR` so all server processes report together.
+- FTS has no Prometheus endpoint: `sql_exporter` reads transfer state from
+  the FTS database; a second instance reads rule and request state from the
+  Rucio database.
+- One dashboard, modelled on the WLCG/ATLAS/CMS transfer views: health,
+  SLOs, transfers (efficiency matrix, throughput per link, failure categories
+  and reasons), backlog (rules, oldest open rule, FTS queue); logs collapsed.
+
+**Service level objectives**
+- Internal targets over a rolling 7-day window, not SLAs:
+  - transfer success 95 %: finished / (finished + failed) FTS files
+  - rule latency 95 %: rules reaching OK within 30 minutes
+- Alerts in `alerts.yml`: burn-rate alerts on both SLOs (fast: 14.4x over
+  1h, slow: 6x over 6h) plus a few component alerts (rucio-server down,
+  exporter down, stuck rules, failed FTS submissions).
 
 **Phase 2: Logs**
 - Loki plus Grafana Alloy (Promtail is in LTS; Alloy is its successor),
@@ -116,7 +130,8 @@ Hermes ────────────────────────�
 - `make helm-lint` and `helm-template` with observability enabled.
 - `make test-observability` (new), run in the existing Compose and k8s CI
   jobs:
-  - Phase 1: Prometheus targets for rucio-server and rucio-daemons are `up`.
+  - Phase 1: Prometheus targets for rucio-server and the database
+    exporters are `up`, and rucio-server returns metric series.
   - Phase 2: a Loki query returns rucio-server logs.
   - Phase 3: after `make test-rucio-transfers`, OpenSearch holds at least one
     `transfer-done` event from Hermes and one completion message from FTS.
@@ -133,8 +148,6 @@ Hermes ────────────────────────�
 
 ## Open questions
 
-- How does Rucio 41.x expose metrics: a Prometheus endpoint, or a push
-  gateway? Which chart values enable it?
 - Hermes: write to OpenSearch directly, or via ActiveMQ for a single ingest
   path? Confirm direct OpenSearch support for this Rucio version.
 - Could events go to Loki instead of OpenSearch, dropping one component?

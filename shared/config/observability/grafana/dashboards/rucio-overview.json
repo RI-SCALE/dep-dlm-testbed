@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 6,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -34,8 +34,8 @@
       "type": "row",
       "title": "Health",
       "collapsed": false,
-      "panels": [],
       "id": 1,
+      "panels": [],
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -106,14 +106,14 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 4,
+        "w": 6,
         "h": 4
       }
     },
     {
       "type": "stat",
-      "title": "Rucio DB exporter",
-      "description": "rucio-db-exporter can query the Rucio database.",
+      "title": "Exporters",
+      "description": "Both database exporters (Rucio, FTS) can be scraped; DOWN if either fails.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -121,7 +121,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "up{job=\"rucio-db\"}",
+          "expr": "min(up{job=~\"rucio-db|fts\"})",
           "instant": true
         }
       ],
@@ -171,76 +171,9 @@
       },
       "id": 3,
       "gridPos": {
-        "x": 4,
+        "x": 6,
         "y": 1,
-        "w": 4,
-        "h": 4
-      }
-    },
-    {
-      "type": "stat",
-      "title": "FTS DB exporter",
-      "description": "fts-exporter can query the FTS database.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "up{job=\"fts\"}",
-          "instant": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "0",
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              }
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      },
-      "id": 4,
-      "gridPos": {
-        "x": 8,
-        "y": 1,
-        "w": 4,
+        "w": 6,
         "h": 4
       }
     },
@@ -292,11 +225,11 @@
           ]
         }
       },
-      "id": 5,
+      "id": 4,
       "gridPos": {
         "x": 12,
         "y": 1,
-        "w": 4,
+        "w": 6,
         "h": 4
       }
     },
@@ -344,18 +277,31 @@
           ]
         }
       },
-      "id": 6,
+      "id": 5,
       "gridPos": {
-        "x": 16,
+        "x": 18,
         "y": 1,
-        "w": 4,
+        "w": 6,
         "h": 4
       }
     },
     {
+      "type": "row",
+      "title": "Service level objectives (7 days)",
+      "collapsed": false,
+      "id": 6,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
       "type": "stat",
-      "title": "FTS failed (last hour)",
-      "description": "Files that failed in FTS in the last hour.",
+      "title": "Transfer success (SLO 95 %)",
+      "description": "Finished / (finished + failed) FTS files over 7 days. Green at or above target.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -363,27 +309,28 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(fts_files_completed_1h{state=\"FAILED\"}) or vector(0)",
+          "expr": "slo:transfer_success:ratio_7d",
           "instant": true
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "0",
+          "unit": "percentunit",
+          "noValue": "no data yet",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "red",
-                "value": 1
+                "color": "green",
+                "value": 0.95
               }
             ]
-          }
+          },
+          "decimals": 1
         }
       },
       "options": {
@@ -398,21 +345,448 @@
       },
       "id": 7,
       "gridPos": {
-        "x": 20,
-        "y": 1,
-        "w": 4,
+        "x": 0,
+        "y": 6,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Transfer error budget left",
+      "description": "Share of the transfer-success error budget (5 % failures) still unspent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "clamp_min(1 - (1 - slo:transfer_success:ratio_7d) / (1 - 0.95), 0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "no data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "decimals": 1
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "x": 6,
+        "y": 6,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Rules within 30 min (SLO 95 %)",
+      "description": "Rules that reached OK within 30 minutes of creation, over 7 days.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "slo:rule_latency:ratio_7d",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "no data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          },
+          "decimals": 1
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Rule latency error budget left",
+      "description": "Share of the rule-latency error budget (5 % slow rules) still unspent.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "clamp_min(1 - (1 - slo:rule_latency:ratio_7d) / (1 - 0.95), 0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "no data yet",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "decimals": 1
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 18,
+        "y": 6,
+        "w": 6,
         "h": 4
       }
     },
     {
       "type": "row",
-      "title": "Rules and requests (Rucio database)",
+      "title": "Transfers",
       "collapsed": false,
+      "id": 11,
       "panels": [],
-      "id": 8,
       "gridPos": {
         "x": 0,
-        "y": 5,
+        "y": 10,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "type": "table",
+      "title": "Efficiency matrix (last hour)",
+      "description": "Transfer efficiency per source (rows) and destination (columns), as in the ATLAS DDM and WLCG transfer dashboards. Empty cells: no transfers on that link.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "dest_se",
+            "rowField": "source_se",
+            "valueField": "Value",
+            "emptyValue": "null"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "custom": {
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "align": "center"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source_se\\dest_se"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Throughput per link (last hour)",
+      "description": "Transferred bytes per second of transfer time, files finished in the last hour.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source_se, dest_se) (fts_throughput_1h_bytes)",
+          "legendFormat": "{{source_se}} → {{dest_se}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Failures by category (last hour)",
+      "description": "Failed files grouped by error category, as in the ATLAS DDM error views.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (category) (fts_failures_1h)",
+          "legendFormat": "{{category}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "noValue": "No failures in the last hour"
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top failure reasons (last hour)",
+      "description": "Ten most frequent FTS failure messages, truncated to 150 characters.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "fts_failure_reasons_1h",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true,
+              "instance": true
+            },
+            "renameByName": {
+              "Value": "files"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "files",
+            "desc": true
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No failures in the last hour"
+        },
+        "overrides": []
+      },
+      "id": 15,
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "Backlog",
+      "collapsed": false,
+      "id": 16,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 27,
         "w": 24,
         "h": 1
       }
@@ -459,10 +833,10 @@
           "sort": "desc"
         }
       },
-      "id": 9,
+      "id": 17,
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 28,
         "w": 8,
         "h": 8
       }
@@ -509,600 +883,18 @@
           "sort": "desc"
         }
       },
-      "id": 10,
-      "gridPos": {
-        "x": 8,
-        "y": 6,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Rule completion time (last hour)",
-      "description": "Creation to OK for rules that became OK in the last hour: what users wait for.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (stat) (rucio_rules_completed_1h_seconds)",
-          "legendFormat": "{{stat}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 11,
-      "gridPos": {
-        "x": 16,
-        "y": 6,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Transfer requests by state",
-      "description": "Rucio transfer requests not yet archived, per state (QUEUED waits for the submitter).",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (state) (rucio_transfer_requests{state!=\"DONE\"})",
-          "legendFormat": "{{state}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 12,
-      "gridPos": {
-        "x": 0,
-        "y": 14,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Queued requests per destination",
-      "description": "Requests waiting in Rucio before submission, per destination RSE.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (dest_rse) (rucio_transfer_requests{state=~\"QUEUED|WAITING|PREPARING\"})",
-          "legendFormat": "{{dest_rse}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 13,
-      "gridPos": {
-        "x": 8,
-        "y": 14,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Storage used per RSE",
-      "description": "Bytes Rucio accounts on each RSE. Needs the abacus-rse daemon.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (rse) (rucio_rse_used_bytes)",
-          "legendFormat": "{{rse}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 14,
-      "gridPos": {
-        "x": 16,
-        "y": 14,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "row",
-      "title": "Rucio and FTS interaction",
-      "collapsed": false,
-      "panels": [],
-      "id": 15,
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Submissions to FTS (per 5 min)",
-      "description": "Files Rucio submitted to FTS in each 5-minute window, by result.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (state) (increase(rucio_transfertool_fts3_submission_total[5m]))",
-          "legendFormat": "{{state}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 2,
-            "fillOpacity": 80,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 16,
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 6,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "FTS status polling (per 5 min)",
-      "description": "Bulk status queries from the conveyor poller to FTS in each 5-minute window, by result.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (state) (increase(rucio_transfertool_fts3_bulk_query_total[5m]))",
-          "legendFormat": "{{state}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 2,
-            "fillOpacity": 80,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 17,
-      "gridPos": {
-        "x": 6,
-        "y": 23,
-        "w": 6,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Request state updates (per 5 min)",
-      "description": "Transfer requests the poller updated from FTS state in each 5-minute window.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (updated) (increase(rucio_daemons_conveyor_poller_update_request_state_total[5m]))",
-          "legendFormat": "updated={{updated}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 2,
-            "fillOpacity": 80,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
       "id": 18,
       "gridPos": {
-        "x": 12,
-        "y": 23,
-        "w": 6,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Queue wait before submission",
-      "description": "Time a request waited in Rucio before submission. Buckets start at 10 s, so short waits read as 5-10 s.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_request_wait_time_bucket[15m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_request_wait_time_bucket[15m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 19,
-      "gridPos": {
-        "x": 18,
-        "y": 23,
-        "w": 6,
-        "h": 8
-      }
-    },
-    {
-      "type": "row",
-      "title": "FTS links",
-      "collapsed": false,
-      "panels": [],
-      "id": 20,
-      "gridPos": {
-        "x": 0,
-        "y": 31,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Transfer efficiency per link (last hour)",
-      "description": "Finished / (finished + failed) per link: the headline WLCG link metric.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})",
-          "legendFormat": "{{source_se}} → {{dest_se}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 21,
-      "gridPos": {
-        "x": 0,
-        "y": 32,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Throughput per link (last hour)",
-      "description": "Transferred bytes per second of transfer time, files finished in the last hour.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source_se, dest_se) (fts_throughput_1h_bytes)",
-          "legendFormat": "{{source_se}} → {{dest_se}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 22,
-      "gridPos": {
         "x": 8,
-        "y": 32,
+        "y": 28,
         "w": 8,
         "h": 8
       }
     },
     {
       "type": "timeseries",
-      "title": "Volume per link (last hour)",
-      "description": "Rolling one-hour volume of successfully transferred bytes.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source_se, dest_se) (fts_bytes_finished_1h)",
-          "legendFormat": "{{source_se}} → {{dest_se}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 23,
-      "gridPos": {
-        "x": 16,
-        "y": 32,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Files in flight by state",
-      "description": "Current non-terminal files in the FTS database (the FTS queue).",
+      "title": "FTS queue by state",
+      "description": "Files waiting or running in FTS (submitted, ready, active, ...).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1141,392 +933,10 @@
           "sort": "desc"
         }
       },
-      "id": 24,
-      "gridPos": {
-        "x": 0,
-        "y": 40,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Transfer duration per link (last hour)",
-      "description": "FTS tx_duration of files finished in the last hour.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (source_se, dest_se) (fts_transfer_seconds_1h{stat=\"avg\"})",
-          "legendFormat": "avg {{source_se}} → {{dest_se}}"
-        },
-        {
-          "refId": "B",
-          "expr": "max by (source_se, dest_se) (fts_transfer_seconds_1h{stat=\"max\"})",
-          "legendFormat": "max {{source_se}} → {{dest_se}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 25,
-      "gridPos": {
-        "x": 8,
-        "y": 40,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Optimizer concurrency per link",
-      "description": "Concurrent transfers the FTS optimizer allows per link; it backs off when a link degrades.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (source_se, dest_se) (fts_optimizer_active)",
-          "legendFormat": "{{source_se}} → {{dest_se}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 26,
+      "id": 19,
       "gridPos": {
         "x": 16,
-        "y": 40,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Failures by category (last hour)",
-      "description": "Failed files grouped by error category, as in the ATLAS DDM error views.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (category) (fts_failures_1h)",
-          "legendFormat": "{{category}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "normal"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 27,
-      "gridPos": {
-        "x": 0,
-        "y": 48,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "table",
-      "title": "Top failure reasons (last hour)",
-      "description": "Ten most frequent FTS failure messages, truncated to 150 characters.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "fts_failure_reasons_1h",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "renameByName": {
-              "Value": "files"
-            }
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "files",
-            "desc": true
-          }
-        ]
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "id": 28,
-      "gridPos": {
-        "x": 8,
-        "y": 48,
-        "w": 16,
-        "h": 8
-      }
-    },
-    {
-      "type": "row",
-      "title": "Rules and tokens (Rucio server)",
-      "collapsed": false,
-      "panels": [],
-      "id": 29,
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Rule creation",
-      "description": "Server-side time to create a replication rule.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[15m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_rule_add_rule_total_bucket[15m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 30,
-      "gridPos": {
-        "x": 0,
-        "y": 57,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Token exchange",
-      "description": "Time for OIDC token exchanges against the IdP.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[15m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(rucio_core_oidc___exchange_token_oidc_bucket[15m])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 31,
-      "gridPos": {
-        "x": 8,
-        "y": 57,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Token cache hit ratio",
-      "description": "Share of token lookups served from Rucio's cache.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(rucio_core_oidc_token_cache_hit_total[15m])) / (sum(increase(rucio_core_oidc_token_cache_hit_total[15m])) + sum(increase(rucio_core_oidc_token_cache_miss_total[15m])))",
-          "legendFormat": "hit ratio"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "showPoints": "never",
-            "spanNulls": 600000,
-            "stacking": {
-              "mode": "none"
-            }
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 32,
-      "gridPos": {
-        "x": 16,
-        "y": 57,
+        "y": 28,
         "w": 8,
         "h": 8
       }
@@ -1534,67 +944,68 @@
     {
       "type": "row",
       "title": "Logs",
-      "collapsed": false,
-      "panels": [],
-      "id": 33,
+      "collapsed": true,
+      "id": 22,
+      "panels": [
+        {
+          "type": "logs",
+          "title": "Errors across services",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "description": "Lines matching error, exception or failed in any testbed container.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{compose_project=~\".+\"} |~ \"(?i)error|exception|failed\""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "id": 20,
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 24,
+            "h": 10
+          }
+        },
+        {
+          "type": "logs",
+          "title": "Logs: $service",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{service=\"$service\"}"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "id": 21,
+          "gridPos": {
+            "x": 0,
+            "y": 47,
+            "w": 24,
+            "h": 10
+          }
+        }
+      ],
       "gridPos": {
         "x": 0,
-        "y": 65,
+        "y": 36,
         "w": 24,
         "h": 1
-      }
-    },
-    {
-      "type": "logs",
-      "title": "Logs: $service",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{service=\"$service\"}"
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "id": 34,
-      "gridPos": {
-        "x": 0,
-        "y": 66,
-        "w": 24,
-        "h": 10
-      }
-    },
-    {
-      "type": "logs",
-      "title": "Errors across services",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "description": "Lines matching error, exception or failed in any testbed container.",
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{compose_project=~\".+\"} |~ \"(?i)error|exception|failed\""
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "id": 35,
-      "gridPos": {
-        "x": 0,
-        "y": 76,
-        "w": 24,
-        "h": 10
       }
     }
   ]
