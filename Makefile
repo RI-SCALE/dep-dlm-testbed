@@ -380,7 +380,7 @@ endif
 .PHONY: stop
 stop: ## Stop the stack, remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) down -v
+	$(COMPOSE) down -v --remove-orphans
 else
 	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
