@@ -7,7 +7,10 @@ Direct-integration only — see docs/design/design-doc-004-direct-opa-integratio
 The vendored opa-ri-scale ODRL evaluator (package dep.*) is loaded by OPA at
 start-up; this script checks it's present, then loads:
   1. authz.rego (package vo.authz.v5)
-  2. data: vo/policy, vo/entitlement_policy and the ODRL policies at dep/odrl
+  2. data: vo/policy (admin_accounts) and the ODRL tier policy at dep/odrl
+
+Authorization is role-based (ADR-008): tiers come from the ODRL policy only,
+and accounts without a token are admins only when listed in ADMIN_ACCOUNTS.
 
 Usage:
     python ingest_policies.py [--opa-url URL] [--opa-dir DIR]
@@ -19,36 +22,19 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 AUTHZ_POLICY_ID = "authz_v5"
 ODRL_FILE = Path("odrl") / "data.json"
 
-DEFAULT_RSE_TYPES = ["DATADISK", "SCRATCHDISK", "LOCALGROUPDISK", "TAPE", "USERDISK"]
+# Accounts that authenticate without a token (userpass) and need the admin
+# tier: root, and ddmlab, which the testbed uses for setup and transfer tests.
+ADMIN_ACCOUNTS = ["root", "ddmlab"]
 
-# Only consulted when TIER_SOURCE is "claims"; with "odrl" the tiers come
-# from dep/odrl and authz.rego ignores this map.
-ENTITLEMENT_POLICY = {
-    "urn:example:aai.example.org:group:rucio-admins:role=member": "admin",
-    "urn:example:aai.example.org:group:atlas-production:role=member": "admin",
-    "urn:example:aai.example.org:group:rucio-users:role=member": "user",
-    "urn:example:aai.example.org:group:atlas-users:role=member": "user",
-    # DEP personas
-    "urn:example:aai.example.org:group:dep-operator:role=member": "admin",
-    "urn:example:aai.example.org:group:dep-end-user:role=member": "user",
-    "urn:example:aai.example.org:group:model-developer:role=member": "user",
-}
-
-# XRD3/XRD4/TEAPOT1/TEAPOT2 and COPERNICUS_S3 don't follow NAME_TYPE;
-# allowlisted rather than relaxing the convention globally.
-ALLOWLISTED_RSE_NAMES = ["XRD3", "XRD4", "TEAPOT1", "TEAPOT2", "COPERNICUS_S3"]
-
-# Where authz.rego takes admin/user tiers from: "odrl" (vendored evaluator
-# reading dep/odrl) or "claims" (ENTITLEMENT_POLICY below). Kept only as a
-# fallback while the ODRL path settles; remove together with the claims
-# branch in authz.rego and ENTITLEMENT_POLICY.
-TIER_SOURCE = "odrl"
+# Data left behind by earlier policy versions; removed so a live OPA holds
+# only what authz.rego reads.
+OBSOLETE_DATA = ["vo/entitlement_policy"]
 
 
 def _default_opa_dir() -> Path:
@@ -57,14 +43,27 @@ def _default_opa_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "config" / "opa"
 
 
-def put(url: str, body: bytes, content_type: str) -> int:
-    req = Request(url, data=body, headers={"Content-Type": content_type}, method="PUT")
+def _request(
+    url: str, method: str, body: bytes = None, content_type: str = None
+) -> int:
+    headers = {"Content-Type": content_type} if content_type else {}
+    req = Request(url, data=body, headers=headers, method=method)
     try:
         with urlopen(req, timeout=10) as resp:
             return resp.status
+    except HTTPError as exc:
+        return exc.code
     except URLError as exc:
-        print(f"ERROR: PUT {url} failed — {exc}", file=sys.stderr)
+        print(f"ERROR: {method} {url} failed — {exc}", file=sys.stderr)
         sys.exit(1)
+
+
+def put(url: str, body: bytes, content_type: str) -> int:
+    status = _request(url, "PUT", body, content_type)
+    if status >= 300:
+        print(f"ERROR: PUT {url} returned HTTP {status}", file=sys.stderr)
+        sys.exit(1)
+    return status
 
 
 def health_check(base_url: str) -> None:
@@ -118,6 +117,16 @@ def ingest_data(base_url: str, data: dict[str, object]) -> None:
         print(f"Data '{path}' ingested ({size} key(s)) — HTTP {status}")
 
 
+def remove_data(base_url: str, paths: list[str]) -> None:
+    for path in paths:
+        status = _request(f"{base_url}/v1/data/{path}", "DELETE")
+        if status == 204:
+            print(f"Data '{path}' removed (obsolete)")
+        elif status != 404:
+            print(f"ERROR: DELETE {path} returned HTTP {status}", file=sys.stderr)
+            sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument(
@@ -141,25 +150,18 @@ def main() -> None:
         print(f"ERROR: ODRL policies not found: {odrl_path}", file=sys.stderr)
         sys.exit(1)
 
-    vo_policy: dict[str, object] = {
-        "known_rse_types": DEFAULT_RSE_TYPES,
-        "allowlisted_rse_names": ALLOWLISTED_RSE_NAMES,
-    }
-    if TIER_SOURCE == "odrl":
-        vo_policy["tier_source"] = "odrl"
-
     health_check(base_url)
     require_evaluator(base_url)
     ingest_module(base_url, AUTHZ_POLICY_ID, opa_dir / "authz.rego")
     ingest_data(
         base_url,
         {
-            "vo/policy": vo_policy,
-            "vo/entitlement_policy": ENTITLEMENT_POLICY,
+            "vo/policy": {"admin_accounts": ADMIN_ACCOUNTS},
             "dep/odrl": json.loads(odrl_path.read_text()),
         },
     )
-    print(f"Done (tier_source={TIER_SOURCE}).")
+    remove_data(base_url, OBSOLETE_DATA)
+    print(f"Done (admin_accounts={ADMIN_ACCOUNTS}).")
 
 
 if __name__ == "__main__":
