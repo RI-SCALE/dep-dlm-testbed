@@ -165,3 +165,11 @@ test_prohibition_revokes_user_tier if {
 	}
 		with data.dep.odrl as odrl
 }
+
+test_listed_account_with_token_needs_a_tier if {
+	not data.vo.authz.v1.allow with input as {
+		"issuer": "root", "action": "del_rse",
+		"token": {"sub": "x", "entitlements": []}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}
