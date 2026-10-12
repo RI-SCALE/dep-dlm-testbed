@@ -181,6 +181,8 @@ class TestAdminTier:
 
 
 class TestUserTier:
+    # randomaccount's subject is also seeded onto root/ddmlab (init-testbed.sh):
+    # it must still be denied, since admin_accounts only applies without a token.
     @pytest.mark.parametrize("username", USER_PERSONAS + ["randomaccount"])
     def test_admin_action_denied(self, token_for, username):
         assert_opa_denied(
@@ -207,4 +209,38 @@ class TestUserTier:
         token = token_for(username)
         assert_allowed(
             add_dataset(token, scope, username), username, token, expected=(201,)
+        )
+
+    def test_deletes_another_personas_rule(self, token_for):
+        """No ownership on rules either: any user-tier member may manage them.
+
+        del_rule reaches the policy with a rule_id only, so this also checks
+        the rule actions are wired through to OPA end to end.
+        """
+        owner, other = token_for("dependuser"), token_for("modeldeveloper")
+        name = f"probe-rule-{int(time.time() * 1000)}"
+        assert_allowed(
+            rucio_rest(f"/dids/dependuser/{name}", owner, "POST", {"type": "DATASET"}),
+            "dependuser",
+            owner,
+            expected=(201,),
+        )
+        resp = rucio_rest(
+            "/rules/",
+            owner,
+            "POST",
+            {
+                "dids": [{"scope": "dependuser", "name": name}],
+                "account": "dependuser",
+                "copies": 1,
+                "rse_expression": "XRD3",
+            },
+        )
+        assert_allowed(resp, "dependuser", owner, expected=(201,))
+        rule_id = resp.json()[0]
+        assert_allowed(
+            # Rucio's DELETE /rules/{id} parses a JSON body (purge_replicas etc.).
+            rucio_rest(f"/rules/{rule_id}", other, "DELETE", {}),
+            "modeldeveloper",
+            other,
         )
