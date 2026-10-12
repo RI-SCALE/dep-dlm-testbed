@@ -46,7 +46,12 @@ _rucio_target := data.vo.policy.rucio_target if {
 
 default _is_admin := false
 
-_is_admin if input.issuer in _admin_accounts
+# Token-less (userpass) accounts only: a token's tier always comes from
+# ODRL, even when its subject also maps to a listed account.
+_is_admin if {
+	input.issuer in _admin_accounts
+	not input.token.sub
+}
 
 _is_admin if _has_tier("admin")
 
