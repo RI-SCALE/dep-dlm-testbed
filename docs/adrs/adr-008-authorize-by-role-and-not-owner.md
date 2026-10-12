@@ -49,12 +49,16 @@ shares data, removes the incentive for duplicate copies, and makes the AAI
 and the ODRL policy the single source of roles, with no catalog lookups or
 maintained lists.
 
-The ODRL policy assigns each token a tier from its entitlements and
-authentication level. Admins (e.g. `dep-operator`, with MFA) may perform
-every action. Users (e.g. `dep-end-user`, `model-developer`) may manage
-rules, DIDs and replicas on any scope; everything else stays admin-only. A
-token without a tier may do nothing, and accounts without a token are admins
-only when explicitly listed.
+The ODRL policy assigns each token a tier from its entitlements (group and
+role, matched exactly) and authentication level. Admins (e.g.
+`dep-operator`, with MFA) may perform every action. Users (e.g.
+`dep-end-user`, `model-developer`) may manage rules, DIDs and replicas on
+any scope; everything else stays admin-only. A token without a tier may do
+nothing, and accounts without a token are admins only when explicitly
+listed.
+
+One deployment serves one tenant: every user-tier group works on the same
+data. Groups that must not share data need separate deployments.
 
 ### Positive Consequences
 
@@ -66,7 +70,8 @@ only when explicitly listed.
 ### Negative Consequences
 
 * Any user can modify or delete any DID, replica or rule, including another
-  group's — acceptable only while DEP needs no separation between groups
+  group's — acceptable only while DEP needs no separation between groups;
+  isolating groups needs separate deployments or a new decision
 * Rule accounts are not checked, so a user can charge another account's
   quota
 * RSE naming and protocol conventions are no longer enforced; admins are
