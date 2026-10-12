@@ -26,18 +26,20 @@ Rucio development is planned to add token exchange (RFC 8693), so transfers
 carry a token with `sub` = user and `act` = Rucio. The AAI already issues an
 `entitlements` claim with group and role membership, e.g.
 `urn:example:aai.example.org:group:dep-operator:role=member`. At the same
-time, project members must share data without duplicate copies on the
-destination.
+time, project members must be able to read each other's data. Rucio keeps
+one replica of a DID per RSE, and ADR-008 lets shared data be registered
+once; storage permissions must not force a copy per user on top of that.
 
 **Question:** how should storage endpoints map token identity to local users
-and groups so that user context is preserved and shared project data stays a
-single copy?
+and groups so that user context is preserved and all project members can
+read the same replica?
 
 ## Decision Drivers
 
 * User context preserved end to end (hard constraint)
 * Fine-grained authorization per user, group and role
-* Shared project data without duplicate copies on the destination
+* One replica per DID readable by all project members, so storage
+  permissions never require a copy per user
 * Traceability: every action attributable to a person and an actor
   (ISO 27001)
 * Site autonomy: HPC sites keep control of their UID/GID space
@@ -55,10 +57,10 @@ single copy?
 ## Decision Outcome
 
 Chosen option: **4. Username claim + entitlements, via Rucio token
-exchange**, because it is the only option that meets the hard constraint
-while keeping group membership central in the AAI, sharing one copy per
-project, recording the actor, and leaving each site in control of its own
-ID space.
+exchange**, because it meets the hard constraint with group membership
+kept central in the AAI and no per-site mapping data, lets project members
+share one replica, records the actor, and leaves each site in control of
+its own ID space.
 
 The username claim decides the file owner (attribution); the entitlement's
 group part decides the file group and permitted paths, and its role the access
@@ -73,7 +75,9 @@ concept doc.
 * User, group, role and actor are all preserved on storage and in logs
 * Membership is managed centrally in the AAI; removing an entitlement
   revokes access with the next token
-* One physical copy per project serves all members
+* One replica serves all project members, provided they use the same DID;
+  deduplication itself comes from Rucio (one replica per DID and RSE) and
+  ADR-008 (data registered once), not from this mapping
 * Sites map names to their own UIDs/GIDs; no shared ID space required
 * Credits and usage stay per Rucio account (ADR-005); file ownership adds
   per-user attribution on disk
@@ -90,6 +94,9 @@ concept doc.
   site they use
 * Data written during the interim is owned by the service account and needs
   a one-off migration to project groups
+* Duplicates are still possible when the same content is registered under
+  different DIDs, written outside Rucio, or needed across projects without
+  an ACL; they are detected, not prevented
 
 ## Confirmation
 
@@ -101,7 +108,11 @@ concept doc.
   expires
 * Endpoint logs contain `sub`, `act`, entitlement and mapped UID/GID for
   every request
+* Two project members reading the same DID resolve to the same physical
+  path, and both are allowed by the project's GID/ACL
 * Rucio's reaper deletes user-owned replicas in project directories
+* A periodic catalog check finds no files with the same checksum and size
+  under different DIDs
 * A periodic check finds no duplicate or reused UIDs/GIDs and no orphaned
   files
 * Transfers queued longer than the token lifetime complete successfully
@@ -142,7 +153,7 @@ access level, `act` logged.
 
 * Good — meets the hard constraint: user, group, role and actor preserved
 * Good — central membership in the AAI; fast revocation
-* Good — one copy per project; site ID autonomy kept
+* Good — project members can share one replica; site ID autonomy kept
 * Bad — needs Rucio development and FTS/endpoint support for exchanged tokens
 * Bad — entitlement mapping and write-as-user support vary per storage type
 * Bad — account and group provisioning at every HPC site
@@ -160,6 +171,7 @@ Rucio stores a UID per account and passes it to storage.
 
 * [Identity mapping on HPC storage](../concepts/identity-mapping-on-hpc-storage.md): concept with mapping, directory layout and runtime views
 * [ADR-005: Usage reporting for credits](adr-005-usage-reporting-for-credits.md)
+* [ADR-008: Authorize Rucio actions by entitlement role instead of data ownership](adr-008-authorize-by-role-and-not-owner.md)
 * [RFC 8693: OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693)
 * AARC-G002: expressing group membership and role information (entitlement syntax)
 * WLCG Common JWT Profiles (storage scopes)

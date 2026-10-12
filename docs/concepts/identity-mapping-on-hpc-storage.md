@@ -18,9 +18,10 @@ into a UID (user) and a GID (group) before any file is touched.
 | **May** they access this? | `entitlements` | file group (GID), path rules | authorization |
 | **What** executed it? | `act` | endpoint log only | chain of custody |
 
-Access is decided **per group**, attribution is kept **per user**. One
-physical copy per project directory serves every member; Rucio already keeps
-one replica per RSE, so nothing is duplicated.
+Access is decided **per group**, attribution is kept **per user**. Rucio
+keeps one replica of a DID per RSE, and the project group lets every member
+read it, so data registered once is stored once. Duplicates only arise when
+the same content gets a second DID (see "One copy" below).
 
 ## What each layer looks like
 
@@ -90,6 +91,12 @@ other::---
   directory ACL, whoever owns the file.
 - **Cross-project data**: lives in one project's directory; other projects
   get an extra ACL entry, or Rucio places it in a shared area.
+- **One copy**: deduplication is by DID, not by content. Shared data is
+  registered once in a project scope (ADR-008); rules from several accounts
+  on the same DID and RSE share one replica. Same content under another DID,
+  files written outside Rucio, or a project re-uploading data it cannot read
+  produce a second copy; a periodic catalog check on checksum and size
+  finds these, and Rucio's auditor finds files unknown to Rucio.
 - **Lifecycle**: removing an entitlement in the AAI revokes access with the
   next token; UIDs/GIDs come from the site directory and are never reused.
 - **Interim**: until Rucio exchanges tokens, transfers carry Rucio's own
