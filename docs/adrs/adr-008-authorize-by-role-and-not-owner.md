@@ -60,6 +60,8 @@ listed.
 One deployment serves one tenant: every user-tier group works on the same
 data. Groups that must not share data need separate deployments.
 
+This decision holds while each community gets its own deployment. Revisit it if communities share one with real data long-term (as on the current CERN instance), by adding scope grants per group to the ODRL policy or if credits are enforced per Rucio account, by checking rule accounts.
+
 ### Positive Consequences
 
 * Group members share all data; registering it once is enough
