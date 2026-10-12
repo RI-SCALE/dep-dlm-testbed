@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rucio-opa-v5-policy"
+name = "rucio-opa-v1-policy"
 version = "0.1.0"
-description = "Phase 5 — Rucio policy package (OPA as PDP, OIDC token-native authorisation via URN entitlements)"
+description = "Rucio policy package (OPA as PDP, OIDC token-native authorisation via URN entitlements)"
 authors = [{ name = "someone", email = "placeholder@cern.ch" }]
 requires-python = ">=3.9"
 readme = "README.md"

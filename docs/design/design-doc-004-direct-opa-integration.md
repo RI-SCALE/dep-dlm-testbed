@@ -12,7 +12,7 @@ opa-policy-package's phase6 already solved this exact problem for its own testbe
 
 ## Goals
 
-- `has_permission()` in this repo's Rucio server delegates to OPA using the same Rego (`vo.authz.v5`) and the same request-shaping logic as opa-policy-package's `permission.py` (direct branch only).
+- `has_permission()` in this repo's Rucio server delegates to OPA using the same Rego (`vo.authz.v1`) and the same request-shaping logic as opa-policy-package's `permission.py` (direct branch only).
 - Keycloak issues tokens with `entitlements` and `acr` claims, matching what `authz.rego`'s `_is_privileged`/`_has_privilege_level` expect.
 - OPA is started, seeded with policy and data, and reachable from `rucio-server` and `rucio-daemons` in both compose variants and (eventually) the Helm/GitOps path.
 - The ingest script is testbed-scoped: no phase concept, no multi-phase `PHASES` dict — this repo has one Rucio deployment, not six.
@@ -27,11 +27,11 @@ opa-policy-package's phase6 already solved this exact problem for its own testbe
 
 ## Design
 
-**Rego.** Copy `policies/rego/phase6/authz.rego` (`package vo.authz.v5`) verbatim into this repo, e.g. `shared/config/opa/authz.rego`. Same treatment as `shared/config/rucio/*.cfg` — a config asset the testbed owns a copy of, not a package dependency.
+**Rego.** Copy `policies/rego/phase6/authz.rego` (`package vo.authz.v1`) verbatim into this repo, e.g. `shared/config/opa/authz.rego`. Same treatment as `shared/config/rucio/*.cfg` — a config asset the testbed owns a copy of, not a package dependency.
 
-**Ingest script.** Adapt the shown `ingest_policies.py` (already testbed-shaped: no `PhaseSpec`/phase selection, single `PHASE` constant) into `shared/scripts/ingest_policies.py`. Two changes from the version shown: drop the `authz_v6` policy_id (that name is a phase6-era leftover in opa-policy-package itself — use `authz_v5` or `rucio_authz` to match the package the Rego declares) and point `--opa-dir` default at the copied file's real location in this repo rather than a `docker/` subpath that doesn't exist here.
+**Ingest script.** Adapt the shown `ingest_policies.py` (already testbed-shaped: no `PhaseSpec`/phase selection, single `PHASE` constant) into `shared/scripts/ingest_policies.py`. Two changes from the version shown: drop the `authz_v1` policy_id (that name is a phase6-era leftover in opa-policy-package itself — use `authz_v1` or `rucio_authz` to match the package the Rego declares) and point `--opa-dir` default at the copied file's real location in this repo rather than a `docker/` subpath that doesn't exist here.
 
-**Compose.** Add an `opa` service (`openpolicyagent/opa:1.8.0`, same as opa-policy-package) and an `opa-init` one-shot service (`python:3.11-slim`, waits on `/health`, runs the ingest script, `restart: "no"`) to both `docker-compose.managed.yml` and `docker-compose.unmanaged.yml`. `rucio-server` and `rucio-daemons` gain `OPA_URL=http://opa:8181`, `OPA_POLICY_PATH=vo/authz/v5/allow`, and a `depends_on: opa-init: condition: service_completed_successfully`.
+**Compose.** Add an `opa` service (`openpolicyagent/opa:1.8.0`, same as opa-policy-package) and an `opa-init` one-shot service (`python:3.11-slim`, waits on `/health`, runs the ingest script, `restart: "no"`) to both `docker-compose.managed.yml` and `docker-compose.unmanaged.yml`. `rucio-server` and `rucio-daemons` gain `OPA_URL=http://opa:8181`, `OPA_POLICY_PATH=vo/authz/v1/allow`, and a `depends_on: opa-init: condition: service_completed_successfully`.
 
 **Keycloak realm.** Merge into `shared/config/keycloak/realm.json`: the `entitlements` client scope (two protocol mappers: `entitlements` list attribute, `acr` attribute) and the `pep:rucio` scope, both attached to the `rucio` client's `defaultClientScopes`. Add `entitlements`/`acr` attributes to existing realm users (`randomaccount`, `adminuser`, or whatever this realm's equivalents are named) so they carry the URNs `authz.rego`'s fallback entitlement map expects. The `authz-service` client and its `aud:authz-service` scope are **not** ported — direct mode needs neither.
 
@@ -64,7 +64,7 @@ opa-policy-package's phase6 already solved this exact problem for its own testbe
 
 ## Sequencing
 
-1. Copy Rego + write the testbed-scoped ingest script; verify `curl localhost:8181/v1/data/vo/authz/v5/allow` responds correctly against hand-crafted input before touching Rucio.
+1. Copy Rego + write the testbed-scoped ingest script; verify `curl localhost:8181/v1/data/vo/authz/v1/allow` responds correctly against hand-crafted input before touching Rucio.
 2. Add `opa`/`opa-init` to compose (both variants), no Rucio wiring yet — confirm the containers start and ingest succeeds in isolation.
 3. Realm changes: add scopes/attributes, confirm via a minted token that `entitlements`/`acr` claims appear.
 4. Port `permission.py`/`opa_client.py`/`oidc.py` patches; wire `OPA_URL`/`OPA_POLICY_PATH` env vars into `rucio-server`/`rucio-daemons`.
@@ -74,6 +74,6 @@ opa-policy-package's phase6 already solved this exact problem for its own testbe
 ## Open questions
 
 - Does this repo's existing `shared/patches/rucio/oidc.py` already forward token claims into `request.environ`, or does that need to be added as part of this work? (Needs inspection before Design is finalized — affects Touch points.)
-- Policy ID naming: opa-policy-package's own `ingest_policies.py` uses `authz_v6` as the `policy_id` for a Rego file declaring `package vo.authz.v5` — a pre-existing inconsistency there, not something to copy blindly. Confirm what OPA policy ID convention this repo should use.
+- Policy ID naming: opa-policy-package's own `ingest_policies.py` uses `authz_v1` as the `policy_id` for a Rego file declaring `package vo.authz.v1` — a pre-existing inconsistency there, not something to copy blindly. Confirm what OPA policy ID convention this repo should use.
 - Does `dep-dlm-testbed` need `RUCIO_OPA_DEBUG_INPUT` exposed as a compose-level toggle, or is direct env-var override on the container sufficient?
 - Are the entitlement URNs (`urn:example:aai.example.org:...`) meant to stay as placeholder/example values here too, or does this testbed have a real AAI namespace it should use instead?

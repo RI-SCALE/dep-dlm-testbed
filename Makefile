@@ -380,7 +380,7 @@ endif
 .PHONY: stop
 stop: ## Stop the stack, remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) down -v
+	$(COMPOSE) --profile '*' down -v --remove-orphans
 else
 	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
@@ -698,7 +698,7 @@ userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches 
 
 .PHONY: clear-artifacts
 clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
-	$(COMPOSE) down -v --remove-orphans 2>/dev/null || true
+	$(COMPOSE) --profile '*' down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \

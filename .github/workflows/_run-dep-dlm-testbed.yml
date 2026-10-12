@@ -163,6 +163,10 @@ jobs:
       - name: Initialize DEP DLM testbed
         run: make init
 
+      - name: Authorization persona test
+        if: inputs.scope_profile == 'local'
+        run: make test-authz-personas
+
       - name: Map identity to seeded account (compose)
         if: (inputs.scope_profile == 'egi-dev' || inputs.scope_profile == 'ls-aai-dev') && inputs.runtime == 'compose'
         run: |

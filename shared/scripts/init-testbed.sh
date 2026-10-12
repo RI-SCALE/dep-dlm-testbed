@@ -818,16 +818,15 @@ setup_fts_oidc_provider() {
 setup_scopes_and_quotas() {
     echo "=== Configuring Scopes and Quotas ==="
 
+    # Scopes are namespaces only (ADR-008): authz.rego never checks who
+    # owns a scope or rule. Any user-tier persona (dependuser,
+    # modeldeveloper) may manage DIDs, replicas and rules in any of them;
+    # admins (depoperator with MFA, accounts in admin_accounts) may do
+    # everything. Register shared data once, in one scope — a second scope
+    # for the same files would only create duplicate catalog entries.
     ra scope add --account root --scope test || true
     ra scope add --account ddmlab --scope ddmlab || true
     ra scope add --account randomaccount --scope randomaccount || true
-
-    # DEP persona self-service scopes (design-008). adminuser/depoperator
-    # need none — they exercise the admin/privileged path only, same as
-    # root/ddmlab. dependuser/modeldeveloper need their own-name scope for
-    # authz.rego's _perm_add_did ownership clause to match
-    # (input.kwargs.scope in input.kwargs.owned_scopes), exercised by
-    # test_authz_personas.py::TestPersonaScopeOwnership.
     ra scope add --account dependuser --scope dependuser || true
     ra scope add --account modeldeveloper --scope modeldeveloper || true
 

@@ -107,7 +107,7 @@ ruciodb:
     - name: OPA_URL
       value: http://opa:8181
     - name: OPA_POLICY_PATH
-      value: vo/authz/v5/allow
+      value: vo/authz/v1/allow
     - name: OPA_TIMEOUT
       value: "2"
     - name: RUCIO_OPA_DEBUG_INPUT
@@ -172,16 +172,16 @@ ruciodb:
     # entrypoint, so Rucio can import the package before an install finishes.
     - configMapFullName: testbed-patches
       volumeName: opa-policy-init
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/__init__.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--__init__.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-client
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/opa_client.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--opa_client.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-permission
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/permission.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--permission.py
 
 
 rucio-daemons:
@@ -269,7 +269,7 @@ rucio-daemons:
     - name: OPA_URL
       value: http://opa:8181
     - name: OPA_POLICY_PATH
-      value: vo/authz/v5/allow
+      value: vo/authz/v1/allow
     - name: OPA_TIMEOUT
       value: "2"
     - name: RUCIO_OPA_DEBUG_INPUT
@@ -333,16 +333,16 @@ rucio-daemons:
     # install could finish, crash-looping on PolicyPackageNotFound.
     - configMapFullName: testbed-patches
       volumeName: opa-policy-init
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/__init__.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--__init__.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/__init__.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--__init__.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-client
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/opa_client.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--opa_client.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/opa_client.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--opa_client.py
     - configMapFullName: testbed-patches
       volumeName: opa-policy-permission
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy/permission.py
-      subPath: rucio--rucio_opa_v5_policy--src--rucio_opa_v5_policy--permission.py
+      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/permission.py
+      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--permission.py
 
 # FTS
 
