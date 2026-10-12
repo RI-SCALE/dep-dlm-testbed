@@ -230,7 +230,7 @@ services:
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
       - OPA_URL=http://opa:8181
-      - OPA_POLICY_PATH=vo/authz/v5/allow
+      - OPA_POLICY_PATH=vo/authz/v1/allow
       - OPA_TIMEOUT=2
       - RUCIO_OPA_DEBUG_INPUT=1
     ports:
@@ -256,7 +256,7 @@ services:
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy/src/rucio_opa_v5_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.token-exchange.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
@@ -333,7 +333,7 @@ services:
       # daemon image expects the daemon name + args via env
       - RUCIO_ENABLE_LOGS=True
       - OPA_URL=http://opa:8181
-      - OPA_POLICY_PATH=vo/authz/v5/allow
+      - OPA_POLICY_PATH=vo/authz/v1/allow
       - OPA_TIMEOUT=2
     entrypoint:
       - bash
@@ -351,7 +351,7 @@ services:
         rucio-undertaker --sleep-time 5 &
         wait
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v5_policy/src/rucio_opa_v5_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v5_policy:ro
+      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.token-exchange.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro

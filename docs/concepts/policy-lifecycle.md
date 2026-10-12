@@ -28,7 +28,7 @@ so updating a policy is a data change, delivered with the next bundle build.
 
 ### Where Rucio fits
 
-Today Rucio queries this package's Rego (`vo.authz.v5`), with privilege tiers
+Today Rucio queries this package's Rego (`vo.authz.v1`), with privilege tiers
 taken from `data.vo.entitlement_policy`. The intended hybrid:
 
 - **ODRL (WP4 repository)** decides *who holds which tier*: DEP entitlement → admin / user.

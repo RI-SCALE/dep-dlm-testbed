@@ -1,10 +1,10 @@
 # Licensed under the Apache License, Version 2.0
 """
-Thin synchronous OPA REST client — identical in structure to Phase 5.
+Thin synchronous OPA REST client.
 
 Environment variables:
     OPA_URL          — base URL of the OPA server  (default: http://localhost:8181)
-    OPA_POLICY_PATH  — Rego rule path to query      (default: vo/authz/v5/allow)
+    OPA_POLICY_PATH  — Rego rule path to query      (default: vo/authz/v1/allow)
     OPA_TIMEOUT      — HTTP timeout in seconds       (default: 2)
 """
 
@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 log = logging.getLogger(__name__)
 
 _DEFAULT_URL = "http://localhost:8181"
-_DEFAULT_POLICY_PATH = "vo/authz/v5/allow"
+_DEFAULT_POLICY_PATH = "vo/authz/v1/allow"
 _DEFAULT_TIMEOUT = 2
 
 

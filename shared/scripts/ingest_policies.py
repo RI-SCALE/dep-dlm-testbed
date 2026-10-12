@@ -6,7 +6,7 @@ OPA server for dep-dlm-testbed.
 Direct-integration only — see docs/design/design-doc-004-direct-opa-integration.md.
 The vendored opa-ri-scale ODRL evaluator (package dep.*) is loaded by OPA at
 start-up; this script checks it's present, then loads:
-  1. authz.rego (package vo.authz.v5)
+  1. authz.rego (package vo.authz.v1)
   2. data: vo/policy (admin_accounts) and the ODRL tier policy at dep/odrl
 
 Authorization is role-based (ADR-008): tiers come from the ODRL policy only,
@@ -25,7 +25,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-AUTHZ_POLICY_ID = "authz_v5"
+AUTHZ_POLICY_ID = "authz_v1"
 ODRL_FILE = Path("odrl") / "data.json"
 
 # Accounts that authenticate without a token (userpass) and need the admin

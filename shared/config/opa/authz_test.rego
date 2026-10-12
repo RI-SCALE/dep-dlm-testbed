@@ -1,9 +1,9 @@
-# Unit tests for vo.authz.v5 — run with `opa test shared/config/opa -v`
+# Unit tests for vo.authz.v1 — run with `opa test shared/config/opa -v`
 # (the vendored ODRL evaluator under vendor/ must be loaded too).
 #
 # Decision logic only: no stack, no bundle. The ODRL tier policy is injected
 # per test with `with data.dep.odrl`, mirroring odrl/data.json.
-package vo.authz.v5_test
+package vo.authz.v1_test
 
 import rego.v1
 
@@ -66,7 +66,7 @@ _admin_actions := [
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 _ok(issuer, action, claims, kwargs) if {
-	data.vo.authz.v5.allow with input as {
+	data.vo.authz.v1.allow with input as {
 		"issuer": issuer, "action": action,
 		"token": {"entitlements": claims}, "kwargs": kwargs,
 	}
@@ -74,7 +74,7 @@ _ok(issuer, action, claims, kwargs) if {
 }
 
 _ok_mfa(issuer, action, claims, kwargs) if {
-	data.vo.authz.v5.allow with input as {
+	data.vo.authz.v1.allow with input as {
 		"issuer": issuer, "action": action,
 		"token": {"entitlements": claims, "acr": _mfa}, "kwargs": kwargs,
 	}
@@ -130,7 +130,7 @@ test_unlisted_entitlement_gets_nothing if {
 test_mfa_alone_grants_nothing if not _ok_mfa("carol", "add_did", [], {"scope": "ddmlab", "name": "f"})
 
 test_missing_token_gets_nothing if {
-	not data.vo.authz.v5.allow with input as {"issuer": "carol", "action": "add_did", "kwargs": {}}
+	not data.vo.authz.v1.allow with input as {"issuer": "carol", "action": "add_did", "kwargs": {}}
 		with data.dep.odrl as _odrl
 }
 
@@ -159,7 +159,7 @@ test_prohibition_revokes_user_tier if {
 		_odrl.policies[0],
 		{"uid": "urn:test:ban", "type": "Set", "prohibition": [{"action": "rucio:user", "target": _target, "assignee": _dep_end_user}]},
 	]}
-	not data.vo.authz.v5.allow with input as {
+	not data.vo.authz.v1.allow with input as {
 		"issuer": "dependuser", "action": "add_did",
 		"token": {"entitlements": [_dep_end_user]}, "kwargs": {"scope": "ddmlab", "name": "f"},
 	}

@@ -111,4 +111,4 @@ only when explicitly listed.
 * `shared/config/opa/odrl/data.json`: tier policy
 * `shared/config/opa/vendor/opa-ri-scale/VENDORED.md`: ODRL evaluator
 * `shared/scripts/ingest_policies.py`
-* `shared/patches/rucio/rucio_opa_v5_policy/`
+* `shared/patches/rucio/rucio_opa_v1_policy/`

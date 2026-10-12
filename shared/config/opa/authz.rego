@@ -1,4 +1,4 @@
-package vo.authz.v5
+package vo.authz.v1
 
 import rego.v1
 

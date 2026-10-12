@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from rucio.core.permission import PermissionResult
     from sqlalchemy.orm import Session
 
-from rucio_opa_v5_policy.opa_client import query_opa
+from rucio_opa_v1_policy.opa_client import query_opa
 
 log = logging.getLogger(__name__)
 
