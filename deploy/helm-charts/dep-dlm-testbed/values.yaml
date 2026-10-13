@@ -112,6 +112,8 @@ ruciodb:
       value: "2"
     - name: RUCIO_OPA_DEBUG_INPUT
       value: "1"
+    - name: PROMETHEUS_MULTIPROC_DIR
+      value: /tmp
 
   secretMounts:
     # Same directory mount as the GSI server
@@ -274,6 +276,8 @@ rucio-daemons:
       value: "2"
     - name: RUCIO_OPA_DEBUG_INPUT
       value: "1"
+    - name: PROMETHEUS_MULTIPROC_DIR
+      value: /tmp
 
   secretMounts:
     - secretFullName: testbed-certs
@@ -958,3 +962,190 @@ opa:
     - name: evaluator
       mountPath: /policies/dep
       readOnly: true
+
+# Observability (design-doc-005): exporters, alert rules, dashboard.
+# Includes kube-prometheus-stack, Loki and Alloy (same values as deploy/gitops/base/values).
+observability:
+  enabled: false
+
+kube-prometheus-stack:
+  fullnameOverride: kube-prometheus-stack
+  # kube-prometheus-stack for the DEP DLM testbed (design-doc-005), release
+  # "kube-prometheus-stack" in namespace "monitoring". Mirrors the Compose
+  # Prometheus + Grafana; Alertmanager is enabled only on Kubernetes.
+
+  # Testbed-sized: no node/cluster monitoring, no default k8s rules/dashboards.
+  # GKE manages the control plane, so its components can't be scraped anyway.
+  defaultRules: { create: false }
+  nodeExporter: { enabled: false }
+  kubeStateMetrics: { enabled: false }
+  kubeControllerManager: { enabled: false }
+  kubeScheduler: { enabled: false }
+  kubeEtcd: { enabled: false }
+  kubeProxy: { enabled: false }
+  kubelet: { enabled: false }
+  coreDns: { enabled: false }
+  kubeApiServer: { enabled: false }
+
+  prometheus:
+    prometheusSpec:
+      image: { tag: v3.1.0 }               # same as Compose; fallback_scrape_protocol needs v3
+      retention: 2d
+      # Pick up the PrometheusRule from the observability chart in any namespace.
+      ruleSelectorNilUsesHelmValues: false
+      ruleNamespaceSelector: {}
+      # Same job names as prometheus.compose.yml (alerts, dashboard and
+      # test_observability.py rely on them). Endpoints discovery replaces the
+      # static targets, so one config serves dep-dlm-sandbox/-staging/-production.
+      additionalScrapeConfigs:
+        - job_name: rucio-server
+          metrics_path: /metrics/
+          # Rucio's Flask view sends text/html, which Prometheus 3 rejects otherwise.
+          fallback_scrape_protocol: PrometheusText0.0.4
+          scrape_interval: 30s
+          scrape_timeout: 30s
+          kubernetes_sd_configs: [{ role: endpoints }]
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+              regex: dep-dlm-.+;rucio-server
+              action: keep
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: http
+              action: keep
+        - job_name: fts
+          kubernetes_sd_configs: [{ role: endpoints }]
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+              regex: dep-dlm-.+;fts-exporter
+              action: keep
+        - job_name: rucio-db
+          kubernetes_sd_configs: [{ role: endpoints }]
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+              regex: dep-dlm-.+;rucio-db-exporter
+              action: keep
+
+  alertmanager:
+    enabled: true
+
+  grafana:
+    # Testbed only: anonymous admin, as in Compose. Remove for production.
+    grafana.ini:
+      auth.anonymous: { enabled: true, org_role: Admin }
+      auth: { disable_login_form: true }
+    defaultDashboardsEnabled: false
+    sidecar:
+      datasources:
+        uid: prometheus                    # dashboard references uid "prometheus"
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        searchNamespace: ALL               # dashboard ConfigMap lives in dep-dlm-<env>
+    additionalDataSources:
+      - name: Loki
+        uid: loki
+        type: loki
+        url: http://loki:3100
+
+loki:
+  fullnameOverride: loki
+  # Loki single binary with filesystem storage (release "loki", namespace
+  # "monitoring"), the Kubernetes counterpart of the Compose loki service.
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig: { replication_factor: 1 }
+    storage: { type: filesystem }
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index: { prefix: index_, period: 24h }
+    limits_config:
+      retention_period: 48h
+  singleBinary:
+    replicas: 1
+    persistence: { enabled: true, size: 5Gi }
+  # Single binary only: switch off the scalable/microservice targets and extras.
+  backend: { replicas: 0 }
+  read: { replicas: 0 }
+  write: { replicas: 0 }
+  ingester: { replicas: 0 }
+  querier: { replicas: 0 }
+  queryFrontend: { replicas: 0 }
+  queryScheduler: { replicas: 0 }
+  distributor: { replicas: 0 }
+  compactor: { replicas: 0 }
+  indexGateway: { replicas: 0 }
+  bloomCompactor: { replicas: 0 }
+  bloomGateway: { replicas: 0 }
+  gateway: { enabled: false }
+  chunksCache: { enabled: false }
+  resultsCache: { enabled: false }
+  lokiCanary: { enabled: false }
+  test: { enabled: false }
+  minio: { enabled: false }
+
+alloy:
+  fullnameOverride: alloy
+  # Grafana Alloy (release "alloy", namespace "monitoring"): ships pod logs from
+  # the dep-dlm-* namespaces to Loki. Counterpart of config.compose.alloy, with
+  # pod discovery instead of Docker discovery. The "service" label matches the
+  # Compose one (component name), so dashboard and tests query both the same way.
+  alloy:
+    configMap:
+      content: |
+        discovery.kubernetes "pods" {
+          role = "pod"
+          namespaces { names = [] }
+        }
+
+        discovery.relabel "pods" {
+          targets = discovery.kubernetes.pods.targets
+
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            regex         = "dep-dlm-.+"
+            action        = "keep"
+          }
+          // service = pod label "app", else app.kubernetes.io/name, else container
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "service"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+            regex         = "(.+)"
+            target_label  = "service"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app"]
+            regex         = "(.+)"
+            target_label  = "service"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+        }
+
+        loki.source.kubernetes "pods" {
+          targets    = discovery.relabel.pods.output
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint {
+            url = "http://loki:3100/loki/api/v1/push"
+          }
+        }

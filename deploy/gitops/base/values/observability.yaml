@@ -1,0 +1,7 @@
+# Values for deploy/helm-charts/observability (namespace dep-dlm-<env>).
+# Sandbox uses the defaults: exporters reach the in-cluster ftsdb and ruciodb.
+# Staging/production: point the exporters at Cloud SQL via a Secret, e.g.
+# exporters:
+#   fts:   { dsnSecret: { name: testbed-secrets, key: fts-exporter-dsn } }
+#   rucio: { dsnSecret: { name: testbed-secrets, key: rucio-db-exporter-dsn } }
+{}

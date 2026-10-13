@@ -1,0 +1,77 @@
+fullnameOverride: kube-prometheus-stack
+# kube-prometheus-stack for the DEP DLM testbed (design-doc-005), release
+# "kube-prometheus-stack" in namespace "monitoring". Mirrors the Compose
+# Prometheus + Grafana; Alertmanager is enabled only on Kubernetes.
+
+# Testbed-sized: no node/cluster monitoring, no default k8s rules/dashboards.
+# GKE manages the control plane, so its components can't be scraped anyway.
+defaultRules: { create: false }
+nodeExporter: { enabled: false }
+kubeStateMetrics: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeEtcd: { enabled: false }
+kubeProxy: { enabled: false }
+kubelet: { enabled: false }
+coreDns: { enabled: false }
+kubeApiServer: { enabled: false }
+
+prometheus:
+  prometheusSpec:
+    image: { tag: v3.1.0 }               # same as Compose; fallback_scrape_protocol needs v3
+    retention: 2d
+    # Pick up the PrometheusRule from the observability chart in any namespace.
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}
+    # Same job names as prometheus.compose.yml (alerts, dashboard and
+    # test_observability.py rely on them). Endpoints discovery replaces the
+    # static targets, so one config serves dep-dlm-sandbox/-staging/-production.
+    additionalScrapeConfigs:
+      - job_name: rucio-server
+        metrics_path: /metrics/
+        # Rucio's Flask view sends text/html, which Prometheus 3 rejects otherwise.
+        fallback_scrape_protocol: PrometheusText0.0.4
+        scrape_interval: 30s
+        scrape_timeout: 30s
+        kubernetes_sd_configs: [{ role: endpoints }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            regex: dep-dlm-.+;rucio-server
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            regex: http
+            action: keep
+      - job_name: fts
+        kubernetes_sd_configs: [{ role: endpoints }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            regex: dep-dlm-.+;fts-exporter
+            action: keep
+      - job_name: rucio-db
+        kubernetes_sd_configs: [{ role: endpoints }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name]
+            regex: dep-dlm-.+;rucio-db-exporter
+            action: keep
+
+alertmanager:
+  enabled: true
+
+grafana:
+  # Testbed only: anonymous admin, as in Compose. Remove for production.
+  grafana.ini:
+    auth.anonymous: { enabled: true, org_role: Admin }
+    auth: { disable_login_form: true }
+  defaultDashboardsEnabled: false
+  sidecar:
+    datasources:
+      uid: prometheus                    # dashboard references uid "prometheus"
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL               # dashboard ConfigMap lives in dep-dlm-<env>
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki:3100

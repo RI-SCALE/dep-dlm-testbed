@@ -1,0 +1,27 @@
+# Configuration comes from files/ -> shared/config/observability, the same
+# files the Compose stack mounts.
+
+# sql_exporter for the FTS (MySQL) and Rucio (PostgreSQL) databases. The DSNs
+# in files/sql-exporter/<name>/sql_exporter.yml point at the in-cluster
+# "ftsdb" and "ruciodb" services (sandbox). Set dsnSecret to override them
+# from a Secret, e.g. for Cloud SQL in staging.
+exporters:
+  image: burningalchemist/sql_exporter:0.24.9
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits:   { memory: 128Mi }
+  fts:
+    enabled: true
+    dsnSecret: {}      # { name: <secret>, key: <key> }
+  rucio:
+    enabled: true
+    dsnSecret: {}
+
+# PrometheusRule built from files/prometheus/alerts.yml. kube-prometheus-stack
+# must select it (ruleSelectorNilUsesHelmValues: false in its values).
+alerts:
+  enabled: true
+
+# Dashboard ConfigMap picked up by the Grafana sidecar (label grafana_dashboard).
+dashboards:
+  enabled: true

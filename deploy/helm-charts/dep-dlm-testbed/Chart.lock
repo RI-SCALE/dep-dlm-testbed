@@ -32,5 +32,17 @@ dependencies:
 - name: opa
   repository: file://../opa
   version: 0.1.0
-digest: sha256:709f0169288c63523be531ebda8edf8edc145e3438f07fa6e502cdf447cd208a
-generated: "2026-09-30T15:16:28.042592589Z"
+- name: observability
+  repository: file://../observability
+  version: 0.1.0
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 68.4.0
+- name: loki
+  repository: https://grafana.github.io/helm-charts
+  version: 6.24.0
+- name: alloy
+  repository: https://grafana.github.io/helm-charts
+  version: 0.10.1
+digest: sha256:6da76699409e99bcad83785eea70e6a3614b96326500e574483d2692d6bff670
+generated: "2026-10-13T09:40:35.883429923Z"

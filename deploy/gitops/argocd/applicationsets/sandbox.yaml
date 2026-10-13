@@ -151,6 +151,47 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
                   ref: values
+
+          - name: kube-prometheus-stack
+            spec:
+              sources:
+                - repoURL: https://prometheus-community.github.io/helm-charts
+                  chart: kube-prometheus-stack
+                  targetRevision: 68.4.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/kube-prometheus-stack.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  ref: values
+          - name: loki
+            spec:
+              sources:
+                - repoURL: https://grafana.github.io/helm-charts
+                  chart: loki
+                  targetRevision: 6.24.0
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/loki.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  ref: values
+          - name: alloy
+            spec:
+              sources:
+                - repoURL: https://grafana.github.io/helm-charts
+                  chart: alloy
+                  targetRevision: 0.10.1
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/alloy.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  ref: values
+          - name: observability
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  path: deploy/helm-charts/observability
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/observability.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  ref: values
   template:
     metadata:
       name: '{{ .name }}-sandbox'

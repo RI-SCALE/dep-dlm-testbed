@@ -1,0 +1,17 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: observability
+  namespace: flux-system
+spec:
+  interval: 5m
+  releaseName: observability
+  targetNamespace: dep-dlm-PLACEHOLDER
+  dependsOn:
+    - { name: kube-prometheus-stack }    # PrometheusRule CRD
+  chart:
+    spec:
+      chart: deploy/helm-charts/observability
+      sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+  valuesFrom:
+    - { kind: ConfigMap, name: observability-values, valuesKey: observability.yaml }

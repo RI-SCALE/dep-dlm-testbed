@@ -76,6 +76,7 @@ additionalEnvs:
   - { name: OPA_URL,            value: http://opa:8181 }
   - { name: OPA_POLICY_PATH,    value: vo/authz/v1/allow }
   - { name: OPA_TIMEOUT,        value: "2" }
+  - { name: PROMETHEUS_MULTIPROC_DIR, value: /tmp }
 
 secretMounts:
   - secretFullName: testbed-certs

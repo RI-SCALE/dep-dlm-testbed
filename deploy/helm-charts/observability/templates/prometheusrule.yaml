@@ -1,0 +1,11 @@
+{{- if .Values.alerts.enabled }}
+# Same rules as the Compose stack (files/prometheus/alerts.yml).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dep-dlm
+  labels: { release: {{ .Release.Name }} }
+spec:
+  groups:
+    {{- toYaml (fromYaml (.Files.Get "files/prometheus/alerts.yml")).groups | nindent 4 }}
+{{- end }}
