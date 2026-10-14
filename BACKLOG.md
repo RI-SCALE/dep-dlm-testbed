@@ -43,7 +43,17 @@
 
 ## Authorization
 
-- [ ] Storage authorization hardening (XRootD SciTokens + Teapot Storm-WebDAV): VO-based Teapot mapping via `eduperson_entitlements` — configure Keycloak to issue `eduperson_entitlement` claims alongside `wlcg.groups` and demonstrate Teapot's VO mapping mode as an alternative to FILE mapping (requires group membership claims not available on the current service account token path). Investigate whether equivalent group/entitlement-based authorization exists for XRootD SciTokens (current understanding: scope-based only).
+- **Storage identity mapping per ADR-007 (XRootD + Teapot/StoRM WebDAV):**
+  per-user UID from `preferred_username`, entitlement-based path/role
+  authorization, project GID via setgid directories; Teapot `VO` mode is not
+  the target. Implement per
+  [Design-006](docs/designs/design-doc-006-storage-identity-mapping.md).
+  - [ ] Keycloak claims and narrow scopes
+  - [ ] XRootD: `scitokens-module.cfg`, authdb, multiuser
+  - [ ] Teapot: `mapping = KEYCLOAK`, policy template patch
+  - [ ] Site directories and ACLs
+  - [ ] `act` / entitlement logging
+  - [ ] Test matrix passes on both endpoints
 - [x] Integrate authorization for this testbed by reusing [opa-policy-package's](https://github.com/mgajek-cern/opa-policy-package/tree/main) Rego policy bundles and OIDC/Keycloak integration, rather than rebuilding authorization logic here.
 
 ## FTS 4
