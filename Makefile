@@ -545,7 +545,7 @@ helm-template: ## Render manifests without installing
 obs-urls: ## Print observability UIs (needs OBSERVABILITY=1)
 ifeq ($(RUNTIME),k8s)
 	@echo "Port-forward first:"
-	@echo "  $(KUBECTL) port-forward svc/$(HELM_RELEASE)-grafana 3000:80"
+	@echo "  $(KUBECTL) port-forward svc/grafana 3000:80"
 	@echo "  $(KUBECTL) port-forward svc/kube-prometheus-stack-prometheus 9090"
 	@echo "  $(KUBECTL) port-forward svc/loki 3100"
 endif
@@ -561,7 +561,7 @@ test-observability: ## Observability smoke test: Prometheus targets up, Loki has
 obs-open: ## Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
 ifeq ($(RUNTIME),k8s)
 	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
-	$(KUBECTL) port-forward svc/$(HELM_RELEASE)-grafana 3000:80 >/dev/null & \
+	$(KUBECTL) port-forward svc/grafana 3000:80 >/dev/null & \
 	$(KUBECTL) port-forward svc/kube-prometheus-stack-prometheus 9090 >/dev/null & \
 	$(KUBECTL) port-forward svc/loki 3100 >/dev/null & \
 	sleep 2; \

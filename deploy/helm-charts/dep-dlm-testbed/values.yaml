@@ -1052,6 +1052,8 @@ kube-prometheus-stack:
     enabled: true
 
   grafana:
+    # Fixed Service name ("grafana") for both Helm and Argo CD/Flux releases.
+    fullnameOverride: grafana
     # Testbed only: anonymous admin, as in Compose. Remove for production.
     grafana.ini:
       auth.anonymous: { enabled: true, org_role: Admin }
