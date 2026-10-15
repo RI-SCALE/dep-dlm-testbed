@@ -1,8 +1,5 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Core stage (production) — external Vault + external DB in real deployments. Kept as
-# postgresql-only for parity; drop this stage and point at external DSN when
-# wiring real external services.
 resources:
   - ../../sources/helmrepositories.yaml
 patches:
