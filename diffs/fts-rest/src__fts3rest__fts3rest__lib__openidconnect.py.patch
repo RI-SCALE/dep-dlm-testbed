@@ -1,0 +1,44 @@
+--- a/src/fts3rest/fts3rest/lib/openidconnect.py
++++ b/src/fts3rest/fts3rest/lib/openidconnect.py
+@@ -1,12 +1,9 @@
+ import logging
+-from datetime import datetime
+
+ import jwt
+-from oic import rndstr
+ from oic.extension.message import TokenIntrospectionRequest, TokenIntrospectionResponse
+-from oic.oic import Client, Grant, Token
+-from oic.oic.message import AccessTokenResponse, Message, RegistrationResponse
+-from oic.utils import time_util
++from oic.oic import Client
++from oic.oic.message import RegistrationResponse
+ from oic.utils.authn.client import CLIENT_AUTHN_METHOD
+
+ log = logging.getLogger(__name__)
+@@ -62,6 +59,14 @@
+             for keybundle in keybundles:
+                 keybundle.cache_time = cache_time
+
++    def get_token_issuer(self, access_token):
++        unverified_payload = jwt.decode(access_token, options=jwt_options_unverified())
++        issuer = unverified_payload["iss"]
++        # Return issuer as-is ? no trailing slash normalization.
++        # self.clients is keyed by what Keycloak's discovery endpoint returns
++        # (no trailing slash), so we must not add one here.
++        return issuer
++
+     def token_issuer_supported(self, access_token):
+         """
+         Given an access token, checks whether a client is registered
+@@ -70,9 +75,9 @@
+         :return: true if token issuer is supported, false otherwise
+         :raise KeyError: issuer claim missing
+         """
+-        unverified_payload = jwt.decode(access_token, options=jwt_options_unverified())
+-        issuer = unverified_payload["iss"]
++        issuer = self.get_token_issuer(access_token)
+         log.debug("Checking client registration for issuer={}".format(issuer))
++        log.debug("Supported issuers={}".format(list(self.clients.keys())))
+         return issuer in self.clients
+
+     def filter_provider_keys(self, issuer, kid=None, alg=None):

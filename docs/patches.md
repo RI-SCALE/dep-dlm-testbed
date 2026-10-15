@@ -1,67 +1,45 @@
 # Patches
 
-Minimal patches to upstream components that enable OIDC-only, token-based
-transfers (X.509/GSI is out of scope). Each patched file is mounted over the
-original: bind mount in Compose, ConfigMap in Kubernetes.
+Minimal patches to upstream components for OIDC-only, token-based transfers.
+Each patched file is mounted over the original (bind mount in Compose,
+ConfigMap in Kubernetes).
 
-Each change is tagged for upstreaming: *(fix)* general bug fix, worth a PR;
-*(propose)* general, needs discussion with upstream; *(local)* testbed-specific.
+## Tracking
 
-## Files touched
+- `shared/patches/<component>.manifest` maps each patched file to its upstream path.
+- `make patches` writes unified diffs to `diffs/<component>/` against the pinned
+  refs in the Makefile (`RUCIO_REF`, `FTS_REST_REF`, `TEAPOT_REF`). Each ref
+  **must match the image** the file is mounted into.
+- `make patches-check` fails CI if a patched file changed without regenerated diffs.
 
-| File | Component | Change |
-|---|---|---|
-| `rucio/oidc.py` | Rucio | • Account-based RFC 8693 token exchange (`get_token_for_account_operation`), not in upstream *(propose)*<br>• Per-issuer, per-grant `get_capabilities()` (see below) *(propose)*<br>• Discovery URL works without a trailing slash on the issuer *(fix)*<br>• Sends `requested_token_type` explicitly *(fix)*<br>• Sends several audiences as repeated RFC 8707 `resource=` parameters *(fix)*<br>• Previously silent failures logged as warnings *(fix)*<br>• `aud:<audience>` scope for `client_credentials` *(local)*<br>• `save_subject_token()` for token seeding *(local)* |
-| `rucio/fts3.py` | Rucio | • Passes `account` and per-RSE `audience` to `request_token` *(propose)*<br>• FTS client scope from capabilities (`fts_client_scope`, else `scope_map`, else `fts`) *(propose)*<br>• No source token for S3 sources *(propose)*<br>• `unmanaged_tokens` from `oidc.token_strategy` *(local)* |
-| `rucio/rse.py` | Rucio | • Audience and scope per RSE come from capabilities instead of a hard-coded EGI branch *(propose)*<br>• Scopes mapped to `""` are dropped; falls back to `openid` *(propose)* |
-| `rucio/constants.py` | Rucio | • `SCHEME_MAP`: adds `srm`/`gsiftp`, `s3s`, `http`, and `root`↔`https` *(fix)*<br>• Adds `gsiftp`, `srm`, `s3s` to the supported protocols *(fix)* |
-| `fts/middleware.py`, `fts/openidconnect.py` | FTS | • Keep the issuer exactly as in the `iss` claim (no added trailing slash); apply or remove both together *(fix)* |
-| `fts/tokenproviders.py` | FTS | • Stores the issuer as given, so the issuer lookup at submit time matches (otherwise 403 "Issuer not found") *(fix)* |
-| `fts/JobBuilder.py` | FTS | • Allows a token on one side and cloud-storage credentials on the other (S3 source → WebDAV destination) *(propose)*<br>• Checks `t_cloudStorage` on each submission; fails closed *(propose)* |
-| `fts/cloudStorage.py`, `fts/cloud.py` | FTS | • Adds `region` and `sigv4_header_mode` for S3 SigV4 signing, settable through the REST API *(propose)* |
-| `teapot/teapot.py` | Teapot | • Verifies JWTs offline with the issuer's keys (`jwks_uri` from discovery) plus an audience check, instead of calling `/userinfo`, which rejects exchanged tokens *(propose)*<br>• More robust process matching *(propose)*<br>• Longer HTTP timeout; make it configurable first *(propose)* |
-| `deploy/compose/Dockerfile.teapot` | Teapot image | • Builds with StoRM WebDAV 1.13.0, which accepts RFC 9068 `at+jwt` tokens ([GH-158](https://github.com/italiangrid/storm-webdav/issues/158)); 1.12.0 rejects them *(propose)* |
+Tags: *(fix)* bug fix, PR-ready · *(propose)* needs upstream discussion · *(local)* testbed-only.
 
-## Per-issuer OIDC capabilities
+## Changes
 
-`get_capabilities(issuer, grant)` reads an optional `capabilities` block per
-issuer in `idpsecrets.json`. It controls, per grant type:
+| File | Change |
+|---|---|
+| `rucio/oidc.py` | Reintroduces account-based RFC 8693 exchange *(propose)* · per-issuer `get_capabilities()` *(propose)* · discovery without trailing slash, `requested_token_type`, repeated `resource=`, warnings instead of silent failures *(fix)* · raw `claims` for OPA *(local)* · `aud:` scope, `save_subject_token()` *(local)* |
+| `rucio/fts3.py` | `account` passed to `request_token`; FTS scope from capabilities; no OIDC token for `s3s` endpoints *(propose)* · `unmanaged_tokens` from `oidc.token_strategy` *(local)* |
+| `rucio/rse.py` | RSE audience/scope from capabilities (EGI: `audience` RSE attribute + `scope_map`) *(propose)* |
+| `rucio/constants.py` | `s3s`, `http`, `root`↔`https` in `SCHEME_MAP` *(fix)* |
+| `rucio/authentication.py`, `rucio/common.py` | Token claims exposed in the request environ for the OPA policy *(local)* |
+| `fts/middleware.py` | Issuer kept exactly as the `iss` claim *(fix)* |
+| `fts/tokenproviders.py` | Issuer stored as given *(fix)* |
+| `fts/JobBuilder.py` | Token on one side, cloud-storage keys on the other *(propose)* |
+| `fts/cloudStorage.py`, `fts/cloud.py` | `region`, `sigv4_header_mode` via REST *(propose)* |
+| `teapot/teapot.py` | Offline JWT verification + audience check instead of `/userinfo` *(propose)* |
+| `deploy/compose/Dockerfile.teapot` | StoRM WebDAV 1.13.0 for RFC 9068 `at+jwt` ([GH-158](https://github.com/italiangrid/storm-webdav/issues/158)) *(propose)* |
 
-- whether to send `resource=` or `audience=`
-- `scope_map`: translates storage scopes; map to `""` to drop one
-- `drop_scopes`: extra scopes to remove
-- `fts_client_scope`: explicit scope for FTS's own `client_credentials`
+## Rules
 
-An issuer without a block gets the WLCG defaults (`audience=`, no
-remapping). Grant types: `client_credentials`, `admin_client_credentials`,
-`token_exchange`, `authorization_code`.
+- **Issuers** must match the token's `iss` exactly, trailing slash included.
+  Strip the slash only when building URLs.
+- **Capabilities**: see [design-doc-001](design/design-doc-001-oidc-capability-profiles.md)
+  and [ADR-002](adrs/adr-002-store-oidc-capabilities-in-idpsecrets.md).
 
-```json
-"capabilities": {
-  "client_credentials": { "resource_param": true, "audience_param": false },
-  "token_exchange":     { "resource_param": false, "audience_param": true },
-  "scope_map":   { "storage.read": "read:/" },
-  "drop_scopes": ["offline_access"]
-}
-```
+## FTS configuration (`init-testbed.sh`)
 
-See [design-doc-001](design/design-doc-001-oidc-capability-profiles.md) and
-[ADR-002](adrs/adr-002-store-oidc-capabilities-in-idpsecrets.md).
-
-## Issuer strings must match `iss` exactly
-
-Every configured issuer (the `idpsecrets.json` key, `rucio.cfg`, Teapot,
-StoRM WebDAV, FTS) must match the token's `iss` claim exactly, including any
-trailing slash. Only strip the slash when building a URL from the issuer,
-never when comparing issuers.
-
-## FTS configuration (set by `init-testbed.sh` through the FTS REST API)
-
-- `/config/token_providers`: the issuer is registered with and without a
-  trailing slash. Submissions look it up by the raw `iss` claim, while the
-  `t_token` foreign key needs the form with the slash.
-- `/config/cloud_storage`: the S3 storage with `region` and
-  `sigv4_header_mode`, plus the access keys for the OIDC subject FTS sees
-  (`user_dn`), so the S3 key lookup succeeds.
-- `/config/se`: `tpc_support=NONE` on the S3 endpoint, which forces streamed
-  copies.
+- `/config/token_providers`: issuer registered with and without trailing slash
+  (submit uses raw `iss`; the `t_token` FK needs the slash form).
+- `/config/cloud_storage`: S3 storage with `region`/`sigv4_header_mode` and keys for the OIDC `user_dn`.
+- `/config/se`: `tpc_support=NONE` on the S3 endpoint (forces streamed copies).

@@ -1,0 +1,316 @@
+--- a/teapot.py
++++ b/teapot.py
+@@ -3,6 +3,7 @@
+ import configparser
+ import csv
+ import datetime
++import time
+ import errno
+ import json
+ import logging
+@@ -20,6 +21,7 @@
+ import anyio
+ import httpx
+ import psutil
++import requests
+ import uvicorn
+ from alise import Alise
+ from fastapi import FastAPI, HTTPException, Request
+@@ -31,9 +33,70 @@
+ from starlette.responses import StreamingResponse
+ from vo_mapping import VOMapping
+
++import jwt  # PyJWT
++from jwt import PyJWKClient
++
+ config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+ config.read("/etc/teapot/config.ini")
+
++TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
++
++_DISCOVERY_RETRIES = 12
++_DISCOVERY_INTERVAL_SEC = 5
++
++_discovery = None
++for _attempt in range(1, _DISCOVERY_RETRIES + 1):
++    try:
++        _discovery = requests.get(
++            f"{TRUSTED_ISS.rstrip('/')}/.well-known/openid-configuration",
++            timeout=10,
++            verify="/etc/ssl/certs/ca-certificates.crt",
++        ).json()
++        JWKS_URL = _discovery["jwks_uri"]
++        break
++    except Exception:
++        if _attempt == _DISCOVERY_RETRIES:
++            logging.getLogger(__name__).critical(
++                "Failed to discover jwks_uri from %s/.well-known/openid-configuration "
++                "after %d attempts",
++                TRUSTED_ISS.rstrip("/"),
++                _DISCOVERY_RETRIES,
++                exc_info=True,
++            )
++            raise
++        logging.getLogger(__name__).warning(
++            "jwks_uri discovery attempt %d/%d failed for %s, retrying in %ds",
++            _attempt,
++            _DISCOVERY_RETRIES,
++            TRUSTED_ISS.rstrip("/"),
++            _DISCOVERY_INTERVAL_SEC,
++            exc_info=True,
++        )
++        time.sleep(_DISCOVERY_INTERVAL_SEC)
++
++TRUSTED_ISS = config["Teapot"]["trusted_OP"]
++_jwk_client = PyJWKClient(JWKS_URL)
++
++
++def verify_token(request):
++    auth = request.headers.get("authorization", "")
++    if not auth.lower().startswith("bearer "):
++        raise HTTPException(status_code=401, detail="No bearer token")
++    token = auth.split(None, 1)[1]
++    try:
++        signing_key = _jwk_client.get_signing_key_from_jwt(token).key
++        claims = jwt.decode(
++            token,
++            signing_key,
++            algorithms=["RS256"],
++            issuer=TRUSTED_ISS,
++            options={"verify_aud": False},  # aud checked in root()
++        )
++    except jwt.PyJWTError as e:
++        logger.warning("JWT verification failed: %s", e)
++        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
++    return claims
++
+
+ # lifespan function for startup and shutdown functions
+ @asynccontextmanager
+@@ -314,11 +377,19 @@
+                 if key.startswith("idp_url_"):
+                     suffix = key[len("idp_url_") :]
+                     name_key = f"idp_name_{suffix}"
++                    audiences_key = f"idp_audiences_{suffix}"
+                     if name_key in config[f"STORAGE_AREA_{i}"]:
+                         idp_pairs.append(
+                             {
+                                 "name": config[f"STORAGE_AREA_{i}"][name_key],
+                                 "url": config[f"STORAGE_AREA_{i}"][key],
++                                "audiences": [
++                                    a.strip()
++                                    for a in config[f"STORAGE_AREA_{i}"]
++                                    .get(audiences_key, "")
++                                    .split(",")
++                                    if a.strip()
++                                ],
+                             }
+                         )
+                     else:
+@@ -496,7 +567,9 @@
+
+     logger.debug("cmd=%s", cmd)
+     p = subprocess.Popen(
+-        cmd, shell=True, preexec_fn=os.setsid  # trunk-ignore(bandit/B602)
++        cmd,
++        shell=True,
++        preexec_fn=os.setsid,  # trunk-ignore(bandit/B602)
+     )  # GitHub Issue #30
+
+     # wait for it...
+@@ -546,10 +619,15 @@
+     #  task. shamelessly stolen from
+     # https://codereview.stackexchange.com/questions/183091/start-a-sub-process-with-sudo-as-head-of-new-process-group-kill-it-after-time
+     for pid in psutil.pids():
+-        proc = psutil.Process(pid)
+-        if cmd == " ".join(proc.cmdline()):
+-            logger.debug("PID for the started storm-webdav server found: %d", pid)
+-            return proc
++        try:
++            proc = psutil.Process(pid)
++            if any("storm-webdav-server.jar" in p for p in proc.cmdline()) and any(
++                "java.io.tmpdir" in p for p in proc.cmdline()
++            ):
++                logger.debug("PID for the started storm-webdav server found: %d", pid)
++                return proc
++        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
++            continue
+     raise RuntimeError("process with full command " + cmd + "does not exist.")
+
+
+@@ -580,7 +658,8 @@
+     if pid:
+         try:
+             kill_proc = subprocess.Popen(
+-                f"sudo kill {pid}", shell=True  # trunk-ignore(bandit)
++                f"sudo kill {pid}",
++                shell=True,  # trunk-ignore(bandit)
+             )  # GitHub Issue #30
+             kill_exit_code = kill_proc.wait()
+             if kill_exit_code != 0:
+@@ -901,9 +980,9 @@
+                 break
+             elif state[user] == "RUNNING":
+                 async with app.state.state_lock:
+-                    app.state.session_state[user][
+-                        "last_accessed"
+-                    ] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
++                    app.state.session_state[user]["last_accessed"] = (
++                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
++                    )
+                     await save_session_state()
+                 should_start_sw = False
+                 logger.debug(
+@@ -968,7 +1047,7 @@
+                     if state[user] == "STARTING":
+                         state[user] = "NOT RUNNING"
+                     async with app.state.state_lock:
+-                        app.state.session_state.pop(user)
++                        app.state.session_state.pop(user, None)
+                         await save_session_state()
+                     logger.debug("The unresponsive webdav instance is removed.")
+                     return None, -1, user
+@@ -984,6 +1063,7 @@
+                     + str(port)
+                     + "/",
+                     verify=context1,
++                    timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
+                 )
+                 if resp.status_code >= 200:
+                     running = True
+@@ -1143,49 +1223,50 @@
+         "MOVE",
+     ],
+ )
+-@flaat.is_authenticated()
+ async def root(request: Request):
+     """
+-    This function serves as the root endpoint for the application.
+-    It authenticates users using the flaat library and handles requests
+-    accordingly.
+-
+-    Parameters:
+-        filepath (str): The path requested by the client.
+-        request (Request): The HTTP request object.
+-        response (Response): The HTTP response object.
+-
+-    Returns:
+-        StreamingResponse: The response to the client's request.
++    Root endpoint. Authenticates the bearer token by verifying its JWT
++    signature offline against the trusted OP's JWKS (no /userinfo or
++    introspection call), then proxies the request to the user's
++    Storm-WebDAV instance.
++
++    Offline verification is required because FTS presents RFC 8693
++    token-exchanged tokens: these are valid signed JWTs but are not
++    "live-session" tokens, so Keycloak's /userinfo and /introspect both
++    reject them. WLCG storage endpoints validate such tokens offline.
+     """
+-    # get data from userinfo endpoint
+-    user_infos = flaat.get_user_infos_from_request(request)
+-    if not user_infos:
+-        raise HTTPException(status_code=403)
++    # --- authenticate: verify JWT signature + iss + exp offline ---
++    claims = verify_token(request)
+
+-    logger.info("user's sub is: %s", user_infos["sub"])
+-    sub = user_infos.get("sub", None)
+-    logger.debug("user's issuer is: %s", user_infos["iss"])
+-    iss = user_infos.get("iss", None)
+-    if mapping == "VO":
+-        logger.debug(
+-            "User's eduperson entitlements are %s", user_infos["eduperson_entitlement"]
++    sub = claims.get("sub")
++    iss = claims.get("iss")
++    if not sub or not iss:
++        raise HTTPException(status_code=401, detail="Token missing sub/iss")
++
++    # --- audience check: token must be addressed to this teapot ---
++    auds = claims.get("aud")
++    if isinstance(auds, str):
++        auds = [auds]
++    elif auds is None:
++        auds = []
++    expected_aud = config["Teapot"].get("audience", fallback=None)
++    if expected_aud and expected_aud not in auds:
++        logger.warning(
++            "Token audience %s does not include expected audience %s",
++            auds,
++            expected_aud,
+         )
+-        eduperson_entitlement = user_infos.get("eduperson_entitlement", None)
+-    else:
+-        eduperson_entitlement = None
++        raise HTTPException(status_code=401, detail="Invalid token audience")
+
+-    if mapping == "KEYCLOAK":
+-        logger.debug(
+-            "User's 'preferred_username' is %s", user_infos["preferred_username"]
+-        )
+-        preferred_username = user_infos.get("preferred_username", None)
+-    else:
+-        preferred_username = None
++    # FILE mapping only needs sub/iss; the other mapping modes are unused here.
++    eduperson_entitlement = None
++    preferred_username = None
++    if mapping == "VO":
++        eduperson_entitlement = claims.get("eduperson_entitlement")
++    elif mapping == "KEYCLOAK":
++        preferred_username = claims.get("preferred_username")
+
+-    if not sub:
+-        # if there is no sub, user can not be authenticated
+-        raise HTTPException(status_code=403)
++    logger.info("authenticated sub=%s iss=%s", sub, iss)
+
+     # user is valid, so check if a storm instance is running for this sub
+     redirect_host, redirect_port, local_user = await storm_webdav_state(
+@@ -1198,23 +1279,17 @@
+     )
+
+     if not redirect_host and not redirect_port:
+-        # no mapping between federated and local user identity found
+         raise HTTPException(status_code=403)
+     if redirect_port == -1:
+         logger.info("no instance for user %s created...", local_user)
+         raise HTTPException(status_code=500, detail="Problem supporting user.")
+     if not redirect_port:
+-        # no port returned, should not happen
+         raise HTTPException(
+             status_code=500, detail="Failed to establish internal connection."
+         )
+     if not redirect_host:
+         redirect_host = "localhost"
+-    logger.debug(
+-        "redirect_host: %s, redirect_port: %d",
+-        redirect_host,
+-        redirect_port,
+-    )
++    logger.debug("redirect_host: %s, redirect_port: %d", redirect_host, redirect_port)
+     logger.debug("request path: %s", request.url.path)
+
+     redirect_url = f"https://{redirect_host}:{redirect_port}{request.url.path}"
+@@ -1248,7 +1323,6 @@
+                 await save_session_state()
+         raise
+
+-    # Get the original request host and port for URL rewriting
+     original_host = request.url.hostname
+     original_port = request.url.port
+
+@@ -1291,7 +1365,6 @@
+         else:
+             rewritten_content_bytes = response_body
+
+-        # Calculate new content-length
+         content_length = len(rewritten_content_bytes)
+
+         rewritten_headers = await rewrite_response_headers(
+@@ -1303,7 +1376,6 @@
+             skip_content_length=(request.method.upper() == "PROPFIND"),
+         )
+
+-        # Remove any old content-length headers (case insensitive)
+         rewritten_headers = {
+             k: v for k, v in rewritten_headers.items() if k.lower() != "content-length"
+         }

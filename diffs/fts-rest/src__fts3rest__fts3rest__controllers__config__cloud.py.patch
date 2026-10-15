@@ -1,0 +1,30 @@
+--- a/src/fts3rest/fts3rest/controllers/config/cloud.py
++++ b/src/fts3rest/fts3rest/controllers/config/cloud.py
+@@ -12,6 +12,17 @@
+ #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ #   See the License for the specific language governing permissions and
+ #   limitations under the License.
++#
++# === DEP DLM testbed patch ===================================================
++# set_cloud_storage() below accepts two extra fields (region,
++# sigv4_header_mode) not present upstream — see the matching model patch
++# (model/cloudStorage.py) for why. This is additive only: every upstream
++# field, decorator, and auth check (@require_certificate + @authorize(ADMIN),
++# already verified against this testbed's host cert) is untouched. It does
++# not change who can write cloud storage config or what auth is required —
++# only which fields are accepted once they're authorized to. See
++# docs/patches.md for the accompanying rationale entry.
++# ===============================================================================
+ import logging
+
+ from flask import request, Response
+@@ -68,6 +79,9 @@
+         app_key=input_dict.get("app_key", None),
+         app_secret=input_dict.get("app_secret", None),
+         service_api_url=input_dict.get("service_api_url", None),
++        # DEP DLM testbed patch: S3v4 signing config, see model/cloudStorage.py
++        region=input_dict.get("region", None),
++        sigv4_header_mode=input_dict.get("sigv4_header_mode", None),
+     )
+     try:
+         Session.merge(storage)
