@@ -491,6 +491,16 @@ argocd-uninstall: ## Remove ArgoCD apps and resources
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
 	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
 
+.PHONY: argocd-open
+argocd-open: ## Open the Argo CD UI (port-forwards argocd-server until Ctrl-C; user: admin)
+	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
+	kubectl -n $(ARGOCD_NAMESPACE) port-forward svc/argocd-server 8080:443 >/dev/null & \
+	sleep 2; \
+	echo "Argo CD https://localhost:8080  user: admin  password: $$(kubectl -n $(ARGOCD_NAMESPACE) get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"; \
+	$(OPEN_URL) https://localhost:8080; \
+	echo "(Ctrl-C to stop)"; \
+	wait
+
 .PHONY: flux-install
 flux-install: ## Install Flux, bootstrap GITOPS_ENV
 	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
@@ -540,18 +550,6 @@ helm-template: ## Render manifests without installing
 	$(HELM) template $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 
 ## Observability
-
-.PHONY: obs-urls
-obs-urls: ## Print observability UIs (needs OBSERVABILITY=1)
-ifeq ($(RUNTIME),k8s)
-	@echo "Port-forward first:"
-	@echo "  $(KUBECTL) port-forward svc/grafana 3000:80"
-	@echo "  $(KUBECTL) port-forward svc/kube-prometheus-stack-prometheus 9090"
-	@echo "  $(KUBECTL) port-forward svc/loki 3100"
-endif
-	@echo "Grafana     http://localhost:3000"
-	@echo "Prometheus  http://localhost:9090"
-	@echo "Loki        http://localhost:3100"
 
 .PHONY: test-observability
 test-observability: ## Observability smoke test: Prometheus targets up, Loki has logs

@@ -102,7 +102,7 @@ dep-dlm-testbed
   K8S_NAMESPACE = dep-dlm-sandbox
   SCOPE_PROFILE = local (local | <profile>)
   TF_ENV = staging
- OBSERVABILITY = 0 (0 | 1)
+  OBSERVABILITY = 0 (0 | 1)
 
 Usage:
   make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"] [OBSERVABILITY=0|1]
@@ -124,7 +124,7 @@ AuthN / AuthZ
 
 Lifecycle
   start                Start the stack
-  stop                 Stop the stack, remove volumes/ PVCs
+  stop                 Stop the stack, remove volumes / PVCs
   restart              Tear down and start again
   rebuild              Rebuild services (SERVICES="fts teapot")
   rebuild-clean        Rebuild from scratch, no cache
@@ -134,6 +134,7 @@ Lifecycle
 GitOps
   argocd-install       Install ArgoCD, bootstrap GITOPS_ENV
   argocd-uninstall     Remove ArgoCD apps and resources
+  argocd-open          Open the Argo CD UI (port-forwards argocd-server until Ctrl-C; user: admin)
   flux-install         Install Flux, bootstrap GITOPS_ENV
   flux-uninstall       Remove Flux Kustomizations and controllers
 
@@ -142,8 +143,8 @@ Helm-only
   helm-template        Render manifests without installing
 
 Observability
-  obs-urls             Print observability UIs (needs OBSERVABILITY=1)
   test-observability   Observability smoke test: Prometheus targets up, Loki has logs
+  obs-open             Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
 
 Tests
   test-rucio-transfers Rucio E2E transfer test
@@ -157,7 +158,7 @@ Tests
 
 Rego
   test-rego            Rego unit tests (all phases, no stack needed)
-  fmt-rego             Format all Rego files in place(fixes the opa-fmt pre-commit hook)
+  fmt-rego             Format all Rego files in place (fixes the opa-fmt pre-commit hook)
 
 Terraform
   tf-fmt               Format Terraform files
