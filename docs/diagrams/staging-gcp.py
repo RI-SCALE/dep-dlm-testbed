@@ -1,8 +1,9 @@
 """
 DEP DLM GitOps Deployment View — Staging (GCP)
 
-Only the data-orchestration engine (Rucio + FTS) stays in-cluster on GKE
-Autopilot; secrets (Secret Manager), DB (Cloud SQL), IdP (external AAI
+Only the data-orchestration engine (Rucio + FTS) and its policy decision
+point (OPA, policies from the external ODRL repository) stay in-cluster on
+GKE Autopilot; secrets (Secret Manager), DB (Cloud SQL), IdP (external AAI
 federation hub) and storage RSEs are all external — mirrors staging.py's
 generic external-storage pattern, with GCP-specific managed services in
 place of the generic placeholders. Structurally identical to production
@@ -46,6 +47,14 @@ grid-security hashes 5fca1cb1.*/b96dc756.*) pulled from the identical
 Secret Manager "certs" secret every other RSE/FTS endpoint already
 uses — no second trust root to manage.
 
+Observability uses what GKE Autopilot already ships instead of the
+in-cluster Prometheus/Loki/Grafana of the sandbox: Managed Service for
+Prometheus (managed collection, PodMonitoring for rucio-server,
+rucio-daemons and the SQL exporters) and Cloud Logging (container stdout
+collected by default), both viewed in Cloud Monitoring. Only the SQL
+exporters run in-cluster; the PromQL alerts/SLO rules carry over as
+Rules objects.
+
 Regenerate: python3 staging_gcp.py  (writes generated/staging-gcp.png)
 """
 
@@ -53,12 +62,14 @@ from diagrams import Diagram, Cluster, Edge
 from diagrams.gcp.compute import GKE, ComputeEngine
 from diagrams.gcp.database import SQL
 from diagrams.gcp.network import LoadBalancing, DNS
+from diagrams.gcp.operations import Monitoring, Logging
 from diagrams.gcp.security import SecretManager, Iam
 from diagrams.k8s.compute import Deployment
 from diagrams.k8s.network import Ingress
 from diagrams.onprem.gitops import Argocd
 from diagrams.generic.network import Firewall
 from diagrams.generic.storage import Storage
+from diagrams.programming.flowchart import Document
 
 graph_attr = {
     "fontsize": "22",
@@ -85,6 +96,7 @@ with Diagram(
     idp_ext = Firewall("External AAI\nfederation hub\n(EGI / LS AAI)")
     source_rses = Storage("Source RSEs\n(data holdings,\ndata spaces)")
     dest_rses = Storage("Destination RSEs\n(compute centres)")
+    policies = Document("ODRL policy\nrepository (WP4)")
 
     with Cluster("GCP Project: dep-dlm-staging"):
         sm = SecretManager(
@@ -96,6 +108,10 @@ with Diagram(
             "Global External ALB\n(provisioned by GKE Gateway,\n"
             "static IP: gateway_static_ip)"
         )
+        gmp = Monitoring(
+            "Cloud Monitoring\n(Managed Service for\nPrometheus, alerts/SLOs)"
+        )
+        logging = Logging("Cloud Logging\n(container logs)")
         dns = DNS(
             "Cloud DNS\n(private zone:\ndep-dlm-staging.example.com,\n"
             "shared across rucio/fts/\nvalidation-storage hostnames)"
@@ -113,6 +129,8 @@ with Diagram(
                 rucio_server = Deployment("Rucio Server")
                 rucio_daemons = Deployment("Rucio Daemons")
                 fts = Deployment("FTS3")
+                opa = Deployment("OPA\n(authz)")
+                exporters = Deployment("SQL exporters\n(Rucio DB, FTS DB)")
 
         with Cluster(
             "GCE VM: dep-dlm-staging-validation-storage\n(public IP, not GKE)",
@@ -141,7 +159,18 @@ with Diagram(
     eso >> Edge() >> sm
     rucio_server >> Edge() >> db
     rucio_server >> Edge() >> idp_ext
+    rucio_server >> Edge(label="authz") >> opa
+    opa >> Edge(label="policy bundle", style="dashed") >> policies
     rucio_daemons >> Edge(label="submit") >> fts
+
+    # Telemetry: managed collection scrapes in place, logs leave via the node agent.
+    (
+        gmp
+        >> Edge(label="PodMonitoring", style="dotted")
+        >> [rucio_server, rucio_daemons, exporters]
+    )
+    exporters >> Edge(style="dotted") >> db
+    gke >> Edge(label="container logs", style="dotted") >> logging
 
     fts >> Edge() >> db
     fts >> Edge() >> source_rses
