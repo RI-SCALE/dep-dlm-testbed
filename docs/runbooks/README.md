@@ -20,7 +20,7 @@ in `BACKLOG.md`.
 
 | # | Runbook | Purpose | Status |
 |---|---------|---------|--------|
-| 7 | Observability | Metrics, logs, and dashboards for the conveyor/judge/reaper daemons, FTS, and storage — what to scrape, what to alert on, where transfers stall. | TODO (later) |
+| 7 | Observability | Metrics, logs, dashboards and alerts for Rucio daemons, FTS and storage in staging/production. Sandbox is covered by [Design-005](../design/design-doc-005-observability.md) and `make obs-open` / `make test-observability`. | TODO — after the GCP observability backend (managed vs in-cluster) is validated |
 | 8 | Public TLS via cert-manager | Automated certs for the Gateway's public hostnames (`rucio_public_hostname`, `fts_public_hostname`) via a `ClusterIssuer` — CA choice still open (GCP-managed certs avoid Let's Encrypt's per-hostname rate limit, which matters given staging is torn down/recreated regularly; a private CA or LE's staging ACME endpoint are other options). Distinct from the internal self-signed CA (`certs`/`generate-certs.sh`), which stays Terraform/manually rotated. | TODO — premature until production's public-endpoint requirements and CA choice are settled |
 
 ## Conventions
