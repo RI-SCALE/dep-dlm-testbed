@@ -2,7 +2,7 @@
 
 Experimental validation environment for the DEP DLM architecture: Rucio, FTS3, XRootD, Teapot WebDAV, Keycloak and OPA, validating OIDC token orchestration, TPC transfers and rule lifecycles end to end. Validated patterns are promoted into production-focused repositories.
 
-Every scenario is validated in CI: Compose and Kubernetes, the local Keycloak plus EGI Check-In and LS AAI, Argo CD and Flux and Terraform deploys to staging and production. See [Actions](https://github.com/RI-SCALE/dep-dlm-testbed/actions) for the status of each workflow.
+CI covers each supported combination: Compose and Kubernetes; the bundled Keycloak, EGI Check-In and LS AAI; Argo CD and Flux; and a Terraform-provisioned, production-like staging environment on GCP, with optional observability. See [Actions](https://github.com/RI-SCALE/dep-dlm-testbed/actions) for the status of each workflow.
 
 ## What's inside
 
