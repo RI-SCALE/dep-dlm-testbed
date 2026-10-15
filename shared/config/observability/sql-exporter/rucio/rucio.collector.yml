@@ -1,4 +1,5 @@
-# Rucio rule and request state (tables per Rucio 41.x models; timestamps are UTC).
+# Rucio rule, request and daemon state (tables per Rucio 41.x models).
+# Timestamps are naive UTC, hence timezone('utc', now()) instead of now().
 collector_name: rucio
 
 metrics:
@@ -28,18 +29,23 @@ metrics:
       WHERE state IN ('R', 'S')
       GROUP BY state
 
-  - metric_name: rucio_rules_completed_1h_seconds
+  # SLI for the rule-latency SLO: rules that became OK in the last hour,
+  # split by whether they took at most 30 minutes from creation.
+  - metric_name: rucio_rules_completed_1h_by_target
     type: gauge
-    help: "Creation to OK time of rules that became OK in the last hour."
-    value_label: stat
-    values: [avg, max]
+    help: "Rules that became OK in the last hour, by whether they met the 30-minute latency target."
+    key_labels: [within_target]
+    values: [rules]
     query: |
-      SELECT COALESCE(AVG(EXTRACT(EPOCH FROM updated_at - created_at)), 0) AS avg,
-             COALESCE(MAX(EXTRACT(EPOCH FROM updated_at - created_at)), 0) AS max
+      SELECT CASE WHEN EXTRACT(EPOCH FROM updated_at - created_at) <= 1800
+                  THEN 'true' ELSE 'false' END AS within_target,
+             COUNT(*) AS rules
       FROM rules
       WHERE state = 'O'
         AND updated_at > timezone('utc', now()) - INTERVAL '1 hour'
+      GROUP BY 1
 
+  # Conveyor queue: transfers Rucio holds before and while FTS runs them.
   - metric_name: rucio_transfer_requests
     type: gauge
     help: "Transfer requests per state and destination RSE."
@@ -60,29 +66,16 @@ metrics:
       WHERE r.request_type = 'T'
       GROUP BY r.state, s.rse
 
-  - metric_name: rucio_rse_used_bytes
+  # Daemon liveness from Rucio's own heartbeats: every daemon thread updates
+  # its row each cycle and deletes it on clean exit. "executable" is a SHA-256
+  # hash, "readable" the daemon name. Direct mode (--run-once) leaves no rows.
+  - metric_name: rucio_daemon_heartbeat_age_seconds
     type: gauge
-    help: "Bytes Rucio accounts on each RSE (filled by abacus-rse)."
-    key_labels: [rse]
-    values: [used]
+    help: "Seconds since the newest heartbeat of each Rucio daemon."
+    key_labels: [daemon]
+    values: [age]
     query: |
-      SELECT s.rse AS rse, COALESCE(u.used, 0) AS used
-      FROM rse_usage u
-      JOIN rses s ON s.id = u.rse_id
-      WHERE u.source = 'rucio' AND NOT s.deleted
-
-  # SLI for the rule-latency SLO: rules that became OK in the last hour,
-  # split by whether they took at most 30 minutes from creation.
-  - metric_name: rucio_rules_completed_1h_by_target
-    type: gauge
-    help: "Rules that became OK in the last hour, by whether they met the 30-minute latency target."
-    key_labels: [within_target]
-    values: [rules]
-    query: |
-      SELECT CASE WHEN EXTRACT(EPOCH FROM updated_at - created_at) <= 1800
-                  THEN 'true' ELSE 'false' END AS within_target,
-             COUNT(*) AS rules
-      FROM rules
-      WHERE state = 'O'
-        AND updated_at > timezone('utc', now()) - INTERVAL '1 hour'
-      GROUP BY 1
+      SELECT readable AS daemon,
+             EXTRACT(EPOCH FROM timezone('utc', now()) - MAX(updated_at)) AS age
+      FROM heartbeats
+      GROUP BY readable

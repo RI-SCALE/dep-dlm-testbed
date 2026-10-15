@@ -41,6 +41,16 @@ prometheus:
           - source_labels: [__meta_kubernetes_endpoint_port_name]
             regex: http
             action: keep
+      - job_name: rucio-daemons
+        # Daemons chart: each daemon pod serves /metrics on port "metrics"
+        # (enable_metrics in its config); monitoring.enabled adds the Service.
+        kubernetes_sd_configs: [{ role: endpoints }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            regex: dep-dlm-.+;(.+-)?rucio-daemons;metrics
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_label_rucio_daemon]
+            target_label: daemon
       - job_name: fts
         kubernetes_sd_configs: [{ role: endpoints }]
         relabel_configs:

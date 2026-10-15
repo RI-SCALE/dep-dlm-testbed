@@ -1,6 +1,6 @@
 # Prometheus scrape config for Docker Compose (design-doc-005, phase 1).
-# Keep job names "rucio-server" and "rucio-daemons": the tests and the
-# Kubernetes ServiceMonitors rely on them.
+# Job names (rucio-server, rucio-daemons, fts, rucio-db) are shared with the Kubernetes
+# scrape config, alerts, dashboard and tests.
 global:
   scrape_interval: 15s
   evaluation_interval: 30s
@@ -21,9 +21,12 @@ scrape_configs:
       - targets: ["rucio-server:80"]
 
   - job_name: rucio-daemons
-    # Exporter sidecar; only runs with DAEMON_MODE=daemons.
-    static_configs:
-      - targets: ["rucio-daemons-metrics:8080"]
+    # Multiprocess exporter, only running with DAEMON_MODE=daemons. DNS
+    # discovery yields no target when the container is absent (direct mode).
+    dns_sd_configs:
+      - names: [rucio-daemons-metrics]
+        type: A
+        port: 8080
 
   - job_name: fts
     # sql_exporter over the FTS database (t_file).
@@ -31,7 +34,7 @@ scrape_configs:
       - targets: ["fts-exporter:9399"]
 
   - job_name: rucio-db
-    # sql_exporter over the Rucio database (rules, requests, RSE usage).
+    # sql_exporter over the Rucio database (rules, requests, heartbeats).
     static_configs:
       - targets: ["rucio-db-exporter:9399"]
 

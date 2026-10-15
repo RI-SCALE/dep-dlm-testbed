@@ -24,6 +24,18 @@ groups:
           summary: "Rucio daemon metrics unavailable"
           description: "No metrics from {{ $labels.instance }} for 5 minutes."
 
+      - alert: RucioDaemonStale
+        # From the heartbeats table: a daemon whose newest heartbeat is older
+        # than 5 minutes has hung or crashed. Daemons that exit cleanly delete
+        # their rows, so direct mode (--run-once) does not trigger this.
+        expr: max by (daemon) (rucio_daemon_heartbeat_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rucio daemon {{ $labels.daemon }} stopped sending heartbeats"
+          description: "Last heartbeat {{ $value | humanizeDuration }} ago."
+
       - alert: RucioDbMetricsDown
         expr: up{job="rucio-db"} == 0
         for: 5m
@@ -51,14 +63,15 @@ groups:
           summary: "Rucio has stuck replication rules"
           description: "{{ $value }} rules are STUCK; check rule errors and FTS failure reasons."
 
-      - alert: FtsSubmissionFailures
-        # Files Rucio could not hand to FTS never show up in the transfer SLO.
-        expr: sum(increase(rucio_transfertool_fts3_submission_total{state="failure"}[15m])) > 0
+      - alert: RucioTransfersBlocked
+        # Requests Rucio cannot hand to FTS never reach the transfer SLO.
+        expr: sum(rucio_transfer_requests{state=~"SUBMISSION_FAILED|NO_SOURCES|MISMATCH_SCHEME"}) > 0
+        for: 15m
         labels:
           severity: warning
         annotations:
-          summary: "Rucio failed to submit transfers to FTS"
-          description: "{{ $value }} file submissions to FTS failed in the last 15 minutes."
+          summary: "Rucio transfer requests cannot be submitted to FTS"
+          description: "{{ $value }} requests are failing submission, have no sources or no matching scheme."
 
   # SLOs: internal targets over 7 days, not SLAs.
   #   transfer success 95 %  finished / (finished + failed) FTS files

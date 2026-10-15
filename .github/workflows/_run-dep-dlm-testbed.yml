@@ -26,6 +26,11 @@ on:
         type: string
         default: '["managed","unmanaged"]'
         description: "JSON array of TOKEN_MODE values to run"
+      observability:
+        required: false
+        type: string
+        default: "0"
+        description: "0 | 1 — deploy the observability stack and run its smoke test"
     secrets:
       S3_ACCESS_KEY:
         required: false
@@ -80,6 +85,7 @@ jobs:
         }}
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+      OBSERVABILITY: ${{ inputs.observability }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -209,6 +215,10 @@ jobs:
 
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
+
+      - name: Observability smoke test
+        if: inputs.observability == '1'
+        run: make test-observability
 
       - name: Rucio E2E TPC transfer test with Copernicus Sentinel data
         run: make test-copernicus-transfers

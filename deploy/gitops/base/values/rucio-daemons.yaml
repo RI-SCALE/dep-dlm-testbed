@@ -5,6 +5,19 @@ image:
   pullPolicy: IfNotPresent
 useDeprecatedImplicitSecrets: false
 
+# Daemon-only settings, merged after server.cfg into each pod's rucio.cfg:
+# every daemon pod serves Prometheus metrics on its "metrics" port (8080).
+config:
+  conveyor:
+    cacert: /etc/grid-security/certificates/rucio_ca.pem
+    usercert: /etc/grid-security/hostcert_with_key.pem
+  monitor:
+    enable_metrics: "True"
+    metrics_port: "8080"
+monitoring:
+  enabled: true                # Service the rucio-daemons scrape job discovers
+  serviceMonitorEnabled: false
+
 lifecycle:
   postStart:
     exec:
@@ -76,7 +89,6 @@ additionalEnvs:
   - { name: OPA_URL,            value: http://opa:8181 }
   - { name: OPA_POLICY_PATH,    value: vo/authz/v1/allow }
   - { name: OPA_TIMEOUT,        value: "2" }
-  - { name: PROMETHEUS_MULTIPROC_DIR, value: /tmp }
 
 secretMounts:
   - secretFullName: testbed-certs
@@ -92,7 +104,9 @@ secretMounts:
       - { key: tls_ca_bundle.pem,     path: certificates/tls_ca_bundle.pem, mode: 0644 }
   - secretFullName: testbed-secrets
     volumeName: rucio-cfg-server
-    mountPath: /opt/rucio/etc/rucio.cfg
+    # Merged into rucio.cfg at start, before the chart's config (10_common.json),
+    # instead of mounting it as rucio.cfg, which would skip that merge.
+    mountPath: /opt/rucio/etc/conf.d/00_server.cfg
     subPath: server.cfg
   - secretFullName: testbed-secrets
     volumeName: rucio-cfg-alembic

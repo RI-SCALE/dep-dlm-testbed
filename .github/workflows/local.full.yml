@@ -16,26 +16,32 @@ jobs:
             runner: ubuntu-latest
             runtime: compose
             daemon_mode: direct
+            observability: "1"
           - arch: amd64
             runner: ubuntu-latest
             runtime: compose
             daemon_mode: daemons
+            observability: "1"
           - arch: amd64
             runner: ubuntu-latest
             runtime: k8s
             daemon_mode: direct
+            observability: "1"
           - arch: amd64
             runner: ubuntu-latest
             runtime: k8s
             daemon_mode: daemons
+            observability: "1"
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: compose
             daemon_mode: direct
+            observability: "1"
           - arch: arm64
             runner: ubuntu-24.04-arm
             runtime: k8s
             daemon_mode: direct
+            observability: "1"
     name: ${{ matrix.arch }} | ${{ matrix.runtime }} | ${{ matrix.daemon_mode }}
     uses: ./.github/workflows/_run-dep-dlm-testbed.yml
     with:
@@ -43,6 +49,7 @@ jobs:
       runtime: ${{ matrix.runtime }}
       daemon_mode: ${{ matrix.daemon_mode }}
       scope_profile: local
+      observability: ${{ matrix.observability }}
     secrets:
       S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}

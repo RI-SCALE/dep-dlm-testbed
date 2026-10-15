@@ -194,6 +194,19 @@ rucio-daemons:
     tag: release-41.2.1
     pullPolicy: IfNotPresent
 
+  # Daemon-only settings, merged after server.cfg into each pod's rucio.cfg:
+  # every daemon pod serves Prometheus metrics on its "metrics" port (8080).
+  config:
+    conveyor:
+      cacert: /etc/grid-security/certificates/rucio_ca.pem
+      usercert: /etc/grid-security/hostcert_with_key.pem
+    monitor:
+      enable_metrics: "True"
+      metrics_port: "8080"
+  monitoring:
+    enabled: true                # Service the rucio-daemons scrape job discovers
+    serviceMonitorEnabled: false
+
   lifecycle:
     postStart:
       exec:
@@ -276,8 +289,6 @@ rucio-daemons:
       value: "2"
     - name: RUCIO_OPA_DEBUG_INPUT
       value: "1"
-    - name: PROMETHEUS_MULTIPROC_DIR
-      value: /tmp
 
   secretMounts:
     - secretFullName: testbed-certs
@@ -294,7 +305,9 @@ rucio-daemons:
 
     - secretFullName: testbed-secrets
       volumeName: rucio-cfg-server
-      mountPath: /opt/rucio/etc/rucio.cfg
+      # Merged into rucio.cfg at start, before the chart's config (10_common.json),
+      # instead of mounting it as rucio.cfg, which would skip that merge.
+      mountPath: /opt/rucio/etc/conf.d/00_server.cfg
       subPath: server.cfg
     - secretFullName: testbed-secrets
       volumeName: rucio-cfg-alembic
@@ -1012,6 +1025,16 @@ kube-prometheus-stack:
             - source_labels: [__meta_kubernetes_endpoint_port_name]
               regex: http
               action: keep
+        - job_name: rucio-daemons
+          # Daemons chart: each daemon pod serves /metrics on port "metrics"
+          # (enable_metrics in its config); monitoring.enabled adds the Service.
+          kubernetes_sd_configs: [{ role: endpoints }]
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+              regex: dep-dlm-.+;(.+-)?rucio-daemons;metrics
+              action: keep
+            - source_labels: [__meta_kubernetes_pod_label_rucio_daemon]
+              target_label: daemon
         - job_name: fts
           kubernetes_sd_configs: [{ role: endpoints }]
           relabel_configs:

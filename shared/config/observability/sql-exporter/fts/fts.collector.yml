@@ -1,4 +1,6 @@
 # FTS transfer metrics from t_file (columns per FTS schema 10.x).
+# The views FTS3 monitoring is built around: efficiency per link, achieved
+# throughput over time, most common errors, plus the queue.
 collector_name: fts
 
 metrics:
@@ -17,6 +19,7 @@ metrics:
                            'ON_HOLD', 'ON_HOLD_STAGING', 'TOKEN_PREP')
       GROUP BY file_state, source_se, dest_se
 
+  # Efficiency per link and the transfer-success SLI.
   - metric_name: fts_files_completed_1h
     type: gauge
     help: "Files that reached a terminal state in the last hour, per state and link."
@@ -32,6 +35,7 @@ metrics:
         AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
       GROUP BY file_state, source_se, dest_se
 
+  # Throughput = transferred volume / time (divided by 3600 in the dashboard).
   - metric_name: fts_bytes_finished_1h
     type: gauge
     help: "Bytes of files finished successfully in the last hour, per link."
@@ -41,38 +45,6 @@ metrics:
       SELECT COALESCE(source_se, '') AS source_se,
              COALESCE(dest_se, '') AS dest_se,
              COALESCE(SUM(filesize), 0) AS bytes
-      FROM t_file
-      WHERE file_state = 'FINISHED'
-        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
-      GROUP BY source_se, dest_se
-
-  # Link quality as shown on WLCG/FTS dashboards: efficiency, throughput,
-  # duration, failure categories, optimizer concurrency.
-  - metric_name: fts_transfer_seconds_1h
-    type: gauge
-    help: "Transfer duration of files finished in the last hour, per link."
-    key_labels: [source_se, dest_se]
-    value_label: stat
-    values: [avg, max]
-    query: |
-      SELECT COALESCE(source_se, '') AS source_se,
-             COALESCE(dest_se, '') AS dest_se,
-             AVG(tx_duration) AS avg,
-             MAX(tx_duration) AS max
-      FROM t_file
-      WHERE file_state = 'FINISHED'
-        AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
-      GROUP BY source_se, dest_se
-
-  - metric_name: fts_throughput_1h_bytes
-    type: gauge
-    help: "Bytes per second of transfer time for files finished in the last hour, per link."
-    key_labels: [source_se, dest_se]
-    values: [throughput]
-    query: |
-      SELECT COALESCE(source_se, '') AS source_se,
-             COALESCE(dest_se, '') AS dest_se,
-             COALESCE(SUM(filesize) / NULLIF(SUM(tx_duration), 0), 0) AS throughput
       FROM t_file
       WHERE file_state = 'FINISHED'
         AND finish_time > UTC_TIMESTAMP() - INTERVAL 1 HOUR
@@ -115,11 +87,3 @@ metrics:
       GROUP BY LEFT(COALESCE(reason, ''), 150)
       ORDER BY files DESC
       LIMIT 10
-
-  - metric_name: fts_optimizer_active
-    type: gauge
-    help: "Concurrent transfers the FTS optimizer allows per link."
-    key_labels: [source_se, dest_se]
-    values: [active]
-    query: |
-      SELECT source_se, dest_se, active FROM t_optimizer
