@@ -1,0 +1,63 @@
+{{- range $name := list "fts" "rucio" }}
+{{- $cfg := index $.Values.exporters $name }}
+{{- if $cfg.enabled }}
+{{- $full := printf "%s-exporter" (ternary "fts" "rucio-db" (eq $name "fts")) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $full }}-config
+  labels: { app: {{ $full }}, release: {{ $.Release.Name }} }
+data:
+{{ ($.Files.Glob (printf "files/sql-exporter/%s/*" $name)).AsConfig | indent 2 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $full }}
+  labels: { app: {{ $full }}, release: {{ $.Release.Name }} }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ $full }} }
+  template:
+    metadata:
+      labels: { app: {{ $full }} }
+      annotations:
+        checksum/config: {{ ($.Files.Glob (printf "files/sql-exporter/%s/*" $name)).AsConfig | sha256sum }}
+    spec:
+      containers:
+        - name: sql-exporter
+          image: {{ $.Values.exporters.image }}
+          args:
+            - -config.file=/etc/sql_exporter/sql_exporter.yml
+            {{- if $cfg.dsnSecret.name }}
+            - -config.data-source-name=$(DSN)
+          env:
+            - name: DSN
+              valueFrom:
+                secretKeyRef: { name: {{ $cfg.dsnSecret.name }}, key: {{ $cfg.dsnSecret.key }} }
+            {{- end }}
+          ports:
+            - { name: metrics, containerPort: 9399 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: metrics }
+          resources:
+            {{- toYaml $.Values.exporters.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/sql_exporter, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: {{ $full }}-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $full }}
+  labels: { app: {{ $full }}, release: {{ $.Release.Name }} }
+spec:
+  selector: { app: {{ $full }} }
+  ports:
+    - { name: metrics, port: 9399, targetPort: metrics }
+{{- end }}
+{{- end }}

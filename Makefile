@@ -11,8 +11,14 @@ SCOPE_PROFILE ?= local
 DAEMON_MODE ?= direct
 SERVICES   ?=
 
+OBSERVABILITY ?= 0
+
 COMPOSE_FILE  ?= deploy/compose/docker-compose.$(TOKEN_MODE).yml
-COMPOSE       := docker compose -f $(COMPOSE_FILE)
+COMPOSE_OBS_FILE := deploy/compose/docker-compose.observability.yml
+COMPOSE_OBS   := $(if $(filter 1,$(OBSERVABILITY)),-f $(COMPOSE_OBS_FILE),)
+COMPOSE       := docker compose -f $(COMPOSE_FILE) $(COMPOSE_OBS)
+# Teardown targets every profile and the overlay, whatever flags start used.
+COMPOSE_ALL   := docker compose --profile '*' -f $(COMPOSE_FILE) -f $(COMPOSE_OBS_FILE)
 
 HELM_CHART    := deploy/helm-charts/dep-dlm-testbed
 HELM_RELEASE  ?= testbed
@@ -21,6 +27,18 @@ HELM          := helm
 GITOPS_ENV ?= sandbox
 K8S_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
 KUBECTL       := kubectl -n $(K8S_NAMESPACE)
+
+# Shared by install, upgrade and template so they all render the same release.
+HELM_SET = --set global.tokenMode=$(TOKEN_MODE) \
+	--set global.daemonMode=$(DAEMON_MODE) \
+	--set global.scopeProfile=$(SCOPE_PROFILE) \
+	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
+	--set observability.enabled=$(if $(filter 1,$(OBSERVABILITY)),true,false)
+
+# Helm creates subchart CRDs only on first install, never on upgrade, so apply
+# the Prometheus Operator CRDs explicitly (server-side: they exceed the annotation limit).
+OBS_CRDS = $(if $(filter 1,$(OBSERVABILITY)),$(HELM) show crds $(HELM_CHART)/charts/kube-prometheus-stack-*.tgz \
+	| kubectl apply --server-side --force-conflicts -f - >/dev/null,true)
 
 GITOPS_REVISION ?= main
 GITOPS_REPO_URL ?=
@@ -59,6 +77,9 @@ TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV)
 # opa-ri-scale ODRL evaluator, vendored into shared/config/opa/vendor/ (see VENDORED.md)
 OPA_RI_SCALE_REPO ?= https://github.com/mgajek-cern/opa-ri-scale.git
 OPA_RI_SCALE_REF  ?= vendor-2026-10-08
+
+# $BROWSER is set inside the VS Code devcontainer and opens the page on the host.
+OPEN_URL = $${BROWSER:-$$(command -v open || command -v xdg-open)}
 
 # Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
 # import — previously duplicated across all four targets, which is how
@@ -267,6 +288,19 @@ else
   EXEC_FTS := docker exec -i compose-fts-1
 endif
 
+ifeq ($(filter $(OBSERVABILITY),0 1),)
+$(error OBSERVABILITY must be '0' or '1', got '$(OBSERVABILITY)')
+endif
+
+ifeq ($(RUNTIME),compose)
+  PROMETHEUS_URL ?= http://prometheus:9090
+  LOKI_URL       ?= http://loki:3100
+else
+  # Deployed by the umbrella chart into K8S_NAMESPACE, next to rucio-client.
+  PROMETHEUS_URL ?= http://kube-prometheus-stack-prometheus:9090
+  LOKI_URL       ?= http://loki:3100
+endif
+
 ## Help
 
 .PHONY: help
@@ -281,9 +315,10 @@ help: ## Show this help
 	@echo '  K8S_NAMESPACE = $(K8S_NAMESPACE)'
 	@echo '  SCOPE_PROFILE = $(SCOPE_PROFILE) (local | <profile>)'
 	@echo '  TF_ENV = $(TF_ENV)'
+	@echo '  OBSERVABILITY = $(OBSERVABILITY) (0 | 1)'
 	@echo ''
 	@echo 'Usage:'
-	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]'
+	@echo '  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"] [OBSERVABILITY=0|1]'
 	@echo ''
 	@awk 'BEGIN {FS = ":.*?## "} \
 	    /^[a-zA-Z0-9_%-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } \
@@ -361,6 +396,7 @@ fetch-odrl-policies: ## Print the DEP ODRL policies from the WP4 policy reposito
 	@ODRL_CLIENT_ID='$(ODRL_CLIENT_ID)' ODRL_CLIENT_SECRET='$(ODRL_CLIENT_SECRET)' \
 	  ./shared/scripts/fetch-odrl-policies.sh
 
+
 ## Lifecycle
 
 .PHONY: start
@@ -369,18 +405,15 @@ ifeq ($(RUNTIME),compose)
 	COMPOSE_PROFILES=$(DAEMON_MODE) $(COMPOSE) up -d $(SERVICES)
 else
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	$(HELM) dependency update $(HELM_CHART)
-	$(HELM) install --set global.tokenMode=$(TOKEN_MODE) \
-	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set global.daemonMode=$(DAEMON_MODE) \
-	--set global.scopeProfile=$(SCOPE_PROFILE) \
-	$(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	source shared/scripts/common.sh && ensure_helm_chart_deps
+	$(OBS_CRDS)
+	$(HELM) upgrade --install $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
 stop: ## Stop the stack, remove volumes / PVCs
 ifeq ($(RUNTIME),compose)
-	$(COMPOSE) --profile '*' down -v --remove-orphans
+	$(COMPOSE_ALL) down -v --remove-orphans
 else
 	$(HELM) uninstall $(HELM_RELEASE) -n $(K8S_NAMESPACE) || true
 	$(KUBECTL) delete pvc --all --ignore-not-found
@@ -396,7 +429,8 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build  $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(OBS_CRDS)
+	$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: rebuild-clean
@@ -405,7 +439,8 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build --no-cache $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
-	$(HELM) upgrade $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	$(OBS_CRDS)
+	$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: ps
@@ -456,6 +491,16 @@ argocd-uninstall: ## Remove ArgoCD apps and resources
 	kubectl delete namespace $(ARGOCD_NAMESPACE) --ignore-not-found
 	@echo "GitOps $(GITOPS_ENV) and Argo CD removed"
 
+.PHONY: argocd-open
+argocd-open: ## Open the Argo CD UI (port-forwards argocd-server until Ctrl-C; user: admin)
+	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
+	kubectl -n $(ARGOCD_NAMESPACE) port-forward svc/argocd-server 8080:443 >/dev/null & \
+	sleep 2; \
+	echo "Argo CD https://localhost:8080  user: admin  password: $$(kubectl -n $(ARGOCD_NAMESPACE) get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)"; \
+	$(OPEN_URL) https://localhost:8080; \
+	echo "(Ctrl-C to stop)"; \
+	wait
+
 .PHONY: flux-install
 flux-install: ## Install Flux, bootstrap GITOPS_ENV
 	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
@@ -502,7 +547,28 @@ helm-lint: ## Lint the umbrella chart
 
 .PHONY: helm-template
 helm-template: ## Render manifests without installing
-	$(HELM) template $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE) --set global.tokenMode=$(TOKEN_MODE) --set global.daemonMode=$(DAEMON_MODE)
+	$(HELM) template $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+
+## Observability
+
+.PHONY: test-observability
+test-observability: ## Observability smoke test: Prometheus targets up, Loki has logs
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) PROMETHEUS_URL=$(PROMETHEUS_URL) LOKI_URL=$(LOKI_URL) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_observability.py -v"
+
+.PHONY: obs-open
+obs-open: ## Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
+ifeq ($(RUNTIME),k8s)
+	@trap 'kill $$(jobs -p) 2>/dev/null' EXIT; \
+	$(KUBECTL) port-forward svc/grafana 3000:80 >/dev/null & \
+	$(KUBECTL) port-forward svc/kube-prometheus-stack-prometheus 9090 >/dev/null & \
+	$(KUBECTL) port-forward svc/loki 3100 >/dev/null & \
+	sleep 2; \
+	$(OPEN_URL) http://localhost:3000; \
+	echo "Grafana :3000  Prometheus :9090  Loki :3100 (Ctrl-C to stop)"; \
+	wait
+else
+	@$(OPEN_URL) http://localhost:3000
+endif
 
 ## Tests
 
@@ -698,7 +764,7 @@ userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches 
 
 .PHONY: clear-artifacts
 clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
-	$(COMPOSE) --profile '*' down -v --remove-orphans 2>/dev/null || true
+	$(COMPOSE_ALL) down -v --remove-orphans 2>/dev/null || true
 	find certs \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \

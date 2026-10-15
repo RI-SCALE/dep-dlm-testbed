@@ -1,0 +1,11 @@
+{{- if .Values.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dep-dlm-dashboards
+  labels:
+    grafana_dashboard: "1"
+    release: {{ .Release.Name }}
+data:
+{{ (.Files.Glob "files/grafana/dashboards/*.json").AsConfig | indent 2 }}
+{{- end }}

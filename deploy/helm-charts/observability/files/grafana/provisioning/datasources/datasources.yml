@@ -1,0 +1,17 @@
+# Grafana datasources (design-doc-005). Compose service names; the Kubernetes
+# overlay rewrites the URLs. Fixed UIDs so dashboards reference them stably.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

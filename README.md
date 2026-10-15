@@ -102,9 +102,10 @@ dep-dlm-testbed
   K8S_NAMESPACE = dep-dlm-sandbox
   SCOPE_PROFILE = local (local | <profile>)
   TF_ENV = staging
+  OBSERVABILITY = 0 (0 | 1)
 
 Usage:
-  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"]
+  make <target> [RUNTIME=compose|k8s] [TOKEN_MODE=managed|unmanaged] [DAEMON_MODE=direct|daemons] [SCOPE_PROFILE=local|<profile, e.g. egi-dev, ls-aai-dev>] [SERVICES="svc1 svc2"] [OBSERVABILITY=0|1]
 
 
 Help
@@ -133,12 +134,17 @@ Lifecycle
 GitOps
   argocd-install       Install ArgoCD, bootstrap GITOPS_ENV
   argocd-uninstall     Remove ArgoCD apps and resources
+  argocd-open          Open the Argo CD UI (port-forwards argocd-server until Ctrl-C; user: admin)
   flux-install         Install Flux, bootstrap GITOPS_ENV
   flux-uninstall       Remove Flux Kustomizations and controllers
 
 Helm-only
   helm-lint            Lint the umbrella chart
   helm-template        Render manifests without installing
+
+Observability
+  test-observability   Observability smoke test: Prometheus targets up, Loki has logs
+  obs-open             Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
 
 Tests
   test-rucio-transfers Rucio E2E transfer test

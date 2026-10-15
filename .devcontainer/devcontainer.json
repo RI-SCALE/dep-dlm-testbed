@@ -13,7 +13,12 @@
         8446, 8449,
         3306, 8443,
         1094, 1095,
-        8080, 8090
+        8080, 8090,
+        3000,
+        9090, 9093,
+        3100,
+        9200,
+        8161, 61613
     ],
     "postCreateCommand": "bash .devcontainer/setup.sh",
     "remoteUser": "root",

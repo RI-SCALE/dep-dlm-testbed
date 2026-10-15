@@ -1,0 +1,10 @@
+apiVersion: v2
+name: observability
+description: |
+  DEP DLM observability wiring (design-doc-005): database exporters for FTS
+  and Rucio, the alert/SLO rules as a PrometheusRule, and the Grafana
+  dashboard. The monitoring stack itself (kube-prometheus-stack, Loki, Alloy)
+  is installed separately into the "monitoring" namespace.
+type: application
+version: 0.1.0
+appVersion: "1.0"

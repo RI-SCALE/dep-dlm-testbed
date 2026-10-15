@@ -1,0 +1,81 @@
+# Rucio rule, request and daemon state (tables per Rucio 41.x models).
+# Timestamps are naive UTC, hence timezone('utc', now()) instead of now().
+collector_name: rucio
+
+metrics:
+  - metric_name: rucio_rules
+    type: gauge
+    help: "Replication rules per state."
+    key_labels: [state]
+    values: [rules]
+    query: |
+      SELECT CASE state WHEN 'R' THEN 'REPLICATING' WHEN 'O' THEN 'OK'
+                        WHEN 'S' THEN 'STUCK' WHEN 'U' THEN 'SUSPENDED'
+                        WHEN 'W' THEN 'WAITING_APPROVAL' WHEN 'I' THEN 'INJECT'
+                        ELSE state::text END AS state,
+             COUNT(*) AS rules
+      FROM rules
+      GROUP BY state
+
+  - metric_name: rucio_rules_oldest_open_age_seconds
+    type: gauge
+    help: "Age of the oldest rule that is still replicating or stuck."
+    key_labels: [state]
+    values: [age]
+    query: |
+      SELECT CASE state WHEN 'R' THEN 'REPLICATING' ELSE 'STUCK' END AS state,
+             EXTRACT(EPOCH FROM timezone('utc', now()) - MIN(created_at)) AS age
+      FROM rules
+      WHERE state IN ('R', 'S')
+      GROUP BY state
+
+  # SLI for the rule-latency SLO: rules that became OK in the last hour,
+  # split by whether they took at most 30 minutes from creation.
+  - metric_name: rucio_rules_completed_1h_by_target
+    type: gauge
+    help: "Rules that became OK in the last hour, by whether they met the 30-minute latency target."
+    key_labels: [within_target]
+    values: [rules]
+    query: |
+      SELECT CASE WHEN EXTRACT(EPOCH FROM updated_at - created_at) <= 1800
+                  THEN 'true' ELSE 'false' END AS within_target,
+             COUNT(*) AS rules
+      FROM rules
+      WHERE state = 'O'
+        AND updated_at > timezone('utc', now()) - INTERVAL '1 hour'
+      GROUP BY 1
+
+  # Conveyor queue: transfers Rucio holds before and while FTS runs them.
+  - metric_name: rucio_transfer_requests
+    type: gauge
+    help: "Transfer requests per state and destination RSE."
+    key_labels: [state, dest_rse]
+    values: [requests]
+    query: |
+      SELECT CASE r.state WHEN 'Q' THEN 'QUEUED' WHEN 'G' THEN 'SUBMITTING'
+                          WHEN 'S' THEN 'SUBMITTED' WHEN 'F' THEN 'FAILED'
+                          WHEN 'D' THEN 'DONE' WHEN 'L' THEN 'LOST'
+                          WHEN 'N' THEN 'NO_SOURCES' WHEN 'O' THEN 'ONLY_TAPE_SOURCES'
+                          WHEN 'A' THEN 'SUBMISSION_FAILED' WHEN 'M' THEN 'MISMATCH_SCHEME'
+                          WHEN 'U' THEN 'SUSPEND' WHEN 'W' THEN 'WAITING'
+                          WHEN 'P' THEN 'PREPARING' ELSE r.state::text END AS state,
+             COALESCE(s.rse, '') AS dest_rse,
+             COUNT(*) AS requests
+      FROM requests r
+      LEFT JOIN rses s ON s.id = r.dest_rse_id
+      WHERE r.request_type = 'T'
+      GROUP BY r.state, s.rse
+
+  # Daemon liveness from Rucio's own heartbeats: every daemon thread updates
+  # its row each cycle and deletes it on clean exit. "executable" is a SHA-256
+  # hash, "readable" the daemon name. Direct mode (--run-once) leaves no rows.
+  - metric_name: rucio_daemon_heartbeat_age_seconds
+    type: gauge
+    help: "Seconds since the newest heartbeat of each Rucio daemon."
+    key_labels: [daemon]
+    values: [age]
+    query: |
+      SELECT readable AS daemon,
+             EXTRACT(EPOCH FROM timezone('utc', now()) - MAX(updated_at)) AS age
+      FROM heartbeats
+      GROUP BY readable

@@ -149,12 +149,14 @@ apply_gateway_root() {
 }
 
 report() {
-  log "Argo CD admin password (initial):"
+  log "Argo CD login (initial): user admin"
   if kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret >/dev/null 2>&1; then
+    printf 'password: '
     kubectl -n "$ARGOCD_NAMESPACE" get secret argocd-initial-admin-secret \
       -o jsonpath='{.data.password}' 2>/dev/null \
       | base64 -d 2>/dev/null \
       || warn "Failed to decode initial admin password"
+    echo
   else
     warn "initial-admin-secret not found (already rotated?)"
   fi
@@ -167,9 +169,10 @@ Next steps:
   kubectl -n ${ARGOCD_NAMESPACE} get applications
   kubectl -n ${APP_NS} get pods -w
 
-  # Access the UI (port-forward)
-  kubectl -n ${ARGOCD_NAMESPACE} port-forward svc/argocd-server 8080:443
-  # then open https://localhost:8080  (user: admin)
+  # Access the UI (user: admin, password above)
+  make argocd-open
+  # or: kubectl -n ${ARGOCD_NAMESPACE} port-forward svc/argocd-server 8080:443
+  #     then open https://localhost:8080
 
 To re-seed Vault with different FLOW/SCOPE_PROFILE values (no commit needed):
   shared/scripts/seed-vault.sh --namespace ${APP_NS} \\
