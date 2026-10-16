@@ -3,7 +3,6 @@ import asyncio
 import configparser
 import csv
 import datetime
-import time
 import errno
 import json
 import logging
@@ -12,6 +11,7 @@ import re
 import socket
 import ssl
 import subprocess
+import time
 from contextlib import asynccontextmanager
 from os.path import exists
 from pathlib import Path
@@ -20,6 +20,7 @@ from stat import S_IRGRP, S_IRWXO, S_IRWXU, S_IXGRP
 
 import anyio
 import httpx
+import jwt
 import psutil
 import requests
 import uvicorn
@@ -29,16 +30,15 @@ from fastapi.security import HTTPBearer
 from flaat.config import AccessLevel
 from flaat.fastapi import Flaat
 from flaat.requirements import HasSubIss
+from jwt import PyJWKClient
 from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 from vo_mapping import VOMapping
 
-import jwt  # PyJWT
-from jwt import PyJWKClient
-
 config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
 config.read("/etc/teapot/config.ini")
 
+# Tokens are verified offline against the JWKS of the first trusted OP.
 TRUSTED_ISS = config["Teapot"]["trusted_OP"].split(",")[0].strip()
 
 _DISCOVERY_RETRIES = 12
@@ -74,7 +74,6 @@ for _attempt in range(1, _DISCOVERY_RETRIES + 1):
         )
         time.sleep(_DISCOVERY_INTERVAL_SEC)
 
-TRUSTED_ISS = config["Teapot"]["trusted_OP"]
 _jwk_client = PyJWKClient(JWKS_URL)
 
 
@@ -377,19 +376,11 @@ async def _create_user_dirs(username, port, sub, iss, external_identities):
                 if key.startswith("idp_url_"):
                     suffix = key[len("idp_url_") :]
                     name_key = f"idp_name_{suffix}"
-                    audiences_key = f"idp_audiences_{suffix}"
                     if name_key in config[f"STORAGE_AREA_{i}"]:
                         idp_pairs.append(
                             {
                                 "name": config[f"STORAGE_AREA_{i}"][name_key],
                                 "url": config[f"STORAGE_AREA_{i}"][key],
-                                "audiences": [
-                                    a.strip()
-                                    for a in config[f"STORAGE_AREA_{i}"]
-                                    .get(audiences_key, "")
-                                    .split(",")
-                                    if a.strip()
-                                ],
                             }
                         )
                     else:
@@ -567,9 +558,7 @@ async def _start_webdav_instance(username, port, sub, iss, external_identities):
 
     logger.debug("cmd=%s", cmd)
     p = subprocess.Popen(
-        cmd,
-        shell=True,
-        preexec_fn=os.setsid,  # trunk-ignore(bandit/B602)
+        cmd, shell=True, preexec_fn=os.setsid  # trunk-ignore(bandit/B602)
     )  # GitHub Issue #30
 
     # wait for it...
@@ -618,12 +607,13 @@ async def _get_proc(cmd):
     # at the moment this is the only halfway surefire method to accomplish this
     #  task. shamelessly stolen from
     # https://codereview.stackexchange.com/questions/183091/start-a-sub-process-with-sudo-as-head-of-new-process-group-kill-it-after-time
+    # Match the server process by its per-user tmpdir: the full command line
+    # differs from `cmd` (sudo/shell wrapping), the tmpdir does not.
+    tmpdir = next(t for t in cmd.split() if t.startswith("-Djava.io.tmpdir="))
     for pid in psutil.pids():
         try:
             proc = psutil.Process(pid)
-            if any("storm-webdav-server.jar" in p for p in proc.cmdline()) and any(
-                "java.io.tmpdir" in p for p in proc.cmdline()
-            ):
+            if tmpdir in proc.cmdline():
                 logger.debug("PID for the started storm-webdav server found: %d", pid)
                 return proc
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
@@ -658,8 +648,7 @@ async def _stop_webdav_instance(username, state, condition):
     if pid:
         try:
             kill_proc = subprocess.Popen(
-                f"sudo kill {pid}",
-                shell=True,  # trunk-ignore(bandit)
+                f"sudo kill {pid}", shell=True  # trunk-ignore(bandit)
             )  # GitHub Issue #30
             kill_exit_code = kill_proc.wait()
             if kill_exit_code != 0:
@@ -980,9 +969,9 @@ async def storm_webdav_state(
                 break
             elif state[user] == "RUNNING":
                 async with app.state.state_lock:
-                    app.state.session_state[user]["last_accessed"] = (
-                        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    )
+                    app.state.session_state[user][
+                        "last_accessed"
+                    ] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     await save_session_state()
                 should_start_sw = False
                 logger.debug(
@@ -1279,17 +1268,23 @@ async def root(request: Request):
     )
 
     if not redirect_host and not redirect_port:
+        # no mapping between federated and local user identity found
         raise HTTPException(status_code=403)
     if redirect_port == -1:
         logger.info("no instance for user %s created...", local_user)
         raise HTTPException(status_code=500, detail="Problem supporting user.")
     if not redirect_port:
+        # no port returned, should not happen
         raise HTTPException(
             status_code=500, detail="Failed to establish internal connection."
         )
     if not redirect_host:
         redirect_host = "localhost"
-    logger.debug("redirect_host: %s, redirect_port: %d", redirect_host, redirect_port)
+    logger.debug(
+        "redirect_host: %s, redirect_port: %d",
+        redirect_host,
+        redirect_port,
+    )
     logger.debug("request path: %s", request.url.path)
 
     redirect_url = f"https://{redirect_host}:{redirect_port}{request.url.path}"
@@ -1323,6 +1318,7 @@ async def root(request: Request):
                 await save_session_state()
         raise
 
+    # Get the original request host and port for URL rewriting
     original_host = request.url.hostname
     original_port = request.url.port
 
@@ -1365,6 +1361,7 @@ async def root(request: Request):
         else:
             rewritten_content_bytes = response_body
 
+        # Calculate new content-length
         content_length = len(rewritten_content_bytes)
 
         rewritten_headers = await rewrite_response_headers(
@@ -1376,6 +1373,7 @@ async def root(request: Request):
             skip_content_length=(request.method.upper() == "PROPFIND"),
         )
 
+        # Remove any old content-length headers (case insensitive)
         rewritten_headers = {
             k: v for k, v in rewritten_headers.items() if k.lower() != "content-length"
         }

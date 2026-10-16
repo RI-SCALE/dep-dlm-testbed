@@ -1,0 +1,64 @@
+--- a/lib/rucio/core/authentication.py
++++ b/lib/rucio/core/authentication.py
+@@ -14,11 +14,13 @@
+ 
+ import datetime
+ import hashlib
++import json
++import logging
+ import random
+ import re
+ import sys
+ import traceback
+-from base64 import b64decode
++from base64 import b64decode, urlsafe_b64decode
+ from typing import TYPE_CHECKING, Optional, Union, cast
+ 
+ import paramiko
+@@ -420,6 +422,26 @@
+         raise CannotAuthenticate(traceback.format_exc())
+ 
+ 
++def _claims_from_jwt(token: Optional[str]) -> dict:
++    """
++    Decode the payload of a JWT without verifying its signature.
++
++    Only call this for a token that was already matched against the tokens
++    table (i.e. validated when it was issued/stored). Non-JWT tokens
++    (userpass, x509, ssh) return {}.
++    """
++    if not token or token.count('.') != 2:
++        return {}
++    try:
++        payload = token.split('.')[1]
++        payload += '=' * (-len(payload) % 4)
++        claims = json.loads(urlsafe_b64decode(payload))
++        return claims if isinstance(claims, dict) else {}
++    except (ValueError, TypeError):
++        logging.warning('Could not decode claims from token', exc_info=True)
++        return {}
++
++
+ @read_session
+ def query_token(token: str, *, session: "Session") -> Optional["TokenValidationDict"]:
+     """
+@@ -442,14 +464,17 @@
+         models.Token.identity,
+         models.Token.expired_at.label('lifetime'),
+         models.Token.audience,
+-        models.Token.oidc_scope.label('authz_scope')
++        models.Token.oidc_scope.label('authz_scope'),
++        models.Token.token
+     ).where(
+         models.Token.token == token,
+         models.Token.expired_at > datetime.datetime.utcnow()
+     )
+     result = session.execute(query).first()
+     if result:
+-        return cast("TokenValidationDict", result._asdict())
++        value = result._asdict()
++        value['claims'] = _claims_from_jwt(value.pop('token'))
++        return cast("TokenValidationDict", value)
+     return None
+ 
+ 

@@ -81,6 +81,14 @@ OPA_RI_SCALE_REF  ?= vendor-2026-10-08
 # $BROWSER is set inside the VS Code devcontainer and opens the page on the host.
 OPEN_URL = $${BROWSER:-$$(command -v open || command -v xdg-open)}
 
+RUCIO_REF    ?= 41.2.1
+FTS_REST_REF ?= v3.14.0
+TEAPOT_REF   ?= 0.23.0
+
+RUCIO_URL    := https://github.com/rucio/rucio.git
+FTS_REST_URL := https://gitlab.cern.ch/fts/fts-rest-flask.git
+TEAPOT_URL   := https://github.com/interTwin-eu/teapot.git
+
 # Single source of truth for every TF_VAR_* passed to plan/apply/destroy/
 # import — previously duplicated across all four targets, which is how
 # userpass_password ended up present in three of them and silently
@@ -325,6 +333,17 @@ help: ## Show this help
 	    /^## / { sub(/^## /, ""); printf "\n\033[1m%s\033[0m\n", $$0 }' $(MAKEFILE_LIST)
 
 ## Setup
+
+.PHONY: patches
+patches: ## Regenerate diffs/ against pinned upstream refs
+	./shared/scripts/make-patches.sh rucio    $(RUCIO_URL)    $(RUCIO_REF)    shared/patches/rucio.manifest    diffs/rucio
+	./shared/scripts/make-patches.sh fts-rest $(FTS_REST_URL) $(FTS_REST_REF) shared/patches/fts-rest.manifest diffs/fts-rest
+	./shared/scripts/make-patches.sh teapot   $(TEAPOT_URL)   $(TEAPOT_REF)   shared/patches/teapot.manifest   diffs/teapot
+
+.PHONY: patches-check
+patches-check: patches ## Fail if patched files changed without regenerating diffs
+	@git diff --exit-code -- diffs/ || \
+	  (echo "Patched files changed without regenerating diffs: run 'make patches'"; exit 1)
 
 .PHONY: certs
 certs: ## Generate CA and host certificates

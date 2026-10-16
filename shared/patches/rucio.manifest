@@ -1,0 +1,7 @@
+# local file                                upstream path (rucio, = rucio-server image tag)
+shared/patches/rucio/authentication.py      lib/rucio/core/authentication.py
+shared/patches/rucio/common.py              lib/rucio/web/rest/flaskapi/v1/common.py
+shared/patches/rucio/constants.py           lib/rucio/common/constants.py
+shared/patches/rucio/fts3.py                lib/rucio/transfertool/fts3.py
+shared/patches/rucio/oidc.py                lib/rucio/core/oidc.py
+shared/patches/rucio/rse.py                 lib/rucio/core/rse.py

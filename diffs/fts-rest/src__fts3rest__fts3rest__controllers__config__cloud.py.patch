@@ -1,0 +1,11 @@
+--- a/src/fts3rest/fts3rest/controllers/config/cloud.py
++++ b/src/fts3rest/fts3rest/controllers/config/cloud.py
+@@ -68,6 +68,8 @@
+         app_key=input_dict.get("app_key", None),
+         app_secret=input_dict.get("app_secret", None),
+         service_api_url=input_dict.get("service_api_url", None),
++        region=input_dict.get("region", None),
++        sigv4_header_mode=input_dict.get("sigv4_header_mode", None),
+     )
+     try:
+         Session.merge(storage)

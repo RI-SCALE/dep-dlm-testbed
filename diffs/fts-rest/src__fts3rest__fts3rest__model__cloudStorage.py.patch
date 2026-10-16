@@ -1,0 +1,28 @@
+--- a/src/fts3rest/fts3rest/model/cloudStorage.py
++++ b/src/fts3rest/fts3rest/model/cloudStorage.py
+@@ -1,4 +1,5 @@
+-#   Copyright 2014-2020 CERN
++#   Copyright Members of the EMI Collaboration, 2013.
++#   Copyright 2013-2020 CERN
+ #
+ #   Licensed under the Apache License, Version 2.0 (the "License");
+ #   you may not use this file except in compliance with the License.
+@@ -11,7 +12,7 @@
+ #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ #   See the License for the specific language governing permissions and
+ #   limitations under the License.
+-from sqlalchemy import Column, String, ForeignKey
++from sqlalchemy import Column, String, Integer, ForeignKey
+ 
+ from .base import Base
+ 
+@@ -23,6 +24,9 @@
+     app_key = Column(String(255))
+     app_secret = Column(String(255))
+     service_api_url = Column(String(1024))
++    # S3 SigV4 signing; existing t_cloudStorage columns not mapped upstream
++    region = Column(String(100))
++    sigv4_header_mode = Column(Integer)
+ 
+ 
+ class CloudStorageUser(Base):

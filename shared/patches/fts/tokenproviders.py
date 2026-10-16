@@ -12,23 +12,6 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-#
-# === DEP DLM testbed patch ===================================================
-# Removes the forced trailing-slash normalization on `issuer` in
-# set_token_provider() below. That normalization directly conflicts with
-# fts3rest/__init__.py's _load_providers_from_db(), whose own comment states
-# the providers dict is keyed by the issuer EXACTLY as stored, with NO
-# trailing-slash normalization, because it must match the raw 'iss' claim
-# from the JWT verbatim. Keycloak (and most IdPs) issue tokens with no
-# trailing slash on `iss` — so a provider row this endpoint force-normalizes
-# to end in "/" can never match a real token, and every submission fails
-# with "Issuer not found in configured providers" regardless of how the
-# provider was registered. This patch makes the endpoint store `issuer`
-# byte-for-byte as given, consistent with what the runtime lookup actually
-# requires. It doesn't change auth, ownership, or any other field — only
-# removes a normalization step that was silently breaking every provider
-# registered through this endpoint. See docs/patches.md.
-# ===============================================================================
 import logging
 from urllib.parse import unquote, urlparse
 
@@ -72,7 +55,10 @@ def set_token_provider():
     Add or modify an OAuth2 token provider entry
     """
     input_dict = get_input_as_dict(request)
-    log.warning(f"Setting new token provider: {input_dict}")
+    log.warning(
+        "Setting new token provider: %s",
+        {k: v for k, v in input_dict.items() if k != "client_secret"},
+    )
     if "name" not in input_dict:
         raise BadRequest("Missing TokenProvider name!")
     if "issuer" not in input_dict:
@@ -89,8 +75,7 @@ def set_token_provider():
     if "client_secret" not in input_dict:
         raise BadRequest("Missing TokenProvider Client Secret!")
 
-    # DEP DLM testbed patch: issuer stored EXACTLY as given — no forced
-    # trailing slash. See file header for why.
+    # Store the issuer as given; it is matched verbatim against `iss`
     issuer = input_dict.get("issuer")
 
     provider = TokenProvider(

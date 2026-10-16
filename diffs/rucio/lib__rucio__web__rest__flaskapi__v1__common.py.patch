@@ -1,0 +1,10 @@
+--- a/lib/rucio/web/rest/flaskapi/v1/common.py
++++ b/lib/rucio/web/rest/flaskapi/v1/common.py
+@@ -167,6 +167,7 @@
+     flask.request.environ['vo'] = auth.get('vo', DEFAULT_VO)
+     flask.request.environ['issuer'] = auth.get('account')
+     flask.request.environ['identity'] = auth.get('identity')
++    flask.request.environ['token_claims'] = auth.get('claims') or {}
+     flask.request.environ['request_id'] = generate_uuid()
+     flask.request.environ['start_time'] = time()
+ 

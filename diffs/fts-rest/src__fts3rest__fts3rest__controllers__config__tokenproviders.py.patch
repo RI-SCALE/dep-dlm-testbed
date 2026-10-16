@@ -1,0 +1,25 @@
+--- a/src/fts3rest/fts3rest/controllers/config/tokenproviders.py
++++ b/src/fts3rest/fts3rest/controllers/config/tokenproviders.py
+@@ -55,7 +55,10 @@
+     Add or modify an OAuth2 token provider entry
+     """
+     input_dict = get_input_as_dict(request)
+-    log.warning(f"Setting new token provider: {input_dict}")
++    log.warning(
++        "Setting new token provider: %s",
++        {k: v for k, v in input_dict.items() if k != "client_secret"},
++    )
+     if "name" not in input_dict:
+         raise BadRequest("Missing TokenProvider name!")
+     if "issuer" not in input_dict:
+@@ -72,9 +75,8 @@
+     if "client_secret" not in input_dict:
+         raise BadRequest("Missing TokenProvider Client Secret!")
+ 
++    # Store the issuer as given; it is matched verbatim against `iss`
+     issuer = input_dict.get("issuer")
+-    if not issuer.endswith("/"):
+-        issuer = issuer + "/"
+ 
+     provider = TokenProvider(
+         name=input_dict.get("name"),

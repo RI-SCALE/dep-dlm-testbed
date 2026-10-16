@@ -1,0 +1,175 @@
+--- a/src/fts3rest/fts3rest/lib/JobBuilder.py
++++ b/src/fts3rest/fts3rest/lib/JobBuilder.py
+@@ -24,6 +24,8 @@
+ from flask import current_app as app
+ from .JobBuilder_utils import *
+ from fts3rest.lib.middleware.fts3auth import credentials
++from fts3rest.model import CloudStorage
++from fts3rest.model.meta import Session
+ 
+ log = logging.getLogger(__name__)
+ 
+@@ -200,6 +202,8 @@
+                             destination, file_dict
+                         )
+                     source = self._set_activity_query_string(source, file_dict)
++            # Allow/disallow protocol translation
++            self._validate_protocol_translation(source, destination)
+ 
+             f = dict(
+                 job_id=self.job_id,
+@@ -453,6 +457,21 @@
+             destinations = list(chain.from_iterable(destinations))
+         any(map(_is_http_endpoint, destinations))
+ 
++    def _validate_protocol_translation(self, source, destination):
++        if app.config.get("fts3.AllowProtocolTranslation", True):
++            return
++        source_prot = canonical_protocol(source)
++        destination_prot = canonical_protocol(destination)
++
++        if (
++            source_prot in PROTOCOL_MATRIX.keys()
++            and destination_prot in PROTOCOL_MATRIX.keys()
++        ):
++            if source_prot != destination_prot:
++                raise BadRequest(
++                    f"Protocol translation transfer between {source.geturl()} and {destination.geturl()} is not allowed ({source_prot} != {destination_prot})",
++                )
++
+     def _file_list_contains_a_token_list(self, files_list):
+         """
+         Returns true if the list of file contains at least one list of source or destination tokens
+@@ -465,6 +484,51 @@
+                 return True
+         return False
+ 
++    def _all_cloud_storage(self, urls):
++        """
++        True if every URL in the list is backed by a cloud_storage credential
++        (i.e. authenticates with static keys, not OIDC tokens). An empty list
++        is not considered cloud-storage-backed.
++        """
++        if not urls:
++            return False
++        for url in urls:
++            se = get_storage_element(urlparse(url.strip()))
++            if not self._cloud_storage_exists(se):
++                return False
++        return True
++
++    def _cloud_storage_exists(self, storage_element):
++        """
++        Return True if the given storage element is registered as a cloud_storage
++        in FTS (t_cloudStorage). Cloud storages are named "<SERVICE>:<host>"
++        (e.g. "S3:eodata.dataspace.copernicus.eu"); match on host.
++        """
++        if not storage_element:
++            return False
++
++        # Extract host whether storage_element is scheme://host:port,
++        # host:port, or bare host.
++        parsed = urlparse(storage_element)
++        se_host = parsed.hostname
++        if not se_host:
++            se_host = storage_element.split("://")[-1].split(":")[0].split("/")[0]
++
++        try:
++            rows = Session.query(CloudStorage.storage_name).all()
++        except Exception as ex:
++            log.warning(f"cloud_storage lookup failed: {ex}")
++            return False
++
++        for (cs_name,) in rows:
++            if not cs_name:
++                continue
++            cs_host = cs_name.split(":", 1)[1] if ":" in cs_name else cs_name
++            cs_host = cs_host.split(":")[0]  # strip any trailing :port
++            if cs_host == se_host:
++                return True
++        return False
++
+     def _add_missing_tokens_if_necessary(self, files_list):
+         """
+         Adds missing tokens if "single token" end user
+@@ -496,41 +560,45 @@
+             source_tokens = file_dict.get("source_tokens", [])
+             destination_tokens = file_dict.get("destination_tokens", [])
+             if source_tokens or destination_tokens:
+-                # Both source tokens and destination tokens should exist
+-                if not (source_tokens and destination_tokens):
+-                    raise BadRequest(
+-                        "Both source_tokens and destination_tokens are required if one of them is present."
+-                    )
++                # A side may legitimately have no token when it authenticates via
++                # cloud_storage (static S3/GCS keys) instead of OIDC. Treat such a
++                # side as satisfied so asymmetric token/cloud_storage transfers
++                # (e.g. S3 source -> token-based WebDAV destination) are allowed.
++                sources_need_token = not self._all_cloud_storage(sources)
++                dests_need_token = not self._all_cloud_storage(destinations)
+ 
+-                # Number of source tokens should match the number of sources
+-                if len(source_tokens) != len(sources):
++                if sources_need_token and not source_tokens:
+                     raise BadRequest(
+-                        "Length of source_tokens should be equal to the length of sources."
++                        "source_tokens required for non-cloud-storage sources"
+                     )
+-
+-                # Number of destination tokens should match the number of destinations
+-                if len(destination_tokens) != len(destinations):
++                if dests_need_token and not destination_tokens:
+                     raise BadRequest(
+-                        "Length of destination_tokens should be equal to the length of destinations."
++                        "destination_tokens required for non-cloud-storage destinations"
+                     )
+ 
+-                # Check if source and destination token lists are not empty
+-                if not source_tokens or not destination_tokens:
+-                    raise BadRequest(
+-                        "Source tokens and destination tokens lists should not be empty."
+-                    )
++                # Length / per-token checks apply ONLY to a side that carries tokens.
++                # A cloud_storage side legitimately has an empty token list.
++                if source_tokens:
++                    if len(source_tokens) != len(sources):
++                        raise BadRequest(
++                            "Length of source_tokens should be equal to the length of sources."
++                        )
++                    for source, source_token in zip(sources, source_tokens):
++                        if not source_token:
++                            raise BadRequest(f"Token for source '{source}' is missing.")
+ 
+-                # Check if each source and destination has corresponding tokens
+-                for source, source_token in zip(sources, source_tokens):
+-                    if not source_token:
+-                        raise BadRequest(f"Token for source '{source}' is missing.")
+-                for destination, destination_token in zip(
+-                    destinations, destination_tokens
+-                ):
+-                    if not destination_token:
++                if destination_tokens:
++                    if len(destination_tokens) != len(destinations):
+                         raise BadRequest(
+-                            f"Token for destination '{destination}' is missing."
++                            "Length of destination_tokens should be equal to the length of destinations."
+                         )
++                    for destination, destination_token in zip(
++                        destinations, destination_tokens
++                    ):
++                        if not destination_token:
++                            raise BadRequest(
++                                f"Token for destination '{destination}' is missing."
++                            )
+ 
+     def _add_tokens_to_dict(self, tokens_dict, token_list):
+         """
+@@ -842,6 +910,8 @@
+             if files_list is not None:
+                 self._populate_transfers(files_list)
+ 
++            validate_submitted_file_limits(len(files_list))
++
+             self._set_user()
+ 
+             # Reject for SE banning

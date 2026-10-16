@@ -1,0 +1,37 @@
+--- a/lib/rucio/core/rse.py
++++ b/lib/rucio/core/rse.py
+@@ -2045,6 +2045,14 @@
+ 
+ def determine_audience_for_rse(rse_id: str) -> str:
+     """Construct the Audience claim for an RSE."""
++    # Deferred import: rucio.core.oidc -> rucio.core.account -> rucio.core.rse
++    from rucio.core.oidc import ADMIN_ISSUER_ID, get_capabilities
++
++    if get_capabilities(ADMIN_ISSUER_ID, 'client_credentials').resource_param:
++        # RFC 8707 resource indicators must be absolute URIs, not bare
++        # hostnames; use the RSE's `audience` attribute when it is set.
++        if audience := get_rse_attribute(rse_id, 'audience'):  # type: ignore (session parameter missing)
++            return audience
+     rse_protocols = get_rse_protocols(rse_id)
+     # FIXME: At the time of writing, there does not appear to be a common
+     # agreement on how sites will configure their storages.  Rucio had requested
+@@ -2061,8 +2069,19 @@
+     extra_scopes: Optional['Iterable[str]'] = None,
+ ) -> str:
+     """Construct the Scope claim for an RSE."""
++    from rucio.core.oidc import ADMIN_ISSUER_ID, get_capabilities  # deferred, see above
++
+     if extra_scopes is None:
+         extra_scopes = []
++    capabilities = get_capabilities(ADMIN_ISSUER_ID, 'client_credentials')
++    if capabilities.scope_map or capabilities.drop_scopes:
++        # Issuer without path-based storage scopes: translate each scope
++        # (a mapping to '' drops it) and always request `openid`.
++        mapped = {capabilities.scope_map.get(s, s) for s in scopes}
++        mapped.update(s for s in extra_scopes if s not in capabilities.drop_scopes)
++        mapped.discard('')
++        mapped.add('openid')
++        return ' '.join(sorted(mapped))
+     rse_protocols = get_rse_protocols(rse_id)
+     filtered_prefixes = set()
+     for protocol in rse_protocols['protocols']:

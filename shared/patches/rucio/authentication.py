@@ -14,15 +14,14 @@
 
 import datetime
 import hashlib
+import json
+import logging
 import random
 import re
 import sys
 import traceback
-from base64 import b64decode
-import base64
-import json
+from base64 import b64decode, urlsafe_b64decode
 from typing import TYPE_CHECKING, Optional, Union, cast
-import logging
 
 import paramiko
 from dogpile.cache import make_region
@@ -68,21 +67,19 @@ def strip_x509_proxy_attributes(dn: str) -> str:
     The motivation for stripping these attributes is to avoid having to store
     multiple DNs in the database (as different identities).
     """
-    if dn.startswith("/"):
-        regexp = r"(/CN=(limited proxy|proxy|[0-9]+))+$"
+    if dn.startswith('/'):
+        regexp = r'(/CN=(limited proxy|proxy|[0-9]+))+$'
     else:
-        regexp = r"^(CN=(limited proxy|proxy|[0-9]+),)+"
+        regexp = r'^(CN=(limited proxy|proxy|[0-9]+),)+'
 
-    return re.sub(regexp, "", dn)
+    return re.sub(regexp, '', dn)
 
 
 def token_key_generator(namespace, fni, **kwargs):
-    """:returns: generate key function"""
-
+    """ :returns: generate key function """
     def generate_key(token, *, session: "Session"):
-        """:returns: token"""
+        """ :returns: token """
         return token
-
     return generate_key
 
 
@@ -96,17 +93,13 @@ def _hash_token_for_cache(token: str) -> str:
     :param token: Authentication token to hash
     :returns: SHA-256 hash of the token as a hex string (64 characters)
     """
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
-if config_get_bool("cache", "use_external_cache_for_auth_tokens", default=False):
-    TOKENREGION = MemcacheRegion(
-        expiration_time=900, function_key_generator=token_key_generator
-    )
+if config_get_bool('cache', 'use_external_cache_for_auth_tokens', default=False):
+    TOKENREGION = MemcacheRegion(expiration_time=900, function_key_generator=token_key_generator)
 else:
-    TOKENREGION = make_region(function_key_generator=token_key_generator).configure(
-        "dogpile.cache.memory", expiration_time=900
-    )
+    TOKENREGION = make_region(function_key_generator=token_key_generator).configure('dogpile.cache.memory', expiration_time=900)
 
 
 @transactional_session
@@ -117,7 +110,7 @@ def get_auth_token_user_pass(
     appid: str,
     ip: Optional[str] = None,
     *,
-    session: "Session",
+    session: "Session"
 ) -> Optional["TokenDict"]:
     """
     Authenticate a Rucio account temporarily via username and password.
@@ -138,35 +131,39 @@ def get_auth_token_user_pass(
     if not account_exists(account, session=session):
         return None
 
-    query = select(models.Identity).where(
+    query = select(
+        models.Identity
+    ).where(
         models.Identity.identity == username,
-        models.Identity.identity_type == IdentityType.USERPASS,
+        models.Identity.identity_type == IdentityType.USERPASS
     )
     result = session.execute(query).scalar()
 
-    db_salt = result["salt"]
-    db_password = result["password"]
+    db_salt = result['salt']
+    db_password = result['password']
 
     salted_password = db_salt + password.encode()
     if db_password != hashlib.sha256(salted_password).hexdigest():
         return None
 
     # get account identifier
-    query = select(models.IdentityAccountAssociation).where(
+    query = select(
+        models.IdentityAccountAssociation
+    ).where(
         models.IdentityAccountAssociation.identity == username,
         models.IdentityAccountAssociation.identity_type == IdentityType.USERPASS,
-        models.IdentityAccountAssociation.account == account,
+        models.IdentityAccountAssociation.account == account
     )
     result = session.execute(query).scalar()
 
-    db_account = result["account"]
+    db_account = result['account']
 
     # remove expired tokens
     __delete_expired_tokens_account(account=account, session=session)
 
     # create new rucio-auth-token for account
     tuid = generate_uuid()  # NOQA
-    token = f"{account}-{username}-{appid}-{tuid}"
+    token = f'{account}-{username}-{appid}-{tuid}'
     new_token = models.Token(account=db_account, identity=username, token=token, ip=ip)
     new_token.save(session=session)
 
@@ -180,7 +177,7 @@ def get_auth_token_x509(
     appid: str,
     ip: Optional[str] = None,
     *,
-    session: "Session",
+    session: "Session"
 ) -> Optional["TokenDict"]:
     """
     Authenticate a Rucio account temporarily via an x509 certificate.
@@ -205,7 +202,7 @@ def get_auth_token_x509(
 
     # create new rucio-auth-token for account
     tuid = generate_uuid()  # NOQA
-    token = f"{account}-{dn}-{appid}-{tuid}"
+    token = f'{account}-{dn}-{appid}-{tuid}'
     new_token = models.Token(account=account, identity=dn, token=token, ip=ip)
     new_token.save(session=session)
 
@@ -219,7 +216,7 @@ def get_auth_token_gss(
     appid: str,
     ip: Optional[str] = None,
     *,
-    session: "Session",
+    session: "Session"
 ) -> Optional["TokenDict"]:
     """
     Authenticate a Rucio account temporarily via a GSS token.
@@ -244,7 +241,7 @@ def get_auth_token_gss(
 
     # create new rucio-auth-token for account
     tuid = generate_uuid()  # NOQA
-    token = f"{account}-{gsstoken}-{appid}-{tuid}"
+    token = f'{account}-{gsstoken}-{appid}-{tuid}'
     new_token = models.Token(account=account, token=token, ip=ip)
     new_token.save(session=session)
 
@@ -258,7 +255,7 @@ def get_auth_token_ssh(
     appid: str,
     ip: Optional[str] = None,
     *,
-    session: "Session",
+    session: "Session"
 ) -> Optional["TokenDict"]:
     """
     Authenticate a Rucio account temporarily via SSH key exchange.
@@ -276,29 +273,31 @@ def get_auth_token_ssh(
 
     # decode the signature which must come in base64 encoded
     try:
-        signature += "=" * ((4 - len(signature) % 4) % 4)  # adding required padding
+        signature += '=' * ((4 - len(signature) % 4) % 4)  # adding required padding
         decoded_signature = b64decode(signature)
     except TypeError:
-        raise CannotAuthenticate(
-            f"Cannot authenticate to account {account} with malformed signature"
-        )
+        raise CannotAuthenticate(f'Cannot authenticate to account {account} with malformed signature')
 
     # Make sure the account exists
     if not account_exists(account, session=session):
         return None
 
     # get all active challenge tokens for the requested account
-    query = select(models.Token).where(
+    query = select(
+        models.Token
+    ).where(
         models.Token.expired_at >= datetime.datetime.utcnow(),
         models.Token.account == account,
-        models.Token.token.like("challenge-%"),
+        models.Token.token.like('challenge-%')
     )
     active_challenge_tokens = session.execute(query).scalars().all()
 
     # get all identities for the requested account
-    query = select(models.IdentityAccountAssociation).where(
+    query = select(
+        models.IdentityAccountAssociation
+    ).where(
         models.IdentityAccountAssociation.identity_type == IdentityType.SSH,
-        models.IdentityAccountAssociation.account == account,
+        models.IdentityAccountAssociation.account == account
     )
     identities = session.execute(query).scalars().all()
 
@@ -309,14 +308,12 @@ def get_auth_token_ssh(
     # try all available SSH identities for the account with the provided signature
     match = False
     for identity in identities:
-        data = identity["identity"].split()[1]
-        data += "=" * ((4 - len(data) % 4) % 4)  # adding required padding
+        data = identity['identity'].split()[1]
+        data += '=' * ((4 - len(data) % 4) % 4)  # adding required padding
         pub_k = paramiko.RSAKey(data=b64decode(data))
         for challenge_token in active_challenge_tokens:
-            if pub_k.verify_ssh_sig(
-                str(challenge_token["token"]).encode(),
-                paramiko.Message(decoded_signature),
-            ):
+            if pub_k.verify_ssh_sig(str(challenge_token['token']).encode(),
+                                    paramiko.Message(decoded_signature)):
                 match = True
                 break
         if match:
@@ -330,7 +327,7 @@ def get_auth_token_ssh(
 
     # create new rucio-auth-token for account
     tuid = generate_uuid()  # NOQA
-    token = f"{account}-ssh:pubkey-{appid}-{tuid}"
+    token = f'{account}-ssh:pubkey-{appid}-{tuid}'
     new_token = models.Token(account=account, token=token, ip=ip)
     new_token.save(session=session)
 
@@ -343,7 +340,7 @@ def get_ssh_challenge_token(
     appid: str,
     ip: Optional[str] = None,
     *,
-    session: "Session",
+    session: "Session"
 ) -> Optional["TokenDict"]:
     """
     Prepare a challenge token for subsequent SSH public key authentication.
@@ -370,11 +367,10 @@ def get_ssh_challenge_token(
     expiration = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
     expiration_unix = expiration.strftime("%s")
 
-    challenge_token = f"challenge-{crypto_rand}-{account}-{expiration_unix}"
+    challenge_token = f'challenge-{crypto_rand}-{account}-{expiration_unix}'
 
-    new_challenge_token = models.Token(
-        account=account, token=challenge_token, ip=ip, expired_at=expiration
-    )
+    new_challenge_token = models.Token(account=account, token=challenge_token, ip=ip,
+                                       expired_at=expiration)
     new_challenge_token.save(session=session)
 
     return token_dictionary(new_challenge_token)
@@ -382,7 +378,10 @@ def get_ssh_challenge_token(
 
 @transactional_session
 def redirect_auth_oidc(
-    auth_code: str, fetchtoken: bool = False, *, session: "Session"
+    auth_code: str,
+    fetchtoken: bool = False,
+    *,
+    session: "Session"
 ) -> Optional[str]:
     """
     Finds the Authentication URL in the Rucio DB oauth_requests table
@@ -400,7 +399,9 @@ def redirect_auth_oidc(
 
     """
     try:
-        query = select(models.OAuthRequest.redirect_msg).where(
+        query = select(
+            models.OAuthRequest.redirect_msg
+        ).where(
             models.OAuthRequest.access_msg == auth_code
         )
         redirect_result = session.execute(query).scalar()
@@ -408,13 +409,13 @@ def redirect_auth_oidc(
         if not redirect_result:
             return None
 
-        if "http" not in redirect_result and fetchtoken:
+        if 'http' not in redirect_result and fetchtoken:
             # in this case the function check if the value is a valid token
             vdict = validate_auth_token(redirect_result, session=session)
             if vdict:
                 return redirect_result
             return None
-        elif "http" in redirect_result and not fetchtoken:
+        elif 'http' in redirect_result and not fetchtoken:
             # return redirection URL
             return redirect_result
     except Exception:
@@ -423,20 +424,21 @@ def redirect_auth_oidc(
 
 def _claims_from_jwt(token: Optional[str]) -> dict:
     """
-    Decode the payload of a JWT already validated by other means.
+    Decode the payload of a JWT without verifying its signature.
 
-    No signature check: the caller has matched this token against the
-    tokens table, so it was verified at issuance. Non-JWT tokens
-    (userpass, x509) return {}.
+    Only call this for a token that was already matched against the tokens
+    table (i.e. validated when it was issued/stored). Non-JWT tokens
+    (userpass, x509, ssh) return {}.
     """
-    if not token or len(token.split(".")) != 3:
+    if not token or token.count('.') != 2:
         return {}
     try:
-        payload = token.split(".")[1]
-        payload += "=" * (-len(payload) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload))
-    except Exception:
-        logging.warning("Could not decode claims from token", exc_info=True)
+        payload = token.split('.')[1]
+        payload += '=' * (-len(payload) % 4)
+        claims = json.loads(urlsafe_b64decode(payload))
+        return claims if isinstance(claims, dict) else {}
+    except (ValueError, TypeError):
+        logging.warning('Could not decode claims from token', exc_info=True)
         return {}
 
 
@@ -460,18 +462,18 @@ def query_token(token: str, *, session: "Session") -> Optional["TokenValidationD
     query = select(
         models.Token.account,
         models.Token.identity,
-        models.Token.expired_at.label("lifetime"),
+        models.Token.expired_at.label('lifetime'),
         models.Token.audience,
-        models.Token.oidc_scope.label("authz_scope"),
-        models.Token.token,
+        models.Token.oidc_scope.label('authz_scope'),
+        models.Token.token
     ).where(
         models.Token.token == token,
-        models.Token.expired_at > datetime.datetime.utcnow(),
+        models.Token.expired_at > datetime.datetime.utcnow()
     )
     result = session.execute(query).first()
     if result:
         value = result._asdict()
-        value["claims"] = _claims_from_jwt(value.pop("token"))
+        value['claims'] = _claims_from_jwt(value.pop('token'))
         return cast("TokenValidationDict", value)
     return None
 
@@ -499,7 +501,7 @@ def validate_auth_token(token: str, *, session: "Session") -> "TokenValidationDi
 
     # SSH challenge tokens share this table but are nonces to be signed, not
     # credentials, so they must never authenticate a request on their own.
-    if token.startswith("challenge-"):
+    if token.startswith('challenge-'):
         raise CannotAuthenticate("Challenge tokens cannot be used for authentication.")
 
     # Hash token for cache key to prevent exposure and handle long JWT tokens
@@ -516,28 +518,28 @@ def validate_auth_token(token: str, *, session: "Session") -> "TokenValidationDi
             if len(token.split(".")) == 3:
                 # imported here to avoid circular import
                 from rucio.core.oidc import validate_jwt
-
                 value = validate_jwt(token, session=session)
             else:
                 raise CannotAuthenticate(traceback.format_exc())
         # save token validation result in cache using hashed key
         TOKENREGION.set(cache_key, value)
-    lifetime = value.get("lifetime", datetime.datetime(1970, 1, 1))  # type: ignore (value is narrowed to dict, but type-checker doesn't see it)
+    lifetime = value.get('lifetime', datetime.datetime(1970, 1, 1))  # type: ignore (value is narrowed to dict, but type-checker doesn't see it)
     if lifetime < datetime.datetime.utcnow():  # check if expired
         TOKENREGION.delete(cache_key)
-        raise CannotAuthenticate(
-            f"Token found but expired since {date_to_str(lifetime)}."
-        )
+        raise CannotAuthenticate(f"Token found but expired since {date_to_str(lifetime)}.")
     return cast("TokenValidationDict", value)
 
 
 def token_dictionary(token: models.Token) -> "TokenDict":
-    return {"token": token.token, "expires_at": token.expired_at}
+    return {'token': token.token, 'expires_at': token.expired_at}
 
 
 @transactional_session
 def __delete_expired_tokens_account(
-    account: "InternalAccount", *, session: "Session", check_refresh_token: bool = False
+    account: "InternalAccount",
+    *,
+    session: "Session",
+    check_refresh_token: bool = False
 ) -> None:
     """
     Deletes expired tokens from the database.
@@ -549,7 +551,7 @@ def __delete_expired_tokens_account(
     """
     where_clauses = [
         models.Token.expired_at < datetime.datetime.utcnow(),
-        models.Token.account == account,
+        models.Token.account == account
     ]
 
     # refresh token check if the option is enabled
@@ -557,22 +559,26 @@ def __delete_expired_tokens_account(
         where_clauses.append(
             or_(
                 models.Token.refresh_expired_at == null(),
-                models.Token.refresh_expired_at < datetime.datetime.utcnow(),
+                models.Token.refresh_expired_at < datetime.datetime.utcnow()
             )
         )
 
-    select_query = (
-        select(models.Token.token)
-        .where(*where_clauses)
-        .with_for_update(skip_locked=True)
+    select_query = select(
+        models.Token.token
+    ).where(
+        *where_clauses
+    ).with_for_update(
+        skip_locked=True
     )
 
     tokens = session.execute(select_query).scalars().all()
 
     for chunk in chunks(tokens, 100):
-        delete_query = (
-            delete(models.Token)
-            .prefix_with("/*+ INDEX(TOKENS_ACCOUNT_EXPIRED_AT_IDX) */")
-            .where(models.Token.token.in_(chunk))
+        delete_query = delete(
+            models.Token
+        ).prefix_with(
+            "/*+ INDEX(TOKENS_ACCOUNT_EXPIRED_AT_IDX) */"
+        ).where(
+            models.Token.token.in_(chunk)
         )
         session.execute(delete_query)

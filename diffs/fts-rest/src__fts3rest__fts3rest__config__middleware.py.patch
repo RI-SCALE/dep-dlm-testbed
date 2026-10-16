@@ -1,0 +1,15 @@
+--- a/src/fts3rest/fts3rest/config/middleware.py
++++ b/src/fts3rest/fts3rest/config/middleware.py
+@@ -87,10 +87,9 @@
+             log.info("No token providers found in the database.")
+ 
+         for provider in token_providers:
+-            # Sanitize URL: ensure issuer ends with a slash for consistency
++            # Keep the issuer exactly as stored: it must match the raw `iss`
++            # claim (see OIDCmanager.get_token_issuer)
+             provider_url = provider.issuer
+-            if provider_url and not provider_url.endswith("/"):
+-                provider_url = provider_url + "/"
+ 
+             providers[provider_url] = {
+                 "client_id": provider.client_id,

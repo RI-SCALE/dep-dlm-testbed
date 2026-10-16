@@ -1,0 +1,97 @@
+--- a/lib/rucio/transfertool/fts3.py
++++ b/lib/rucio/transfertool/fts3.py
+@@ -37,7 +37,7 @@
+ from rucio.common.stopwatch import Stopwatch
+ from rucio.common.utils import APIEncoder, chunks, deep_merge_dict
+ from rucio.core.monitor import MetricManager
+-from rucio.core.oidc import request_token
++from rucio.core.oidc import ADMIN_ISSUER_ID, get_capabilities, request_token
+ from rucio.core.request import get_source_rse, get_transfer_error
+ from rucio.core.rse import determine_audience_for_rse, determine_scope_for_rse, get_rse_supported_checksums_from_attributes
+ from rucio.db.sqla.constants import RequestState
+@@ -309,12 +309,25 @@
+     and the protocol being used must be WebDAV.
+     """
+     for endpoint in [*transfer_hop.sources, transfer_hop.dst]:
++        # S3 endpoints authenticate with FTS cloud_storage keys, not tokens.
++        if endpoint.scheme == 's3s':
++            continue
+         if (endpoint.rse.attributes.get(RseAttr.OIDC_SUPPORT) is not True
+-                or endpoint.scheme != 'davs'):
++                or endpoint.scheme not in ('davs', 'https')):
+             return False
+     return True
+ 
+ 
++def _fts_client_scope() -> str:
++    """Scope for Rucio's own token towards FTS, from the admin issuer's capabilities."""
++    capabilities = get_capabilities(ADMIN_ISSUER_ID, 'client_credentials')
++    if capabilities.fts_client_scope is not None:
++        return capabilities.fts_client_scope
++    if capabilities.scope_map:
++        return ' '.join(sorted({s for s in capabilities.scope_map.values() if s}))
++    return 'fts'
++
++
+ def build_job_params(
+         transfer_path: list["DirectTransfer"],
+         bring_online: Optional[int] = None,
+@@ -398,6 +411,11 @@
+         job_params['job_metadata']['multi_sources'] = True
+     if strict_copy:
+         job_params['strict_copy'] = strict_copy
++    # Unless FTS manages the token lifecycle (oidc.token_strategy = exchange),
++    # Rucio hands over long-lived tokens which FTS must not exchange/refresh.
++    # Requires AllowNonManagedTokens on the FTS server.
++    if config_get('oidc', 'token_strategy', raise_exception=False, default='client_credentials') != 'exchange':
++        job_params['unmanaged_tokens'] = True
+ 
+     if (last_hop.dst.rse.attributes.get(RseAttr.USE_IPV4, False)
+             or any(src.rse.attributes.get(RseAttr.USE_IPV4, False) for src in last_hop.sources)):
+@@ -903,7 +921,7 @@
+         if oidc_support:
+             fts_hostname = urlparse(external_host).hostname
+             if fts_hostname is not None:
+-                token = request_token(audience=fts_hostname, scope='fts')
++                token = request_token(audience=fts_hostname, scope=_fts_client_scope())
+                 if token is not None:
+                     self.logger(logging.INFO, 'Using a token to authenticate with FTS instance %s', fts_hostname)
+                     self.token = token
+@@ -1020,17 +1038,29 @@
+         }
+ 
+         if self.token:
+-            t_file['source_tokens'] = []
++            source_tokens = []
+             for source in transfer.sources:
++                # S3 sources use FTS cloud_storage keys; no token is attached.
++                if source.scheme == 's3s':
++                    continue
+                 src_audience = determine_audience_for_rse(rse_id=source.rse.id)
+                 src_scope = determine_scope_for_rse(rse_id=source.rse.id, scopes=['storage.read'], extra_scopes=['offline_access'])
+-                t_file['source_tokens'].append(request_token(src_audience, src_scope))
+-
+-            dst_audience = determine_audience_for_rse(transfer.dst.rse.id)
+-            # FIXME: At the time of writing, StoRM requires `storage.read` in
+-            # order to perform a stat operation.
+-            dst_scope = determine_scope_for_rse(transfer.dst.rse.id, scopes=['storage.modify', 'storage.read'], extra_scopes=['offline_access'])
+-            t_file['destination_tokens'] = [request_token(dst_audience, dst_scope)]
++                src_token = request_token(src_audience, src_scope, account=rws.account)
++                if src_token is None:
++                    raise TransferToolWrongAnswer(f'Could not procure source token for {source.rse.name}')
++                source_tokens.append(src_token)
++            if source_tokens:
++                t_file['source_tokens'] = source_tokens
++
++            if transfer.dst.scheme != 's3s':
++                dst_audience = determine_audience_for_rse(transfer.dst.rse.id)
++                # FIXME: At the time of writing, StoRM requires `storage.read` in
++                # order to perform a stat operation.
++                dst_scope = determine_scope_for_rse(transfer.dst.rse.id, scopes=['storage.modify', 'storage.read'], extra_scopes=['offline_access'])
++                dst_token = request_token(dst_audience, dst_scope, account=rws.account)
++                if dst_token is None:
++                    raise TransferToolWrongAnswer(f'Could not procure destination token for {transfer.dst.rse.name}')
++                t_file['destination_tokens'] = [dst_token]
+ 
+         if isinstance(self.scitags_exp_id, int):
+             activity_id = self.scitags_activity_ids.get(rws.activity)
