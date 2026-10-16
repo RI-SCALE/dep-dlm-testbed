@@ -6,7 +6,7 @@ ConfigMap in Kubernetes).
 
 ## Tracking
 
-- `shared/patches/<component>.manifest` maps each patched file to its upstream path.
+- `patches/<component>.manifest` maps each patched file to its upstream path.
 - `make patches` writes unified diffs to `diffs/<component>/` against the pinned
   refs in the Makefile (`RUCIO_REF`, `FTS_REST_REF`, `TEAPOT_REF`). Each ref
   **must match the image** the file is mounted into.

@@ -46,7 +46,7 @@ make ingest-policies                        # reload policies into a running OPA
 make check-claims USER=<e.g. depoperator>   # inspect entitlement/acr claims per Keycloak user
 ```
 
-Policies live in [shared/config/opa/](./shared/config/opa/); `make fetch-odrl-policies` prints the current DEP policies from the WP4 repository (needs `ODRL_CLIENT_SECRET`).
+Policies live in [configs/opa/](./configs/opa/); `make fetch-odrl-policies` prints the current DEP policies from the WP4 repository (needs `ODRL_CLIENT_SECRET`).
 
 ### Observability
 
@@ -91,11 +91,11 @@ PROFILE=egi-dev             # or ls-aai-dev
 source envs/$PROFILE.env
 
 # Substitute your client credentials into idpsecrets.json
-cp shared/config/rucio/$PROFILE/idpsecrets.json.example shared/config/rucio/$PROFILE/idpsecrets.json
+cp configs/rucio/$PROFILE/idpsecrets.json.example configs/rucio/$PROFILE/idpsecrets.json
 sed -i \
   -e "s|<valid client id>|$OIDC_CLIENT_ID|g" \
   -e "s|<valid client secret>|$OIDC_CLIENT_SECRET|g" \
-  shared/config/rucio/$PROFILE/idpsecrets.json
+  configs/rucio/$PROFILE/idpsecrets.json
 
 export RUNTIME=k8s DAEMON_MODE=direct TOKEN_MODE=unmanaged   # see table
 make start

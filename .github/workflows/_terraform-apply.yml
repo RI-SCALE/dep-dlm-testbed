@@ -186,11 +186,11 @@ jobs:
       - name: make tf-apply
         run: make tf-apply AUTO_APPROVE=1
 
-      # ── reset validation-storage so it re-pulls certs/config ──────────
+      # ── reset validation-storage so it re-pulls certs/configs ──────────
       # Terraform apply only *uploads* new secret versions to GSM; the VM's
       # startup-script (which wipes/re-populates $CONFIG_DIR and pulls
       # fresh cert bytes) only runs at boot — metadata-only updates don't
-      # re-trigger it. Without an explicit reset, cert/config fixes land
+      # re-trigger it. Without an explicit reset, cert/configs fixes land
       # in Secret Manager but never reach the running instance.
       - name: Reset validation-storage instance
         if: inputs.tf_env == 'staging'

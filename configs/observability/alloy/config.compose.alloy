@@ -1,0 +1,42 @@
+// Grafana Alloy config for Docker Compose (design-doc-005, phase 2).
+// Ships stdout/stderr of every container on the Docker host to Loki.
+// Label contract with shared/tests/test_observability.py and the Kubernetes
+// config: every stream carries service=<compose service name>.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host           = "unix:///var/run/docker.sock"
+  targets        = discovery.docker.containers.targets
+  relabel_rules  = discovery.relabel.containers.rules
+  labels         = { runtime = "compose" }
+  forward_to     = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

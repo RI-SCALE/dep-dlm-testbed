@@ -21,6 +21,6 @@ RUN git clone --depth 1 --branch "${TEAPOT_REF}" "${TEAPOT_REPO}" /usr/src/teapo
 RUN echo "root ALL=(teapot) NOPASSWD: ALL" >> /etc/sudoers
 
 EXPOSE 8081
-COPY shared/scripts/teapot/docker-entrypoint.sh /usr/local/bin/teapot-entrypoint.sh
+COPY scripts/teapot/docker-entrypoint.sh /usr/local/bin/teapot-entrypoint.sh
 RUN chmod +x /usr/local/bin/teapot-entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/teapot-entrypoint.sh"]

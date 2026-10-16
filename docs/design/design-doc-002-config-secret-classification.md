@@ -52,7 +52,7 @@ The umbrella chart's own templates
 single source of truth for `testbed-configs`/`testbed-patches`/
 `testbed-scripts`/`testbed-tests` across **both** deployment paths.
 GitOps renders the same templates directly
-(`shared/scripts/render-testbed-configmaps.sh`, via
+(`scripts/render-testbed-configmaps.sh`, via
 `helm template --show-only`) rather than maintaining a second,
 independent definition of the same objects — closing the exact class
 of drift this doc exists to prevent. Confirmed in practice: an earlier,

@@ -1,6 +1,6 @@
 // Grafana Alloy config for Docker Compose (design-doc-005, phase 2).
 // Ships stdout/stderr of every container on the Docker host to Loki.
-// Label contract with shared/tests/test_observability.py and the Kubernetes
+// Label contract with tests/test_observability.py and the Kubernetes
 // config: every stream carries service=<compose service name>.
 
 discovery.docker "containers" {

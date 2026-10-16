@@ -114,8 +114,8 @@ This decision holds while each community gets its own deployment. Revisit it if 
 
 ## Evidence / Links
 
-* `shared/config/opa/authz.rego`, `authz_test.rego`
-* `shared/config/opa/odrl/data.json`: tier policy
-* `shared/config/opa/vendor/opa-ri-scale/VENDORED.md`: ODRL evaluator
-* `shared/scripts/ingest_policies.py`
-* `shared/patches/rucio/rucio_opa_v1_policy/`
+* `configs/opa/authz.rego`, `authz_test.rego`
+* `configs/opa/odrl/data.json`: tier policy
+* `configs/opa/vendor/opa-ri-scale/VENDORED.md`: ODRL evaluator
+* `scripts/ingest_policies.py`
+* `patches/rucio/rucio_opa_v1_policy/`

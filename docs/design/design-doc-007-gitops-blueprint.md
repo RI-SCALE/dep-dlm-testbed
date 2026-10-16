@@ -137,8 +137,8 @@ kubelet mount failure, so the Secret must exist before the Job's pod is created.
 | `deploy/gitops/argocd/` | ApplicationSets + app-of-apps entrypoints |
 | `deploy/gitops/flux/` | HelmReleases, HelmRepositories, ESO Kustomization, env entrypoints |
 | `init-argocd.sh`, `init-flux.sh` | bootstrap and ordering (`--revision`, `--flow`, `--scope-profile`) |
-| `shared/scripts/seed-vault.sh` | sandbox Vault seeding |
-| `shared/scripts/run-bootstrap-db.sh` | Rucio DB schema bootstrap |
+| `scripts/seed-vault.sh` | sandbox Vault seeding |
+| `scripts/run-bootstrap-db.sh` | Rucio DB schema bootstrap |
 | `Makefile` | `argocd-install/-uninstall/-open`, `flux-install/-uninstall` |
 | `docs/diagrams/` | deployment views per environment |
 

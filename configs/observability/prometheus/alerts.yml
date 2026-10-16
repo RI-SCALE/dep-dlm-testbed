@@ -1,0 +1,134 @@
+# Alerts and SLO rules (design-doc-005). Component alerts say what broke;
+# SLO burn-rate alerts say whether users are affected.
+# Shared by Compose (rule_files) and Kubernetes (PrometheusRule wrapper).
+# No Alertmanager in the Compose stack: alerts show in the Prometheus UI.
+groups:
+  - name: dep-dlm-components
+    rules:
+      - alert: RucioServerDown
+        expr: up{job="rucio-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "rucio-server unreachable"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 2 minutes."
+
+      - alert: RucioDaemonsMetricsDown
+        # Fires in DAEMON_MODE=direct too, where no daemons run; expected there.
+        expr: up{job="rucio-daemons"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio daemon metrics unavailable"
+          description: "No metrics from {{ $labels.instance }} for 5 minutes."
+
+      - alert: RucioDaemonStale
+        # From the heartbeats table: a daemon whose newest heartbeat is older
+        # than 5 minutes has hung or crashed. Daemons that exit cleanly delete
+        # their rows, so direct mode (--run-once) does not trigger this.
+        expr: max by (daemon) (rucio_daemon_heartbeat_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Rucio daemon {{ $labels.daemon }} stopped sending heartbeats"
+          description: "Last heartbeat {{ $value | humanizeDuration }} ago."
+
+      - alert: RucioDbMetricsDown
+        expr: up{job="rucio-db"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio database metrics unavailable"
+          description: "rucio-db-exporter cannot query the Rucio database for 5 minutes."
+
+      - alert: FtsMetricsDown
+        expr: up{job="fts"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "FTS database metrics unavailable"
+          description: "fts-exporter cannot query the FTS database for 5 minutes."
+
+      - alert: RucioRulesStuck
+        expr: sum(rucio_rules{state="STUCK"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio has stuck replication rules"
+          description: "{{ $value }} rules are STUCK; check rule errors and FTS failure reasons."
+
+      - alert: RucioTransfersBlocked
+        # Requests Rucio cannot hand to FTS never reach the transfer SLO.
+        expr: sum(rucio_transfer_requests{state=~"SUBMISSION_FAILED|NO_SOURCES|MISMATCH_SCHEME"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rucio transfer requests cannot be submitted to FTS"
+          description: "{{ $value }} requests are failing submission, have no sources or no matching scheme."
+
+  # SLOs: internal targets over 7 days, not SLAs.
+  #   transfer success 95 %  finished / (finished + failed) FTS files
+  #   rule latency     95 %  rules reaching OK within 30 minutes
+  # Burn-rate alerts: fast 14.4x over 1h, slow 6x over 6h.
+  # The *_1h source metrics are rolling one-hour gauges; sum_over_time()
+  # counts every event equally often, so longer-window ratios stay correct.
+  - name: dep-dlm-slo
+    rules:
+      - record: slo:transfer_success:ratio_1h
+        expr: |
+          (sum(fts_files_completed_1h{state="FINISHED"}) or vector(0))
+            / sum(fts_files_completed_1h{state=~"FINISHED|FAILED"})
+      - record: slo:transfer_success:ratio_6h
+        expr: |
+          (sum(sum_over_time(fts_files_completed_1h{state="FINISHED"}[6h])) or vector(0))
+            / sum(sum_over_time(fts_files_completed_1h{state=~"FINISHED|FAILED"}[6h]))
+      - record: slo:transfer_success:ratio_7d
+        expr: |
+          (sum(sum_over_time(fts_files_completed_1h{state="FINISHED"}[7d])) or vector(0))
+            / sum(sum_over_time(fts_files_completed_1h{state=~"FINISHED|FAILED"}[7d]))
+      - record: slo:rule_latency:ratio_6h
+        expr: |
+          (sum(sum_over_time(rucio_rules_completed_1h_by_target{within_target="true"}[6h])) or vector(0))
+            / sum(sum_over_time(rucio_rules_completed_1h_by_target[6h]))
+      - record: slo:rule_latency:ratio_7d
+        expr: |
+          (sum(sum_over_time(rucio_rules_completed_1h_by_target{within_target="true"}[7d])) or vector(0))
+            / sum(sum_over_time(rucio_rules_completed_1h_by_target[7d]))
+
+      - alert: TransferSuccessBudgetBurnFast
+        # Ignore hours with only a few files.
+        expr: |
+          (1 - slo:transfer_success:ratio_1h) > 14.4 * 0.05
+          and on() sum(fts_files_completed_1h{state=~"FINISHED|FAILED"}) >= 10
+        for: 5m
+        labels:
+          severity: critical
+          slo: transfer-success
+        annotations:
+          summary: "Transfer success SLO burning its error budget fast"
+          description: "{{ $value | humanizePercentage }} of FTS files failed in the last hour (SLO 95 %). Check the efficiency matrix and failure reasons."
+      - alert: TransferSuccessBudgetBurnSlow
+        expr: (1 - slo:transfer_success:ratio_6h) > 6 * 0.05
+        for: 30m
+        labels:
+          severity: warning
+          slo: transfer-success
+        annotations:
+          summary: "Transfer success SLO burning its error budget"
+          description: "{{ $value | humanizePercentage }} of FTS files failed over 6 hours (SLO 95 %)."
+      - alert: RuleLatencyBudgetBurnSlow
+        expr: (1 - slo:rule_latency:ratio_6h) > 6 * 0.05
+        for: 30m
+        labels:
+          severity: warning
+          slo: rule-latency
+        annotations:
+          summary: "Rule latency SLO burning its error budget"
+          description: "{{ $value | humanizePercentage }} of rules completed in the last 6 hours took longer than 30 minutes (SLO 95 %)."

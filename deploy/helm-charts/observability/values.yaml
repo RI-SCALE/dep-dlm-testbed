@@ -1,4 +1,4 @@
-# Configuration comes from files/ -> shared/config/observability, the same
+# Configuration comes from files/ -> configs/observability, the same
 # files the Compose stack mounts.
 
 # sql_exporter for the FTS (MySQL) and Rucio (PostgreSQL) databases. The DSNs

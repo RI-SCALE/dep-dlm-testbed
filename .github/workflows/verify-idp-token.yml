@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
   pull_request:
     paths:
-      - shared/scripts/verify-idp-token.sh
+      - scripts/verify-idp-token.sh
       - Makefile
 
 jobs:

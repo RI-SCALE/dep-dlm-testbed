@@ -14,10 +14,10 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/authdb:/etc/xrootd/authdb:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
 
   xrd4:
@@ -35,10 +35,10 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/authdb:/etc/xrootd/authdb:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/authdb:/etc/xrootd/authdb:ro
+      - ${TESTBED_HOST_SOURCE}/configs/xrootd/${CONFIG_PROFILE_DIR}scitokens.conf:/etc/xrootd/scitokens.conf:ro
+      - ${TESTBED_HOST_SOURCE}/scripts/xrootd/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
     entrypoint: ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
 
   ftsdb:
@@ -82,16 +82,16 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/${CONFIG_PROFILE_DIR}fts3config:/etc/fts3/fts3config:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/${CONFIG_PROFILE_DIR}unmanaged.fts3restconfig:/etc/fts3/fts3restconfig:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/openidconnect.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/JobBuilder.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/cloudStorage.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/model/cloudStorage.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/cloud.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/cloud.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/fts/tokenproviders.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/tokenproviders.py:ro
+      - ${TESTBED_HOST_SOURCE}/configs/fts/${CONFIG_PROFILE_DIR}fts3config:/etc/fts3/fts3config:ro
+      - ${TESTBED_HOST_SOURCE}/configs/fts/${CONFIG_PROFILE_DIR}unmanaged.fts3restconfig:/etc/fts3/fts3restconfig:ro
+      - ${TESTBED_HOST_SOURCE}/configs/fts/gfal2_http_plugin.conf:/etc/gfal2.d/http_plugin.conf:ro
+      - ${TESTBED_HOST_SOURCE}/scripts/fts/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/middleware.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/config/middleware.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/openidconnect.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/openidconnect.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/JobBuilder.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/lib/JobBuilder.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/cloudStorage.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/model/cloudStorage.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/cloud.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/cloud.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/fts/tokenproviders.py:/tmp/fts-rest-flask/src/fts3rest/fts3rest/controllers/config/tokenproviders.py:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     entrypoint:
       - bash
@@ -116,7 +116,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/teapot1cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
@@ -128,11 +128,11 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - ${TESTBED_HOST_SOURCE}/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot1-data:/data
     healthcheck:
       test: ["CMD", "curl", "-sk", "https://localhost:8081/docs", "-o", "/dev/null", "-w", "%{http_code}"]
@@ -152,7 +152,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}config.ini:/etc/teapot/config.ini:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/usr/local/share/ca-certificates/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/var/lib/teapot/webdav/Teapot-testing.crt:ro
       - ${TESTBED_HOST_SOURCE}/certs/teapot2cert.pem:/var/lib/teapot/webdav/teapot.crt:ro
@@ -164,11 +164,11 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/teapot/logback.xml:/etc/teapot/logback.xml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
+      - ${TESTBED_HOST_SOURCE}/configs/teapot/logback.xml:/etc/teapot/logback.xml:ro
+      - ${TESTBED_HOST_SOURCE}/patches/teapot/teapot.py:/usr/share/teapot/teapot.py:ro
       - teapot2-data:/data
     healthcheck:
       test: ["CMD", "curl", "-sk", "https://localhost:8081/docs", "-o", "/dev/null", "-w", "%{http_code}"]
@@ -203,7 +203,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - ${TESTBED_HOST_SOURCE}/configs/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/keycloakcert.pem:/etc/x509/https/keycloakcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/keycloakkey.pem:/etc/x509/https/keycloakkey.pem:ro
 
@@ -256,23 +256,23 @@ services:
         dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/scripts/rucio/bootstrap-db.py:/scripts/rucio/bootstrap-db.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
+      - ${TESTBED_HOST_SOURCE}/scripts/rucio/bootstrap-db.py:/scripts/rucio/bootstrap-db.py:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/ping"]
       interval: 10s
@@ -297,8 +297,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/tests:/tests:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/tests:/tests:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     command:
       - /bin/bash
@@ -351,9 +351,9 @@ services:
         rucio-undertaker --sleep-time 5 &
         wait
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
@@ -361,12 +361,12 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert_with_key.pem:/etc/grid-security/hostcert_with_key.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/fts3.py:/usr/local/lib/python3.9/site-packages/rucio/transfertool/fts3.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/oidc.py:/usr/local/lib/python3.9/site-packages/rucio/core/oidc.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/constants.py:/usr/local/lib/python3.9/site-packages/rucio/common/constants.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/rse.py:/usr/local/lib/python3.9/site-packages/rucio/core/rse.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/authentication.py:/usr/local/lib/python3.9/site-packages/rucio/core/authentication.py:ro
+      - ${TESTBED_HOST_SOURCE}/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
 
   opa:
     image: openpolicyagent/opa:1.8.0-static
@@ -378,7 +378,7 @@ services:
     volumes:
       # Vendored ODRL evaluator, loaded at start-up: its modules call each
       # other's functions cyclically, which the policy API can't ingest one by one.
-      - ${TESTBED_HOST_SOURCE}/shared/config/opa/vendor/opa-ri-scale/dep:/policies/dep:ro
+      - ${TESTBED_HOST_SOURCE}/configs/opa/vendor/opa-ri-scale/dep:/policies/dep:ro
     command: run --server --log-level info --addr=0.0.0.0:8181 --ignore '*_test.rego' /policies/dep
 
   opa-init:
@@ -389,8 +389,8 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/scripts/ingest_policies.py:/app/ingest_policies.py:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/opa:/app/opa:ro
+      - ${TESTBED_HOST_SOURCE}/scripts/ingest_policies.py:/app/ingest_policies.py:ro
+      - ${TESTBED_HOST_SOURCE}/configs/opa:/app/opa:ro
     working_dir: /app
     command:
       - sh

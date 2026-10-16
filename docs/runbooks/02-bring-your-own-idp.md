@@ -14,9 +14,9 @@ Keycloak). Where issuer/audience/client/scopes land, and the two flows
 `idpsecrets.json` per profile is gitignored — create it first, then fill in
 your real values:
 ```bash
-cp shared/config/rucio/<profile>/idpsecrets.json.example \
-   shared/config/rucio/<profile>/idpsecrets.json
-# edit shared/config/rucio/<profile>/idpsecrets.json with your real values
+cp configs/rucio/<profile>/idpsecrets.json.example \
+   configs/rucio/<profile>/idpsecrets.json
+# edit configs/rucio/<profile>/idpsecrets.json with your real values
 ```
 Then reseed:
 ```bash
@@ -107,13 +107,13 @@ Not self-service — `support@aai.lifescience-ri.eu` or Federation Registry.
    register at `https://signup.aai.lifescience-ri.eu/fed/registrar?vo=lifescience_test`
    first if you see an access-denied org-unit page.
 6. `client_id`/`client_secret` → the real
-   `shared/config/rucio/ls-aai-dev/idpsecrets.json` (create it from
+   `configs/rucio/ls-aai-dev/idpsecrets.json` (create it from
    `idpsecrets.json.example` first — see Prerequisites).
 
 `user-mapping.csv` needs the **client's own** `client_credentials` sub too
 (Teapot's `teapot_token` fixture authenticates as the client itself) — decode
 a `client_credentials` token to get it, add to
-`shared/config/teapot/ls-aai-dev/user-mapping.csv`, or 401
+`configs/teapot/ls-aai-dev/user-mapping.csv`, or 401
 "local user for sub claim ... does not exist".
 
 No per-RSE *clients* on ls-aai-dev — RSEs are resource indicators on the one
@@ -125,8 +125,8 @@ testbed client instead.
 an external issuer. Need system bundle + internal CA combined, as `tls_ca_bundle.pem`.
 
 - **egi-dev**: ready combined bundle at
-  `shared/config/rucio/egi-dev/tls_ca_bundle.pem` →
-  `cp shared/config/rucio/egi-dev/tls_ca_bundle.pem certs/tls_ca_bundle.pem`.
+  `configs/rucio/egi-dev/tls_ca_bundle.pem` →
+  `cp configs/rucio/egi-dev/tls_ca_bundle.pem certs/tls_ca_bundle.pem`.
   Don't inline the full system store into a Helm-tracked file (1 MiB release-secret limit).
   `rucio_ca.pem` still separately drives `rucio.cfg`'s `[conveyor] cacert` (FTS/gfal trust).
 - **ls-aai-dev**: system-trusted already, no combined bundle needed.
@@ -168,7 +168,7 @@ and FTS's `TokenExchangeExecutor` fails with `"Failed to get refresh token"`
 without it. **Use `token_strategy=client_credentials`** (`TOKEN_MODE=unmanaged`)
 for `egi-dev`. Whether refresh-token exchange can be enabled per client or
 isn't supported by Check-In is open with EGI; re-test with
-`shared/scripts/verify-idp-token.sh` before switching. (Before the upgrade, CI
+`scripts/verify-idp-token.sh` before switching. (Before the upgrade, CI
 failed `managed` with `invalid_client`/"Audience not found"; that symptom is
 no longer expected.)
 
@@ -306,7 +306,7 @@ curl -s -u "$OIDC_CLIENT_ID:$OIDC_CLIENT_SECRET" \
 ```
 
 One-pass check (client_credentials, resource=, token-exchange, refresh grant):
-`shared/scripts/verify-idp-token.sh` — prefer over manual curl.
+`scripts/verify-idp-token.sh` — prefer over manual curl.
 
 FTS's own internal token-exchange (`TOKEN_MODE=managed`, LS AAI):
 ```bash
@@ -316,7 +316,7 @@ kubectl -n dep-dlm-sandbox exec pod/ftsdb-0 -- \
 
 User flow end-to-end (browser code flow; port-forward/`/etc/hosts`/CA setup as runbook 01):
 ```bash
-export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/egi-dev/oidc-client.cfg
+export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/configs/rucio/egi-dev/oidc-client.cfg
 rucio whoami   # browser login, paste the code
 echo "Hello from egi-dev" >> /tmp/hello-egi.txt
 rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-egi.txt
