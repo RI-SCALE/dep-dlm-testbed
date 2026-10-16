@@ -6,22 +6,22 @@
  from fts3rest.lib.middleware.fts3auth import credentials
 +from fts3rest.model import CloudStorage
 +from fts3rest.model.meta import Session
-
+ 
  log = logging.getLogger(__name__)
-
+ 
 @@ -200,6 +202,8 @@
                              destination, file_dict
                          )
                      source = self._set_activity_query_string(source, file_dict)
 +            # Allow/disallow protocol translation
 +            self._validate_protocol_translation(source, destination)
-
+ 
              f = dict(
                  job_id=self.job_id,
 @@ -453,6 +457,21 @@
              destinations = list(chain.from_iterable(destinations))
          any(map(_is_http_endpoint, destinations))
-
+ 
 +    def _validate_protocol_translation(self, source, destination):
 +        if app.config.get("fts3.AllowProtocolTranslation", True):
 +            return
@@ -43,7 +43,7 @@
 @@ -465,6 +484,51 @@
                  return True
          return False
-
+ 
 +    def _all_cloud_storage(self, urls):
 +        """
 +        True if every URL in the list is backed by a cloud_storage credential
@@ -92,15 +92,7 @@
      def _add_missing_tokens_if_necessary(self, files_list):
          """
          Adds missing tokens if "single token" end user
-@@ -480,7 +544,6 @@
-
-             # Add bearer token as missing source and destination tokens
-             for file_dict in files_list:
--
-                 file_dict["source_tokens"] = []
-                 for i in range(len(file_dict["sources"])):
-                     file_dict["source_tokens"].append(bearer_token)
-@@ -496,41 +559,45 @@
+@@ -496,41 +560,45 @@
              source_tokens = file_dict.get("source_tokens", [])
              destination_tokens = file_dict.get("destination_tokens", [])
              if source_tokens or destination_tokens:
@@ -115,7 +107,7 @@
 +                # (e.g. S3 source -> token-based WebDAV destination) are allowed.
 +                sources_need_token = not self._all_cloud_storage(sources)
 +                dests_need_token = not self._all_cloud_storage(destinations)
-
+ 
 -                # Number of source tokens should match the number of sources
 -                if len(source_tokens) != len(sources):
 +                if sources_need_token and not source_tokens:
@@ -131,7 +123,7 @@
 -                        "Length of destination_tokens should be equal to the length of destinations."
 +                        "destination_tokens required for non-cloud-storage destinations"
                      )
-
+ 
 -                # Check if source and destination token lists are not empty
 -                if not source_tokens or not destination_tokens:
 -                    raise BadRequest(
@@ -147,7 +139,7 @@
 +                    for source, source_token in zip(sources, source_tokens):
 +                        if not source_token:
 +                            raise BadRequest(f"Token for source '{source}' is missing.")
-
+ 
 -                # Check if each source and destination has corresponding tokens
 -                for source, source_token in zip(sources, source_tokens):
 -                    if not source_token:
@@ -169,15 +161,15 @@
 +                            raise BadRequest(
 +                                f"Token for destination '{destination}' is missing."
 +                            )
-
+ 
      def _add_tokens_to_dict(self, tokens_dict, token_list):
          """
-@@ -842,6 +909,8 @@
+@@ -842,6 +910,8 @@
              if files_list is not None:
                  self._populate_transfers(files_list)
-
+ 
 +            validate_submitted_file_limits(len(files_list))
 +
              self._set_user()
-
+ 
              # Reject for SE banning

@@ -544,6 +544,7 @@ class JobBuilder:
 
             # Add bearer token as missing source and destination tokens
             for file_dict in files_list:
+
                 file_dict["source_tokens"] = []
                 for i in range(len(file_dict["sources"])):
                     file_dict["source_tokens"].append(bearer_token)

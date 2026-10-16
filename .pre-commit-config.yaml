@@ -1,4 +1,5 @@
-exclude: ^shared/config/opa/vendor/
+# Vendored code, generated diffs and files mounted over upstream stay byte-for-byte
+exclude: ^(shared/config/opa/vendor/|diffs/|shared/patches/(rucio|fts|teapot)/[^/]+\.py$)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

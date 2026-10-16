@@ -1,9 +1,12 @@
 import logging
+from datetime import datetime
 
 import jwt
+from oic import rndstr
 from oic.extension.message import TokenIntrospectionRequest, TokenIntrospectionResponse
-from oic.oic import Client
-from oic.oic.message import RegistrationResponse
+from oic.oic import Client, Grant, Token
+from oic.oic.message import AccessTokenResponse, Message, RegistrationResponse
+from oic.utils import time_util
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
 log = logging.getLogger(__name__)
@@ -61,11 +64,8 @@ class OIDCmanager:
 
     def get_token_issuer(self, access_token):
         unverified_payload = jwt.decode(access_token, options=jwt_options_unverified())
-        issuer = unverified_payload["iss"]
-        # Return issuer as-is ? no trailing slash normalization.
-        # self.clients is keyed by what Keycloak's discovery endpoint returns
-        # (no trailing slash), so we must not add one here.
-        return issuer
+        # Return the `iss` claim as-is: issuers are compared verbatim
+        return unverified_payload["iss"]
 
     def token_issuer_supported(self, access_token):
         """
