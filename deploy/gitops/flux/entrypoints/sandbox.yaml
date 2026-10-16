@@ -50,3 +50,5 @@ spec:
   sourceRef: { kind: GitRepository, name: dep-dlm-testbed }
   path: ./deploy/gitops/flux/environments/sandbox
   prune: true
+  dependsOn:
+    - name: dep-dlm-sandbox-secrets
