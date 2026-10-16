@@ -59,7 +59,7 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: rucio-daemons
             spec:
@@ -69,87 +69,87 @@ spec:
                   targetRevision: master
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: rucio-client
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/rucio-client
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-client.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: keycloak
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/keycloak
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/keycloak.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: xrd3
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd3.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: xrd4
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/xrootd
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/xrd4.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: teapot1
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot1.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: teapot2
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/teapot
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/teapot2.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: fts
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/fts
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: opa
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/opa
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/opa.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
 
           - name: kube-prometheus-stack
@@ -160,7 +160,7 @@ spec:
                   targetRevision: 68.4.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/kube-prometheus-stack.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: loki
             spec:
@@ -170,7 +170,7 @@ spec:
                   targetRevision: 6.24.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/loki.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: alloy
             spec:
@@ -180,17 +180,17 @@ spec:
                   targetRevision: 0.10.1
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/alloy.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
           - name: observability
             spec:
               sources:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   path: deploy/helm-charts/observability
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/observability.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: refactor/flatten-shared-layout
+                  targetRevision: main
                   ref: values
   template:
     metadata:
