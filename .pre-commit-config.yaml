@@ -1,5 +1,5 @@
 # Vendored code, generated diffs and files mounted over upstream stay byte-for-byte
-exclude: ^(shared/config/opa/vendor/|diffs/|shared/patches/(rucio|fts|teapot)/[^/]+\.py$)
+exclude: ^(configs/opa/vendor/|diffs/|patches/(rucio|fts|teapot)/[^/]+\.py$)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -17,7 +17,7 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: check-shebang-scripts-are-executable
-        files: ^shared/scripts/.*\.sh$
+        files: ^scripts/.*\.sh$
       - id: check-symlinks          # catches broken symlinks in files/
       - id: destroyed-symlinks      # catches symlinks turned into files
 
@@ -26,7 +26,7 @@ repos:
     hooks:
       - id: ruff-check
         args: [ --fix ]
-        exclude: ^shared/patches/.*\.py$
+        exclude: ^patches/.*\.py$
       - id: ruff-format
 
   - repo: local
@@ -36,7 +36,7 @@ repos:
         description: rucio-server/rucio-daemons resolve via git+https through
           the helm-git plugin — helmlint needs charts/ populated first, or it
           silently skips/misreports the umbrella chart.
-        entry: shared/scripts/ensure-helm-chart-deps.sh
+        entry: scripts/ensure-helm-chart-deps.sh
         language: system
         files: ^deploy/helm-charts/dep-dlm-testbed/Chart\.(yaml|lock)$
         pass_filenames: false
@@ -50,8 +50,8 @@ repos:
     rev: v0.10.0.1
     hooks:
       - id: shellcheck
-        files: ^shared/scripts/.*\.sh$
-        exclude: ^shared/scripts/fts/wait-for-it\.sh$
+        files: ^scripts/.*\.sh$
+        exclude: ^scripts/fts/wait-for-it\.sh$
 
   - repo: local
     hooks:

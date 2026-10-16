@@ -7,7 +7,7 @@ below shows how Rucio, FTS3 and the storage endpoints coordinate tokens for a
 single third-party copy (TPC) transfer, including the Rucio conveyor daemons
 that drive the pipeline.
 
-Exercised by [test_rucio_transfers.py](../shared/tests/test_rucio_transfers.py):
+Exercised by [test_rucio_transfers.py](../tests/test_rucio_transfers.py):
 `add_replication_rule` → judge-evaluator → conveyor-submitter → conveyor-poller
 → conveyor-finisher → rule state OK.
 
@@ -85,7 +85,7 @@ sequenceDiagram
 ## OIDC Deletion Flow
 
 Rule-based deletion path, as exercised by
-[test_rucio_deletion.py](../shared/tests/test_rucio_deletion.py):
+[test_rucio_deletion.py](../tests/test_rucio_deletion.py):
 `update_replication_rule(lifetime=-1)` expires the rule; Judge-Cleaner sets
 the tombstone; Reaper physically deletes from storage.
 
@@ -117,7 +117,7 @@ RP->>RS: Mark replica removed from catalogue
 ## DID-based Deletion Flow (Undertaker)
 
 DID expiration path, as exercised by
-[test_rucio_deletion.py](../shared/tests/test_rucio_deletion.py):
+[test_rucio_deletion.py](../tests/test_rucio_deletion.py):
 `set_metadata(key='lifetime', value=-1)` expires the DID; Undertaker
 deletes any unlocked rules on it (equivalent to the rule-based flow above).
 For DATASET/CONTAINER DIDs it also removes the DID row directly;

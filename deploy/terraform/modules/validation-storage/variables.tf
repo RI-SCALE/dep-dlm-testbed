@@ -52,8 +52,8 @@ variable "machine_type" {
 variable "repo_root" {
   description = <<-EOT
     Absolute path to the repo root (e.g. path.root's parent, or an
-    explicit path), used to locate shared/config/{xrootd,teapot} and
-    shared/scripts/xrootd/docker-entrypoint.sh at plan time — these
+    explicit path), used to locate configs/{xrootd,teapot} and
+    scripts/xrootd/docker-entrypoint.sh at plan time — these
     static config files are embedded into the VM's startup script via
     file(), the same content sandbox's compose stack already mounts.
   EOT

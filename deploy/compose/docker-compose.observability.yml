@@ -27,8 +27,8 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
     volumes:
       - rucio-daemons-prom:/tmp/prometheus
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
+      - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostkey.pem:/etc/grid-security/hostkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
@@ -59,7 +59,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter/fts:/etc/sql_exporter:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/sql-exporter/fts:/etc/sql_exporter:ro
 
   rucio-db-exporter:
     image: burningalchemist/sql_exporter:0.24.9
@@ -71,7 +71,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/sql-exporter/rucio:/etc/sql_exporter:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/sql-exporter/rucio:/etc/sql_exporter:ro
 
   prometheus:
     image: prom/prometheus:v3.1.0
@@ -85,8 +85,8 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/prometheus/prometheus.compose.yml:/etc/prometheus/prometheus.yml:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/prometheus/prometheus.compose.yml:/etc/prometheus/prometheus.yml:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - dep-dlm-obs-prometheus:/prometheus
 
   grafana:
@@ -105,8 +105,8 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - dep-dlm-obs-grafana:/var/lib/grafana
 
   loki:
@@ -133,7 +133,7 @@ services:
     networks:
       - dep-dlm-testbed
     volumes:
-      - ${TESTBED_HOST_SOURCE}/shared/config/observability/alloy/config.compose.alloy:/etc/alloy/config.alloy:ro
+      - ${TESTBED_HOST_SOURCE}/configs/observability/alloy/config.compose.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
 networks:

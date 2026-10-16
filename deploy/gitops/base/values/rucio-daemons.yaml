@@ -117,7 +117,7 @@ secretMounts:
     mountPath: /opt/rucio/etc/idpsecrets.json
     subPath: idpsecrets.json
 
-# testbed-patches is a ConfigMap now (see shared/patches/kustomization.yaml —
+# testbed-patches is a ConfigMap now (see patches/kustomization.yaml —
 # converted from secretGenerator, since none of its content is sensitive),
 # so it mounts via configMounts, not secretMounts. Requires rucio-daemons'
 # conveyor/judge/reaper deployment templates + values.yaml to support

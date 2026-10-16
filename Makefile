@@ -74,7 +74,7 @@ TF_STATE_PREFIX ?= $(TF_ENV)
 TERRAFORM       := terraform -chdir=$(TF_DIR)
 TF_RESOLVE_ENV  := eval "$$(deploy/terraform/scripts/resolve-tf-env.sh $(TF_ENV))"
 
-# opa-ri-scale ODRL evaluator, vendored into shared/config/opa/vendor/ (see VENDORED.md)
+# opa-ri-scale ODRL evaluator, vendored into configs/opa/vendor/ (see VENDORED.md)
 OPA_RI_SCALE_REPO ?= https://github.com/mgajek-cern/opa-ri-scale.git
 OPA_RI_SCALE_REF  ?= vendor-2026-10-08
 
@@ -278,7 +278,7 @@ ifeq ($(GITOPS_ENV),staging)
     -v $(TESTBED_HOST_SOURCE)/certs/rucio_ca.pem:/etc/grid-security/certificates/rucio_ca.pem:ro \
 	-v $(TESTBED_HOST_SOURCE)/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro \
     -v $(TESTBED_HOST_SOURCE)/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro \
-    -v $(TESTBED_HOST_SOURCE)/shared/tests:/tests:ro \
+    -v $(TESTBED_HOST_SOURCE)/tests:/tests:ro \
 	-v $(TESTBED_HOST_SOURCE)/.kube/config-$(TF_ENV):/root/.kube/config:ro \
     mgajekcern/rucio-client-docker-kubectl:3867d9453cff79ce4d3b9354065e1c57402dafc7
 
@@ -336,9 +336,9 @@ help: ## Show this help
 
 .PHONY: patches
 patches: ## Regenerate diffs/ against pinned upstream refs
-	./shared/scripts/make-patches.sh rucio    $(RUCIO_URL)    $(RUCIO_REF)    shared/patches/rucio.manifest    diffs/rucio
-	./shared/scripts/make-patches.sh fts-rest $(FTS_REST_URL) $(FTS_REST_REF) shared/patches/fts-rest.manifest diffs/fts-rest
-	./shared/scripts/make-patches.sh teapot   $(TEAPOT_URL)   $(TEAPOT_REF)   shared/patches/teapot.manifest   diffs/teapot
+	./scripts/make-patches.sh rucio    $(RUCIO_URL)    $(RUCIO_REF)    patches/rucio.manifest    diffs/rucio
+	./scripts/make-patches.sh fts-rest $(FTS_REST_URL) $(FTS_REST_REF) patches/fts-rest.manifest diffs/fts-rest
+	./scripts/make-patches.sh teapot   $(TEAPOT_URL)   $(TEAPOT_REF)   patches/teapot.manifest   diffs/teapot
 
 .PHONY: patches-check
 patches-check: patches ## Fail if patched files changed without regenerating diffs
@@ -347,7 +347,7 @@ patches-check: patches ## Fail if patched files changed without regenerating dif
 
 .PHONY: certs
 certs: ## Generate CA and host certificates
-	./shared/scripts/generate-certs.sh
+	./scripts/generate-certs.sh
 
 .PHONY: init
 init: ## Init testbed accounts, RSEs, OIDC seed
@@ -355,16 +355,16 @@ init: ## Init testbed accounts, RSEs, OIDC seed
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
-	./shared/scripts/init-testbed.sh
+	./scripts/init-testbed.sh
 
 .PHONY: vendor-opa-ri-scale
 vendor-opa-ri-scale: ## Re-vendor the opa-ri-scale ODRL evaluator at OPA_RI_SCALE_REF
-	rm -rf /tmp/ors shared/config/opa/vendor/opa-ri-scale/dep
+	rm -rf /tmp/ors configs/opa/vendor/opa-ri-scale/dep
 	git clone -q --depth 1 --branch $(OPA_RI_SCALE_REF) $(OPA_RI_SCALE_REPO) /tmp/ors
-	mkdir -p shared/config/opa/vendor/opa-ri-scale
-	cp -r /tmp/ors/OPA/src/dep shared/config/opa/vendor/opa-ri-scale/dep
-	rm -f shared/config/opa/vendor/opa-ri-scale/dep/data.yaml shared/config/opa/vendor/opa-ri-scale/dep/demo.yaml
-	opa test shared/config/opa -v
+	mkdir -p configs/opa/vendor/opa-ri-scale
+	cp -r /tmp/ors/OPA/src/dep configs/opa/vendor/opa-ri-scale/dep
+	rm -f configs/opa/vendor/opa-ri-scale/dep/data.yaml configs/opa/vendor/opa-ri-scale/dep/demo.yaml
+	opa test configs/opa -v
 
 ## AuthN / AuthZ
 
@@ -372,12 +372,12 @@ vendor-opa-ri-scale: ## Re-vendor the opa-ri-scale ODRL evaluator at OPA_RI_SCAL
 verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT_SECRET.
 	@case "$(SCOPE_PROFILE)" in \
 	  egi-dev) \
-	    shared/scripts/verify-idp-token.sh \
+	    scripts/verify-idp-token.sh \
 	      --issuer https://aai-dev.egi.eu/auth/realms/egi \
 	      --client-id 699e9e29-29e8-4220-8863-5306d8a7feb8 \
 	      --scope "openid profile eduperson_entitlement offline_access read:/ write:/" ;; \
 	  ls-aai-dev) \
-	    shared/scripts/verify-idp-token.sh \
+	    scripts/verify-idp-token.sh \
 	      --issuer https://login.aai.lifescience-ri.eu/oidc/ \
 	      --client-id 4ff05c0b-1d83-42b7-a00a-8bd162df4165 \
 	      --scope "openid profile email offline_access eduperson_entitlement" ;; \
@@ -387,25 +387,25 @@ verify-idp-token: ## Verify OIDC token flow for SCOPE_PROFILE. Needs OIDC_CLIENT
 .PHONY: check-claims
 check-claims: ## Decode entitlements/acr claims for every realm user (or USER=<name>)
 ifeq ($(RUNTIME),compose)
-	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:8080 $(if $(USER),--user $(USER))
+	python3 scripts/check_user_claims.py --keycloak-url http://localhost:8080 $(if $(USER),--user $(USER))
 else
 	@$(KUBECTL) port-forward svc/keycloak 18080:8080 >/dev/null 2>&1 & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null" EXIT; \
 	sleep 2; \
-	python3 shared/scripts/check_user_claims.py --keycloak-url http://localhost:18080 $(if $(USER),--user $(USER))
+	python3 scripts/check_user_claims.py --keycloak-url http://localhost:18080 $(if $(USER),--user $(USER))
 endif
 
 .PHONY: ingest-policies
 ingest-policies: ## Push authz.rego and data (incl. ODRL policies) into the running OPA (idempotent)
 ifeq ($(RUNTIME),compose)
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:8181 --opa-dir shared/config/opa
+	python3 scripts/ingest_policies.py --opa-url http://localhost:8181 --opa-dir configs/opa
 else
 	@$(KUBECTL) port-forward svc/opa 18181:8181 >/dev/null 2>&1 & \
 	PF_PID=$$!; \
 	trap "kill $$PF_PID 2>/dev/null" EXIT; \
 	sleep 2; \
-	python3 shared/scripts/ingest_policies.py --opa-url http://localhost:18181 --opa-dir shared/config/opa
+	python3 scripts/ingest_policies.py --opa-url http://localhost:18181 --opa-dir configs/opa
 endif
 
 .PHONY: fetch-odrl-policies
@@ -413,7 +413,7 @@ fetch-odrl-policies: ## Print the DEP ODRL policies from the WP4 policy reposito
 	@[ -n "$(ODRL_CLIENT_SECRET)" ] || \
 	  { echo "ERROR: ODRL_CLIENT_SECRET must be set (EGI Check-in dev client with policies:read)"; exit 1; }
 	@ODRL_CLIENT_ID='$(ODRL_CLIENT_ID)' ODRL_CLIENT_SECRET='$(ODRL_CLIENT_SECRET)' \
-	  ./shared/scripts/fetch-odrl-policies.sh
+	  ./scripts/fetch-odrl-policies.sh
 
 
 ## Lifecycle
@@ -424,7 +424,7 @@ ifeq ($(RUNTIME),compose)
 	COMPOSE_PROFILES=$(DAEMON_MODE) $(COMPOSE) up -d $(SERVICES)
 else
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	source shared/scripts/common.sh && ensure_helm_chart_deps
+	source scripts/common.sh && ensure_helm_chart_deps
 	$(OBS_CRDS)
 	$(HELM) upgrade --install $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
@@ -484,7 +484,7 @@ endif
 .PHONY: argocd-install
 argocd-install: ## Install ArgoCD, bootstrap GITOPS_ENV
 	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
-	./shared/scripts/init-argocd.sh --env $(GITOPS_ENV) \
+	./scripts/init-argocd.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
@@ -501,7 +501,7 @@ argocd-uninstall: ## Remove ArgoCD apps and resources
 	-for es in $$(kubectl get externalsecret -n $(K8S_NAMESPACE) -o name 2>/dev/null); do \
 	  kubectl delete -n $(K8S_NAMESPACE) $$es --ignore-not-found; done
 	# 4. Now the namespace can finalize. NOTE: vault-seed-once and
-	#    rucio-bootstrap-db are imperative Jobs (shared/scripts/seed-vault.sh,
+	#    rucio-bootstrap-db are imperative Jobs (scripts/seed-vault.sh,
 	#    run-bootstrap-db.sh) — not GitOps-managed, so nothing above prunes
 	#    them, but they live in this namespace and are deleted with it here.
 	kubectl delete namespace $(K8S_NAMESPACE) --ignore-not-found --timeout=360s
@@ -523,7 +523,7 @@ argocd-open: ## Open the Argo CD UI (port-forwards argocd-server until Ctrl-C; u
 .PHONY: flux-install
 flux-install: ## Install Flux, bootstrap GITOPS_ENV
 	OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
-	./shared/scripts/init-flux.sh --env $(GITOPS_ENV) \
+	./scripts/init-flux.sh --env $(GITOPS_ENV) \
 	    --flow $(TOKEN_MODE) --scope-profile $(SCOPE_PROFILE) \
 	    $(if $(GITOPS_REPO_URL),--repo-url $(GITOPS_REPO_URL)) \
 	    $(if $(GITOPS_REVISION),--revision $(GITOPS_REVISION))
@@ -624,7 +624,7 @@ probe-fts-teapot: ## Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Ruc
 	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
 	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
 	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
-	  python3 - < shared/tests/probe_fts_teapot.py
+	  python3 - < tests/probe_fts_teapot.py
 
 .PHONY: probe-fts-xrootd
 probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
@@ -633,7 +633,7 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 	  OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' \
 	  OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' \
 	  VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) \
-	  python3 - < shared/tests/probe_fts_xrootd.py
+	  python3 - < tests/probe_fts_xrootd.py
 
 .PHONY: test-authz-personas
 test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
@@ -644,13 +644,13 @@ test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
 .PHONY: test-rego
 test-rego: ## Rego unit tests (all phases, no stack needed)
 	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
-	opa test shared/config/opa -v
+	opa test configs/opa -v
 
 .PHONY: fmt-rego
 fmt-rego: ## Format all Rego files in place (fixes the opa-fmt pre-commit hook)
 	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
-	opa fmt -w shared/config/opa
-	opa check --strict shared/config/opa
+	opa fmt -w configs/opa
+	opa check --strict configs/opa
 
 ## Terraform
 
@@ -805,4 +805,4 @@ cleanup: ## Delete rules/replicas/distances (and RSEs unless KEEP_RSES=1) create
 	$(TEST_OIDC_ENV) \
 	RUNTIME=$(RUNTIME) \
 	K8S_NAMESPACE=$(K8S_NAMESPACE) \
-	./shared/scripts/cleanup-testbed.sh
+	./scripts/cleanup-testbed.sh

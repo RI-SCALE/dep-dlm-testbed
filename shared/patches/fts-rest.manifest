@@ -1,7 +1,0 @@
-# local file                                upstream path (fts-rest-flask, = Dockerfile.fts ref)
-shared/patches/fts/cloud.py                 src/fts3rest/fts3rest/controllers/config/cloud.py
-shared/patches/fts/cloudStorage.py          src/fts3rest/fts3rest/model/cloudStorage.py
-shared/patches/fts/JobBuilder.py            src/fts3rest/fts3rest/lib/JobBuilder.py
-shared/patches/fts/middleware.py            src/fts3rest/fts3rest/config/middleware.py
-shared/patches/fts/openidconnect.py         src/fts3rest/fts3rest/lib/openidconnect.py
-shared/patches/fts/tokenproviders.py        src/fts3rest/fts3rest/controllers/config/tokenproviders.py

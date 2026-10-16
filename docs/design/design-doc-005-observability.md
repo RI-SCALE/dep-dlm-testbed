@@ -13,7 +13,7 @@ gives no runtime visibility once a deployment is running:
   are no dashboards for daemon health or rule backlog.
 - No central logs: diagnosing a failed transfer means `docker logs` or
   `kubectl logs` per container (see `docs/troubleshooting.md`).
-- Transfer events are not collected: `shared/config/fts/fts-activemq.conf`
+- Transfer events are not collected: `configs/fts/fts-activemq.conf`
   exists, but no broker or consumer is deployed and Hermes is not configured
   to emit anywhere.
 - The staging/production runbook for observability is still open in
@@ -49,7 +49,7 @@ Three phases, each off by default (`OBSERVABILITY=1` for Compose,
 sandbox environment enables them). Each phase is built on Compose first, then
 translated to Kubernetes.
 
-Runtime-independent configuration lives in `shared/config/observability/` and
+Runtime-independent configuration lives in `configs/observability/` and
 is used by both runtimes: dashboards, datasources, alert rules, the Rucio
 `[monitor]`/Hermes sections, `fts-activemq.conf` and the Vector config. Only
 the wiring differs:
@@ -135,15 +135,15 @@ Hermes ────────────────────────�
 
 | File / component | Change |
 |---|---|
-| `shared/config/observability/` (new) | Dashboards, datasources, alert rules, `sql_exporter` collectors, Alloy and Vector config |
-| `deploy/helm-charts/observability/` (new) | Exporters, `PrometheusRule` and dashboard ConfigMap from `shared/config/observability` |
+| `configs/observability/` (new) | Dashboards, datasources, alert rules, `sql_exporter` collectors, Alloy and Vector config |
+| `deploy/helm-charts/observability/` (new) | Exporters, `PrometheusRule` and dashboard ConfigMap from `configs/observability` |
 | `deploy/helm-charts/dep-dlm-testbed/` | `observability`, `kube-prometheus-stack`, `loki`, `alloy` dependencies behind `observability.enabled` |
 | `deploy/compose/docker-compose.observability.yml` (new) | Prometheus, Grafana, Loki, Alloy, ActiveMQ, OpenSearch, Vector |
 | `deploy/gitops/flux/components/` | New: `kube-prometheus-stack`, `loki`, `alloy`, `observability`; later `activemq`, `opensearch`, `vector` |
 | `deploy/gitops/argocd/applicationsets/` | Same components for Argo CD |
 | `deploy/gitops/base/values/` | Values for the new components; `PROMETHEUS_MULTIPROC_DIR` for rucio-server; `[monitor] enable_metrics` and `monitoring.enabled` for rucio-daemons; Hermes later |
-| `shared/config/rucio/` and `deploy/terraform/modules/secrets/templates/rucio.cfg.tftpl` | `[monitor]` and Hermes sections |
-| `shared/config/fts/fts-activemq.conf` | Broker endpoint per environment |
+| `configs/rucio/` and `deploy/terraform/modules/secrets/templates/rucio.cfg.tftpl` | `[monitor]` and Hermes sections |
+| `configs/fts/fts-activemq.conf` | Broker endpoint per environment |
 | `Makefile` | `OBSERVABILITY=1` toggle for `start`; `obs-open` and `test-observability` targets |
 | `docs/runbooks/07-observability.md` (new) | Operator runbook |
 

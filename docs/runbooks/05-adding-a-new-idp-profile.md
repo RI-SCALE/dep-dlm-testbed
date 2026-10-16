@@ -16,10 +16,10 @@ parallel set of config files alongside the `local` defaults. Compose
 resolves the profile via `CONFIG_PROFILE_DIR` (Makefile-derived, empty for
 `local`); Helm resolves it via `global.scopeProfile` + the per-profile
 ConfigMap (`testbed-configs-<profile>`, see `configs-cm.yaml`). Both read
-from the same `<profile>/` subdirectories under `shared/config/`.
+from the same `<profile>/` subdirectories under `configs/`.
 
 To add a profile named `<profile>`, create `<profile>/` subdirectories and
-files as listed below — nothing outside `shared/config/` needs a new file,
+files as listed below — nothing outside `configs/` needs a new file,
 only edits to reference the new profile name where noted.
 
 ## 0. Check the IdP's token shape first
@@ -54,10 +54,10 @@ to do below:
 
 | Directory | Files to add under `<profile>/` |
 |---|---|
-| `shared/config/rucio/` | `idpsecrets.json.example`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the new IdP supports RFC 8693 token-exchange with `resource=` — see runbook 02's caveat before assuming it does) |
-| `shared/config/fts/` | `fts3config`, `managed.fts3restconfig`, `unmanaged.fts3restconfig` |
-| `shared/config/teapot/` | `config.ini`, `application.yml`, `data.properties`, `user-mapping.csv` |
-| `shared/config/xrootd/` | `scitokens.conf` |
+| `configs/rucio/` | `idpsecrets.json.example`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the new IdP supports RFC 8693 token-exchange with `resource=` — see runbook 02's caveat before assuming it does) |
+| `configs/fts/` | `fts3config`, `managed.fts3restconfig`, `unmanaged.fts3restconfig` |
+| `configs/teapot/` | `config.ini`, `application.yml`, `data.properties`, `user-mapping.csv` |
+| `configs/xrootd/` | `scitokens.conf` |
 
 Copy the `egi-dev/` version of each as a starting point and edit:
 issuer URL, audience/`resource=` targets, `trusted_OP` (teapot), scitokens
@@ -77,21 +77,21 @@ token in step 0.
 
 The tracked artifact is `idpsecrets.json.example`, keeping `<valid client
 id>` / `<valid client secret>` placeholders (same convention as
-`shared/config/rucio/egi-dev/idpsecrets.json.example`). The real
+`configs/rucio/egi-dev/idpsecrets.json.example`). The real
 `idpsecrets.json` for each profile is gitignored — create it locally from
 the example before filling in real values:
 
 ```bash
-cp shared/config/rucio/<profile>/idpsecrets.json.example \
-   shared/config/rucio/<profile>/idpsecrets.json
+cp configs/rucio/<profile>/idpsecrets.json.example \
+   configs/rucio/<profile>/idpsecrets.json
 ```
 
 **The current `.gitignore` lists each profile's real `idpsecrets.json`
-individually** (`shared/config/rucio/egi-dev/idpsecrets.json`,
-`shared/config/rucio/ls-aai-dev/idpsecrets.json`) rather than as a glob —
+individually** (`configs/rucio/egi-dev/idpsecrets.json`,
+`configs/rucio/ls-aai-dev/idpsecrets.json`) rather than as a glob —
 a new profile's real file is **not** covered automatically. Add a line for
 `<profile>` to `.gitignore` as part of this checklist (see §4), or switch
-the existing entries to a single `shared/config/rucio/*/idpsecrets.json`
+the existing entries to a single `configs/rucio/*/idpsecrets.json`
 glob so future profiles are covered without a `.gitignore` edit.
 
 Real credentials go into the copied `idpsecrets.json` only on the
@@ -116,12 +116,12 @@ parameter than Keycloak/EGI.
 If the new IdP's TLS chain isn't already covered by the system CA bundle
 (unlikely for a real public IdP, common for another self-signed testbed),
 regenerate the combined bundle the way egi-dev's
-`shared/config/rucio/egi-dev/rucio_ca.pem` was built: system roots + the
+`configs/rucio/egi-dev/rucio_ca.pem` was built: system roots + the
 internal Rucio Dev CA + the new issuer's chain. Do **not** add a full
 `<profile>/rucio_ca.pem` to `certs/` — that directory stays profile-agnostic
 (see `.gitignore`: everything under `certs/*.pem` is ignored except
 `rucio_ca.key.pem`, `rucio_ca.pem`, `tls_ca_bundle.pem`); keep any
-profile-specific combined bundle under `shared/config/rucio/<profile>/` as
+profile-specific combined bundle under `configs/rucio/<profile>/` as
 egi-dev does, and copy it over `certs/rucio_ca.pem` only at test time
 (never commit the copy).
 
@@ -138,8 +138,8 @@ A few places do need a one-line addition:
   per profile; add `"<profile>"` to that list so its per-profile ConfigMap
   actually renders.
 - `.gitignore` — add
-  `shared/config/rucio/<profile>/idpsecrets.json` (or switch the existing
-  per-profile entries to the `shared/config/rucio/*/idpsecrets.json` glob
+  `configs/rucio/<profile>/idpsecrets.json` (or switch the existing
+  per-profile entries to the `configs/rucio/*/idpsecrets.json` glob
   mentioned in §2) so the new profile's real secrets file is never
   accidentally tracked.
 - `deploy/gitops/environments/sandbox/secrets/seed-job.yaml` — **this one is
@@ -174,17 +174,17 @@ needs no code changes.
 Follow runbook 02's Verification section end to end (CA-trust check, daemon
 client_credentials check, TPC `gfal-copy` script, interactive `whoami` +
 upload) with `RUCIO_CONFIG` pointed at
-`shared/config/rucio/<profile>/oidc-client.cfg` and
+`configs/rucio/<profile>/oidc-client.cfg` and
 `SCOPE_PROFILE=<profile>` exported before `make init`/`make start`.
 
 ## Checklist summary
 
 - [ ] Decoded a token from the new IdP: noted `iss` trailing slash, checked `typ` for `at+jwt`
-- [ ] `shared/config/{rucio,fts,teapot,xrootd}/<profile>/*` created from egi-dev templates
+- [ ] `configs/{rucio,fts,teapot,xrootd}/<profile>/*` created from egi-dev templates
 - [ ] `user-mapping.csv` has rows for both the client's own `client_credentials` sub and (later) real tester subs
 - [ ] `idpsecrets.json.example` has placeholders only (tracked)
 - [ ] Real `idpsecrets.json` created via `cp idpsecrets.json.example idpsecrets.json`, filled with real values, and gitignored — not committed
-- [ ] `.gitignore` covers the new profile's real `idpsecrets.json` (per-profile line, or the `shared/config/rucio/*/idpsecrets.json` glob)
+- [ ] `.gitignore` covers the new profile's real `idpsecrets.json` (per-profile line, or the `configs/rucio/*/idpsecrets.json` glob)
 - [ ] `fts_client_scope`/`scope_map`/`drop_scopes` set if the IdP's scope set doesn't match WLCG defaults
 - [ ] Combined CA bundle built if the new issuer isn't system-trusted
 - [ ] `<profile>` added to `configs-cm.yaml`'s per-profile ConfigMap loop

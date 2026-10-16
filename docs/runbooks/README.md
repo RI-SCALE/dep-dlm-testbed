@@ -10,7 +10,7 @@ once the stack is up.
 | 2 | [Bring your own IdP](02-bring-your-own-idp.md) | Point Rucio/FTS/RSEs at an external OIDC issuer; where issuer/audience/client/scopes land. |
 | 3 | [Bring your own storage](03-bring-your-own-storage.md) | Omit bundled XRootD/Teapot; register and wire external RSEs. |
 | 4 | [Connecting to validation-storage](04-connecting-to-validation-storage.md) | SSH into the staging/production validation-storage VM via OS Login + IAP tunneling for debugging config, logs, and container state in place. |
-| 5 | [Adding a new IdP / SCOPE_PROFILE](05-adding-a-new-idp-profile.md) | Checklist for validating the stack against a different external IdP — which files to add under `shared/config/<profile>/`, and the handful of places outside it (Helm's `configs-cm.yaml`, gitops' `seed-job.yaml`) that need a matching edit. |
+| 5 | [Adding a new IdP / SCOPE_PROFILE](05-adding-a-new-idp-profile.md) | Checklist for validating the stack against a different external IdP — which files to add under `configs/<profile>/`, and the handful of places outside it (Helm's `configs-cm.yaml`, gitops' `seed-job.yaml`) that need a matching edit. |
 | 6 | [Secrets via GCP Secret Manager + ExternalSecrets](06-secrets-gcp-secret-manager.md) | How staging/production actually provision secrets (superseding the originally-planned "external Vault" approach — sandbox alone still uses in-cluster Vault): Terraform-managed Secret Manager entries, ESO's `ClusterSecretStore` wiring via Workload Identity, and rotation. |
 
 ## Planned runbooks (TODO)

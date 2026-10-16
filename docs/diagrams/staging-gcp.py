@@ -23,7 +23,7 @@ modules/validation-storage) running XRootD (xrd3/xrd4) + Teapot/WebDAV
 (teapot1/teapot2) via docker compose, reachable on its own public IP
 through a firewall rule scoped to exactly those four ports. It's
 registered as real Rucio RSEs (XRD3/XRD4/TEAPOT1/TEAPOT2 — see
-shared/scripts/init-testbed.sh's configure_validation_storage_rses(),
+scripts/init-testbed.sh's configure_validation_storage_rses(),
 no EXT_ prefix) so FTS exercises a genuine external network path — same
 role as the generic Source/Destination RSEs, just with real
 infrastructure instead of a placeholder.
@@ -180,7 +180,7 @@ with Diagram(
     # validation-storage: real external network path, registered as
     # XRD3/XRD4/TEAPOT1/TEAPOT2 (no EXT_ prefix) and paired with the
     # generic sandbox RSEs above (same role, real infra) — see
-    # shared/scripts/init-testbed.sh's configure_validation_storage_rses().
+    # scripts/init-testbed.sh's configure_validation_storage_rses().
     #
     # DNS resolution is load-bearing here, not decorative: FTS's real
     # transfer engine only resolves valstorage.dep-dlm-staging.example.com

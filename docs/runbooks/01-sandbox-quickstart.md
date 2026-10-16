@@ -161,7 +161,7 @@ sudo cp certs/rucio_ca.pem certs/5fca1cb1.0 certs/b96dc756.0 \
 ( cd /etc/grid-security/certificates && sudo openssl rehash . )
 export X509_CERT_DIR=/etc/grid-security/certificates
 
-export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/shared/config/rucio/oidc-client.cfg
+export RUCIO_CONFIG=/workspaces/dep-dlm-testbed/configs/rucio/oidc-client.cfg
 rucio whoami   # browser login as randomaccount / secret, paste the code
 
 # upload to Teapot (Storm-WebDAV, davs port 8081)

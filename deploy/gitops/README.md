@@ -22,7 +22,7 @@ rationale live in `docs/gitops-blueprint.md`; this is the operational entry poin
 `testbed-configs`/`testbed-patches`/`testbed-scripts`/`testbed-tests` are
 **not** Kustomize-generated or GitOps-synced — same as Vault seeding and the
 Rucio DB bootstrap, they're rendered once at bootstrap time
-(`shared/scripts/render-testbed-configmaps.sh`, via `helm template` against
+(`scripts/render-testbed-configmaps.sh`, via `helm template` against
 the umbrella chart — single source of truth with the local/helm-only
 deployment path) and applied directly, run automatically by
 `init-argocd.sh`/`init-flux.sh` alongside `seed-vault.sh`. This is what

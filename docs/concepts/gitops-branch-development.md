@@ -14,7 +14,7 @@ you must point them at your branch, then revert before merge.
 
 **No longer a row here:** `environments/sandbox/secrets/seed-job.yaml` — that
 file is gone. Vault seeding and the DB-bootstrap Job are now imperative scripts
-(`shared/scripts/seed-vault.sh`, `shared/scripts/run-bootstrap-db.sh`), and
+(`scripts/seed-vault.sh`, `scripts/run-bootstrap-db.sh`), and
 `init-argocd.sh`/`init-flux.sh` pass `--repo-url`/`--revision` straight through
 to them. Pointing `make argocd-install`/`make flux-install` at your branch via
 `GITOPS_REPO_URL`/`GITOPS_REVISION` is now sufficient for those two steps —

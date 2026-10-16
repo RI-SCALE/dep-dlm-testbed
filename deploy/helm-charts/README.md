@@ -13,10 +13,10 @@ helm-charts/
 │   ├── values.yaml                # Single source of truth (toggle services, OIDC, etc.)
 │   ├── files/                     # Symlinks to repo root (fixed for Helm context)
 │   │   ├── certs/    → ../../../certs
-│   │   ├── configs/  → ../../../shared/config
-│   │   ├── scripts/  → ../../../shared/scripts
-│   │   ├── tests/    → ../../../shared/tests
-│   │   └── patches/  → ../../../shared/patches
+│   │   ├── configs/  → ../../../config
+│   │   ├── scripts/  → ../../../scripts
+│   │   ├── tests/    → ../../../tests
+│   │   └── patches/  → ../../../patches
 │   └── templates/
 │       ├── testbed-certs.yaml      # All host/CA certs — Secret
 │       ├── testbed-configs.yaml    # Non-sensitive shared config — ConfigMap
@@ -45,7 +45,7 @@ object kind happened to be convenient (see ADR-004).
 These templates are the single source of truth for `testbed-configs`/
 `testbed-patches`/`testbed-scripts`/`testbed-tests` across every
 deployment path — GitOps renders the same templates via
-`shared/scripts/render-testbed-configmaps.sh` rather than maintaining a
+`scripts/render-testbed-configmaps.sh` rather than maintaining a
 separate definition.
 
 `testbed-certs` and `testbed-secrets` are the only Secrets anywhere in
@@ -57,10 +57,10 @@ this chart; everything else is a ConfigMap.
 cd dep-dlm-testbed/files
 rm -f certs configs scripts tests patches
 ln -s ../../../../certs certs
-ln -s ../../../../shared/config configs
-ln -s ../../../../shared/scripts scripts
-ln -s ../../../../shared/tests tests
-ln -s ../../../../shared/patches patches
+ln -s ../../../../configs configs
+ln -s ../../../../scripts scripts
+ln -s ../../../../tests tests
+ln -s ../../../../patches patches
 ```
 
 ## Quickstart

@@ -1,5 +1,5 @@
 locals {
-  certs_dir = "${path.module}/../../../../certs" # shared/scripts/generate-certs.sh's output dir
+  certs_dir = "${path.module}/../../../../certs" # scripts/generate-certs.sh's output dir
 }
 
 resource "google_secret_manager_secret_version" "certs" {

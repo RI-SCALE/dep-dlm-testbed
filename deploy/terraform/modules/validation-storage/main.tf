@@ -135,13 +135,13 @@ resource "google_compute_instance" "this" {
     startup-script = templatefile("${path.module}/templates/startup-script.sh.tftpl", {
       certs_secret_id        = var.certs_secret_id
       docker_compose_yml     = file("${path.module}/templates/docker-compose.yml.tftpl")
-      xrdrucio_scitokens_cfg = file("${var.repo_root}/shared/config/xrootd/xrdrucio-scitokens.cfg")
-      xrootd_authdb          = file("${var.repo_root}/shared/config/xrootd/authdb")
+      xrdrucio_scitokens_cfg = file("${var.repo_root}/configs/xrootd/xrdrucio-scitokens.cfg")
+      xrootd_authdb          = file("${var.repo_root}/configs/xrootd/authdb")
       xrootd_scitokens_conf = templatefile("${path.module}/templates/xrootd-scitokens.conf.tftpl", {
         oidc_issuer      = var.oidc_issuer
         oidc_issuer_name = var.oidc_issuer_name
       })
-      xrootd_entrypoint_sh = file("${var.repo_root}/shared/scripts/xrootd/docker-entrypoint.sh")
+      xrootd_entrypoint_sh = file("${var.repo_root}/scripts/xrootd/docker-entrypoint.sh")
       teapot_config_ini = templatefile("${path.module}/templates/teapot-config.ini.tftpl", {
         oidc_issuer      = var.oidc_issuer
         teapot_idp_name  = var.teapot_idp_name
@@ -158,8 +158,8 @@ resource "google_compute_instance" "this" {
       teapot_user_mapping_csv = trimspace(templatefile("${path.module}/templates/teapot-user-mapping.csv.tftpl", {
         teapot_extra_subs = var.teapot_extra_subs
       }))
-      teapot_logback_xml = file("${var.repo_root}/shared/config/teapot/logback.xml")
-      teapot_patch_py    = file("${var.repo_root}/shared/patches/teapot/teapot.py")
+      teapot_logback_xml = file("${var.repo_root}/configs/teapot/logback.xml")
+      teapot_patch_py    = file("${var.repo_root}/patches/teapot/teapot.py")
     })
   }
 

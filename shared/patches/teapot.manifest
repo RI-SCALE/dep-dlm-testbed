@@ -1,2 +1,0 @@
-# local file                                upstream path (teapot, = Dockerfile.teapot version)
-shared/patches/teapot/teapot.py             teapot.py
