@@ -22,15 +22,48 @@ make certs                  # generate CA and host certificates
 export RUNTIME=compose      # compose | k8s (Helm chart)
 export TOKEN_MODE=managed   # FTS token mode: managed | unmanaged
 export DAEMON_MODE=direct   # direct | daemons
+export OBSERVABILITY=0      # 1 adds Prometheus, Grafana, Loki and Alloy
+
 
 make start                  # start the stack
 make init                   # accounts, RSEs, OIDC seed
 make test-rucio-transfers
 make test-rucio-deletion
+make test-authz-personas    # bundled Keycloak only
 make stop                   # stop and remove volumes / PVCs
 ```
 
 ## Scenarios
+
+### Authorization
+
+Rucio delegates permission checks to OPA, which evaluates `authz.rego` and the DEP ODRL policies against the token's entitlement claims.
+
+```bash
+make test-rego                              # rego unit tests, no stack needed
+make test-authz-personas                    # persona tokens against Rucio REST (DIDs, rules, admin action), bundled Keycloak
+make ingest-policies                        # reload policies into a running OPA after editing them
+make check-claims USER=<e.g. depoperator>   # inspect entitlement/acr claims per Keycloak user
+```
+
+Policies live in [shared/config/opa/](./shared/config/opa/); `make fetch-odrl-policies` prints the current DEP policies from the WP4 repository (needs `ODRL_CLIENT_SECRET`).
+
+### Observability
+
+`OBSERVABILITY=1` adds Prometheus, Grafana, Loki and Alloy on either runtime, with alerts, two SLOs and a Rucio/FTS overview dashboard. FTS and Rucio database state come from `sql_exporter`; use `DAEMON_MODE=daemons` for per-daemon metrics.
+
+```bash
+export OBSERVABILITY=1 DAEMON_MODE=daemons
+make start
+make init
+make test-rucio-transfers
+make test-observability     # targets up, Rucio series present, logs in Loki
+make obs-open               # open Grafana (k8s: port-forwards until Ctrl-C)
+```
+
+![Rucio and FTS overview dashboard](./docs/images/observability-overview.jpg)
+
+Design and metric sources: [design doc 005](./docs/design/design-doc-005-observability.md).
 
 ### Copernicus S3 transfers
 
