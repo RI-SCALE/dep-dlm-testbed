@@ -340,10 +340,11 @@ patches: ## Regenerate diffs/ against pinned upstream refs
 	./scripts/make-patches.sh fts-rest $(FTS_REST_URL) $(FTS_REST_REF) patches/fts-rest.manifest diffs/fts-rest
 	./scripts/make-patches.sh teapot   $(TEAPOT_URL)   $(TEAPOT_REF)   patches/teapot.manifest   diffs/teapot
 
-.PHONY: patches-check
 patches-check: patches ## Fail if patched files changed without regenerating diffs
-	@git diff --exit-code -- diffs/ || \
-	  (echo "Patched files changed without regenerating diffs: run 'make patches'"; exit 1)
+	@if [ -n "$$(git status --porcelain -- diffs/)" ]; then \
+		git status --short -- diffs/; git diff -- diffs/; \
+		echo "::error::diffs/ is stale — run 'make patches' and commit the result"; exit 1; \
+	fi
 
 .PHONY: certs
 certs: ## Generate CA and host certificates

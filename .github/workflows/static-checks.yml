@@ -1,4 +1,4 @@
-name: Lint
+name: Static checks
 
 on:
   push:
@@ -35,8 +35,8 @@ jobs:
       - name: Run pre-commit hooks
         run: pre-commit run --all-files
 
-  terraform-docs-check:
-    name: Terraform docs (check only)
+  generated:
+    name: Generated files up to date
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,11 +49,9 @@ jobs:
             https://github.com/terraform-docs/terraform-docs/releases/download/v0.24.0/terraform-docs-v0.24.0-linux-amd64.tar.gz
           tar -xzf /tmp/terraform-docs.tar.gz -C /tmp
           sudo mv /tmp/terraform-docs /usr/local/bin/
-      - name: Regenerate docs
-        run: make tf-docs
-      - name: Fail if docs are stale
+      - name: Terraform docs
         run: |
-          if ! git diff --exit-code; then
-            echo "::error::terraform-docs output is stale — run 'make tf-docs' and commit the result"
-            exit 1
-          fi
+          make tf-docs
+          git diff --exit-code -- deploy/terraform || { echo "::error::run 'make tf-docs' and commit"; exit 1; }
+      - name: Patch diffs
+        run: make patches-check
