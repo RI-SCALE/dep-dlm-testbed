@@ -6,7 +6,7 @@ No requirements.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | n/a |
 
 ## Modules
@@ -16,7 +16,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_secret_manager_secret.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.eso_access](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.certs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
@@ -25,7 +25,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_bootstrap_userpass_pwd"></a> [bootstrap\_userpass\_pwd](#input\_bootstrap\_userpass\_pwd) | Bootstrap ddmlab userpass password baked into rucio.cfg's [client]/[bootstrap] sections | `string` | n/a | yes |
 | <a name="input_eso_service_account_email"></a> [eso\_service\_account\_email](#input\_eso\_service\_account\_email) | Email of the GCP service account (from modules/kubernetes) that External Secrets Operator impersonates | `string` | n/a | yes |
 | <a name="input_fts_db_host"></a> [fts\_db\_host](#input\_fts\_db\_host) | Private IP of the fts Cloud SQL (MySQL) instance (module.fts\_database.private\_ip\_address) | `string` | n/a | yes |
@@ -51,6 +51,6 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_secret_ids"></a> [secret\_ids](#output\_secret\_ids) | Map of logical secret name -> full Secret Manager secret resource name (projects/<project>/secrets/<id>). Uses .id, not .secret\_id, so it's directly usable as-is in access\_secret\_version() calls — same attribute every secret\_version resource in this module already references. |
 <!-- END_TF_DOCS -->

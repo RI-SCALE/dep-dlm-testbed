@@ -6,7 +6,7 @@ No requirements.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | n/a |
 | <a name="provider_random"></a> [random](#provider\_random) | n/a |
 
@@ -17,7 +17,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_sql_database.rucio](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database_instance.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance) | resource |
 | [google_sql_user.rucio](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
@@ -26,7 +26,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix applied to the instance name (e.g. dep-dlm-staging) | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | VPC network ID (from deploy/terraform/bootstrap's networking, as of this revision), for private IP | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | n/a | yes |
@@ -40,7 +40,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_connection_name"></a> [connection\_name](#output\_connection\_name) | Cloud SQL connection name (project:region:instance), useful for the Cloud SQL Auth Proxy if ever needed |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | Name of the Cloud SQL instance |
 | <a name="output_private_ip_address"></a> [private\_ip\_address](#output\_private\_ip\_address) | Private IP address of the Cloud SQL instance |

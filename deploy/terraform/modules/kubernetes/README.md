@@ -6,7 +6,7 @@ No requirements.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | n/a |
 
 ## Modules
@@ -16,7 +16,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_global_address.gateway](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_global_address) | resource |
 | [google_container_cluster.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster) | resource |
 | [google_container_node_pool.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool) | resource |
@@ -27,7 +27,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix applied to all kubernetes resource names (e.g. dep-dlm-staging) | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | VPC network ID (from deploy/terraform/bootstrap's networking, as of this revision) | `string` | n/a | yes |
 | <a name="input_pods_range_name"></a> [pods\_range\_name](#input\_pods\_range\_name) | Secondary IP range name for pods (from deploy/terraform/bootstrap's networking, as of this revision) | `string` | n/a | yes |
@@ -47,7 +47,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#output\_cluster\_ca\_certificate) | Base64-encoded cluster CA certificate |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | API server endpoint (sensitive-adjacent — treat kubeconfig generation with care) |
 | <a name="output_cluster_location"></a> [cluster\_location](#output\_cluster\_location) | Zone of the GKE cluster (pass as --location to gcloud container clusters ...) |

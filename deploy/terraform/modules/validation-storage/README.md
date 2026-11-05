@@ -6,7 +6,7 @@ No requirements.
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_google"></a> [google](#provider\_google) | n/a |
 
 ## Modules
@@ -16,7 +16,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [google_compute_address.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_firewall.validation_storage_iap_ssh](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_compute_firewall.validation_storage_ingress](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
@@ -31,7 +31,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_certs_secret_id"></a> [certs\_secret\_id](#input\_certs\_secret\_id) | Full resource ID of the Secret Manager secret containing this host's cert/key pair + rucio\_ca.pem (JSON-encoded, same shape as module.secrets' certs secret) | `string` | n/a | yes |
 | <a name="input_dns_zone_name"></a> [dns\_zone\_name](#input\_dns\_zone\_name) | Name of the pre-existing Cloud DNS managed zone (e.g.<br/>google\_dns\_managed\_zone.internal.name) this module will create<br/>var.hostname's A record in. The zone itself is a shared,<br/>environment-level resource — created once by the caller (see<br/>environments/staging/main.tf) since other hostnames (rucio, fts)<br/>may need records in the same zone — not owned by this module. | `string` | n/a | yes |
 | <a name="input_hostname"></a> [hostname](#input\_hostname) | Public DNS hostname this VM will be reachable at (e.g.<br/>validation-storage.dep-dlm-staging.example.com). Must resolve to the<br/>static IP this module reserves via the google\_dns\_record\_set this<br/>module creates (see var.dns\_zone\_name) — the zone itself is shared<br/>across the environment and created by the caller, not this module. | `string` | n/a | yes |
@@ -54,7 +54,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | Public IP of the validation-storage VM — point var.hostname's DNS record at this |
 | <a name="output_hostname"></a> [hostname](#output\_hostname) | Configured public hostname for this validation target (echoed back for convenience) |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | GCE instance name, for gcloud compute ssh / logs lookups |
