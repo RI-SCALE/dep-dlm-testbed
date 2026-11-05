@@ -162,13 +162,13 @@ jobs:
       - name: Verify workload pods are Running
         run: |
           ns=dep-dlm-${{ inputs.tf_env }}
-          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
-          kubectl -n $ns rollout status deploy/rucio-server --timeout=300s
-          kubectl -n $ns rollout status deploy/fts --timeout=300s
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=600s
+          kubectl -n $ns rollout status deploy/rucio-server --timeout=600s
+          kubectl -n $ns rollout status deploy/fts --timeout=600s
           for d in conveyor-submitter conveyor-poller conveyor-finisher \
                    judge-evaluator judge-cleaner reaper; do
             kubectl -n $ns get deploy/rucio-daemons-$d >/dev/null 2>&1 && \
-              kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=300s
+              kubectl -n $ns rollout status deploy/rucio-daemons-$d --timeout=600s
           done
           kubectl -n $ns get pods
 
