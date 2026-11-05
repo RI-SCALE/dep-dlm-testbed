@@ -202,7 +202,7 @@ install_terraform() {
 }
 
 install_terraform_docs() {
-    local TFDOCS_VERSION="v0.20.0"
+    local TFDOCS_VERSION="v0.24.0"
     echo -e "${BLUE}Installing terraform-docs $TFDOCS_VERSION...${NC}"
     curl -Ls "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-linux-${ARCH}.tar.gz" \
         | tar -xz -C /tmp
