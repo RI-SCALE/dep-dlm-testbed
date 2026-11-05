@@ -2,67 +2,31 @@
 DEP DLM GitOps Deployment View — Staging (GCP)
 
 Only the data-orchestration engine (Rucio + FTS) and its policy decision
-point (OPA, policies from the external ODRL repository) stay in-cluster on
-GKE Autopilot; secrets (Secret Manager), DB (Cloud SQL), IdP (external AAI
-federation hub) and storage RSEs are all external — mirrors staging.py's
-generic external-storage pattern, with GCP-specific managed services in
-place of the generic placeholders. Structurally identical to production
-by design.
+point (OPA, policies from the external ODRL repository) run in-cluster, on a
+zonal GKE Standard cluster with a single fixed-size node (ADR-009). Secrets
+(Secret Manager), databases (Cloud SQL for PostgreSQL and MySQL), IdP
+(external AAI federation hub) and storage RSEs are external. Production has
+the same shape with an autoscaling node pool.
 
-Public ingress is the GKE Gateway API (gatewayClassName:
-gke-l7-global-external-managed), NOT a plain k8s Ingress — that
-gatewayClassName is what actually reconciles into a real GCP global
-external Application Load Balancer (forwarding rule, target proxy,
-backend services) holding the reserved static IP (gateway_static_ip).
-Both rucio.dep-dlm-staging.example.com and fts.dep-dlm-staging.example.com
-route through the same Gateway/HTTPRoute object via Host-header matching.
+Public ingress is the GKE Gateway API (gatewayClassName
+gke-l7-global-external-managed), which provisions a global external
+Application Load Balancer on the reserved static IP (gateway_static_ip).
+rucio.* and fts.* route through the same Gateway via Host-header matching.
 
-validation-storage is a testbed-owned exception to "storage is generic/
-external": a single GCE VM (Container-Optimized OS, NOT GKE — see
-modules/validation-storage) running XRootD (xrd3/xrd4) + Teapot/WebDAV
-(teapot1/teapot2) via docker compose, reachable on its own public IP
-through a firewall rule scoped to exactly those four ports. It's
-registered as real Rucio RSEs (XRD3/XRD4/TEAPOT1/TEAPOT2 — see
-scripts/init-testbed.sh's configure_validation_storage_rses(),
-no EXT_ prefix) so FTS exercises a genuine external network path — same
-role as the generic Source/Destination RSEs, just with real
-infrastructure instead of a placeholder.
+validation-storage is a testbed-owned GCE VM (Container-Optimized OS, not
+GKE) running XRootD (xrd3/xrd4) and Teapot WebDAV (teapot1/teapot2) via
+docker compose, registered as real RSEs so FTS exercises an external network
+path. It is resolved through a private Cloud DNS zone, not by IP: FTS's
+gfal2/davix transfer engine does not honour per-pod /etc/hosts entries. It
+trusts the same CA chain from the Secret Manager "certs" secret.
 
-Resolved via a private Cloud DNS zone (dep-dlm-staging-internal, zone
-dep-dlm-staging.example.com.) shared with rucio/fts's own public
-hostnames, rather than addressed by raw IP. This is load-bearing, not
-cosmetic: FTS's actual transfer engine (the gfal2/davix client
-performing the real davs:// TPC pull) does not consult the same
-resolver path a per-pod /etc/hosts entry reaches, so DNS-record-less
-IP addressing left every real transfer failing with UnknownHostException
-even though diagnostic tools (curl, xrdfs, a plain Python `requests`
-call) resolved the hostname fine. The managed zone is created once,
-shared, at the environment level (environments/staging/main.tf);
-validation-storage's own module only owns the A record pointing at its
-reserved static IP, keeping the record's lifecycle tied to the VM it
-describes.
-
-The VM also trusts the same CA chain (rucio_ca.pem plus the two
-grid-security hashes 5fca1cb1.*/b96dc756.*) pulled from the identical
-Secret Manager "certs" secret every other RSE/FTS endpoint already
-uses — no second trust root to manage.
-
-Observability uses what GKE Autopilot already ships instead of the
-in-cluster Prometheus/Loki/Grafana of the sandbox: Managed Service for
-Prometheus (managed collection, PodMonitoring for rucio-server,
-rucio-daemons and the SQL exporters) and Cloud Logging (container stdout
-collected by default), both viewed in Cloud Monitoring. Only the SQL
-exporters run in-cluster; the PromQL alerts/SLO rules carry over as
-Rules objects.
-
-Regenerate: python3 staging_gcp.py  (writes generated/staging-gcp.png)
+Regenerate: python3 staging-gcp.py  (writes generated/staging-gcp.png)
 """
 
 from diagrams import Diagram, Cluster, Edge
 from diagrams.gcp.compute import GKE, ComputeEngine
 from diagrams.gcp.database import SQL
 from diagrams.gcp.network import LoadBalancing, DNS
-from diagrams.gcp.operations import Monitoring, Logging
 from diagrams.gcp.security import SecretManager, Iam
 from diagrams.k8s.compute import Deployment
 from diagrams.k8s.network import Ingress
@@ -83,7 +47,7 @@ node_attr = {"fontsize": "11"}
 cluster_attr = {"margin": "30"}
 
 with Diagram(
-    "DEP DLM — Staging (GCP, storage external)",
+    "DEP DLM — Staging (GCP, GKE Standard, single node)",
     filename="generated/staging-gcp",
     outformat="png",
     show=False,
@@ -99,96 +63,55 @@ with Diagram(
     policies = Document("ODRL policy\nrepository (WP4)")
 
     with Cluster("GCP Project: dep-dlm-staging"):
-        sm = SecretManager(
-            "Secret Manager\n(dep-dlm-staging secrets\n+ certs, incl. shared CA chain)"
-        )
-        db = SQL("Cloud SQL\nfor PostgreSQL\n(rucio + fts metadata)")
-        wif = Iam("Workload Identity\nFederation")
-        glb = LoadBalancing(
-            "Global External ALB\n(provisioned by GKE Gateway,\n"
-            "static IP: gateway_static_ip)"
-        )
-        gmp = Monitoring(
-            "Cloud Monitoring\n(Managed Service for\nPrometheus, alerts/SLOs)"
-        )
-        logging = Logging("Cloud Logging\n(container logs)")
-        dns = DNS(
-            "Cloud DNS\n(private zone:\ndep-dlm-staging.example.com,\n"
-            "shared across rucio/fts/\nvalidation-storage hostnames)"
-        )
+        sm = SecretManager("Secret Manager\n(secrets + certs,\nshared CA chain)")
+        rucio_db = SQL("Cloud SQL\nfor PostgreSQL\n(Rucio)")
+        fts_db = SQL("Cloud SQL\nfor MySQL\n(FTS)")
+        wif = Iam("Workload Identity")
+        glb = LoadBalancing("Global External ALB\n(GKE Gateway,\ngateway_static_ip)")
+        dns = DNS("Cloud DNS\n(private zone)")
 
-        with Cluster("GKE Autopilot Cluster: dep-dlm-staging-gke"):
-            gke = GKE("GKE Autopilot\n(managed control plane)")
+        with Cluster(
+            "GKE Standard (zonal): dep-dlm-staging-gke\nnode pool: 1 fixed node, no autoscaling"
+        ):
+            gke = GKE("GKE\ncontrol plane")
 
             with Cluster("k8s namespace: dep-dlm-staging", graph_attr=cluster_attr):
-                gateway = Ingress(
-                    "Gateway API\n(Gateway + HTTPRoute,\n"
-                    "gatewayClassName:\ngke-l7-global-external-managed)"
-                )
+                gateway = Ingress("Gateway API\n(Gateway + HTTPRoute)")
                 eso = Deployment("External Secrets\nOperator")
                 rucio_server = Deployment("Rucio Server")
                 rucio_daemons = Deployment("Rucio Daemons")
                 fts = Deployment("FTS3")
                 opa = Deployment("OPA\n(authz)")
-                exporters = Deployment("SQL exporters\n(Rucio DB, FTS DB)")
 
         with Cluster(
             "GCE VM: dep-dlm-staging-validation-storage\n(public IP, not GKE)",
             graph_attr=cluster_attr,
         ):
-            valstorage_fw = Firewall(
-                "Firewall rule\n(0.0.0.0/0 :1094-1095,\n8081-8082)"
-            )
+            valstorage_fw = Firewall("Firewall rule\n(:1094-1095, 8081-8082)")
             valstorage_vm = ComputeEngine(
-                "Container-Optimized OS\ndocker compose:\n"
-                "xrd3/xrd4 (XRootD)\nteapot1/teapot2 (WebDAV)"
+                "docker compose:\nxrd3/xrd4 (XRootD)\nteapot1/teapot2 (WebDAV)"
             )
             valstorage_fw >> valstorage_vm
 
     gitops >> Edge(label="sync", style="dashed") >> rucio_server
 
-    (
-        glb
-        >> Edge(label="rucio.*.example.com\nfts.*.example.com\n(Host header)")
-        >> gateway
-    )
+    glb >> Edge(label="rucio.* / fts.*\n(Host header)") >> gateway
     gateway >> rucio_server
     gateway >> fts
 
     wif >> Edge(label="federated\ncredential", style="dotted") >> eso
-    eso >> Edge() >> sm
-    rucio_server >> Edge() >> db
-    rucio_server >> Edge() >> idp_ext
+    eso >> sm
+    rucio_server >> rucio_db
+    rucio_server >> idp_ext
     rucio_server >> Edge(label="authz") >> opa
     opa >> Edge(label="policy bundle", style="dashed") >> policies
     rucio_daemons >> Edge(label="submit") >> fts
+    fts >> fts_db
 
-    # Telemetry: managed collection scrapes in place, logs leave via the node agent.
-    (
-        gmp
-        >> Edge(label="PodMonitoring", style="dotted")
-        >> [rucio_server, rucio_daemons, exporters]
-    )
-    exporters >> Edge(style="dotted") >> db
-    gke >> Edge(label="container logs", style="dotted") >> logging
+    fts >> source_rses
+    fts >> dest_rses
+    source_rses >> Edge(label="direct copy", style="bold") >> dest_rses
 
-    fts >> Edge() >> db
-    fts >> Edge() >> source_rses
-    fts >> Edge() >> dest_rses
-    source_rses >> Edge() >> dest_rses
-
-    # validation-storage: real external network path, registered as
-    # XRD3/XRD4/TEAPOT1/TEAPOT2 (no EXT_ prefix) and paired with the
-    # generic sandbox RSEs above (same role, real infra) — see
-    # scripts/init-testbed.sh's configure_validation_storage_rses().
-    #
-    # DNS resolution is load-bearing here, not decorative: FTS's real
-    # transfer engine only resolves valstorage.dep-dlm-staging.example.com
-    # via this Cloud DNS record (see module docstring above) — a
-    # per-pod /etc/hosts entry alone was confirmed insufficient for the
-    # actual davs:// TPC pull, even though it satisfied diagnostic tools.
     dns >> Edge(label="A record", style="dashed") >> valstorage_vm
-    fts >> Edge() >> valstorage_vm
+    fts >> valstorage_vm
     sm >> Edge(label="certs +\nCA chain") >> valstorage_vm
-
-    gke >> Edge(style="invis") >> sm
