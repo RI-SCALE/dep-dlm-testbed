@@ -14,6 +14,10 @@ output "cluster_endpoint" {
   value = module.kubernetes.cluster_endpoint
 }
 
+output "cluster_location" {
+  value = module.kubernetes.cluster_location
+}
+
 output "eso_service_account_email" {
   value = module.kubernetes.eso_service_account_email
 }

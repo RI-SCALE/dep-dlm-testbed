@@ -2,7 +2,7 @@
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.7 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
@@ -10,20 +10,20 @@
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | 5.45.2 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.0 |
 
 ## Modules
 
 | Name | Source | Version |
-| ---- | ------ | ------- |
+|------|--------|---------|
 | <a name="module_networking"></a> [networking](#module\_networking) | ../modules/networking | n/a |
 
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google_compute_project_metadata_item.enable_oslogin](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_project_metadata_item) | resource |
 | [google_iam_workload_identity_pool.github](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool) | resource |
 | [google_iam_workload_identity_pool_provider.github](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider) | resource |
@@ -41,7 +41,7 @@
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | GCP Billing Account ID (format XXXXXX-XXXXXX-XXXXXX) every environment<br/>project is linked to. This is the one value in this whole module that<br/>traces back to a genuine manual commercial precondition — Cloud<br/>Billing account creation/enrollment isn't something google\_project can<br/>bootstrap for itself. Whoever applies this module needs roles/billing.user<br/>on this specific billing account (checked by the provider on every<br/>plan/apply, not just once). | `string` | n/a | yes |
 | <a name="input_github_repo"></a> [github\_repo](#input\_github\_repo) | GitHub org/repo the Workload Identity Federation provider trusts (format org/repo). Scoped via attribute\_condition so no other repo can mint tokens these providers accept. | `string` | n/a | yes |
 | <a name="input_environments"></a> [environments](#input\_environments) | Environments to bootstrap a GCP Project (and now VPC/subnet/networking)<br/>for. `deletion_policy` maps straight to google\_project's own field:<br/>"DELETE" is fine for a disposable/trial staging project, "PREVENT"<br/>(the safer default) stops `terraform destroy` from silently deleting a<br/>project outright. `region` is now the SINGLE source of truth for that<br/>environment's networking AND its GKE cluster's region — environments/<br/><env> receives it as a required input rather than independently<br/>defaulting it, to remove the drift risk of two places disagreeing. | <pre>list(object({<br/>    name            = string<br/>    deletion_policy = optional(string, "PREVENT")<br/>    region          = optional(string, "europe-west3") # Frankfurt; revisit per ADR-003 Open Points<br/>  }))</pre> | <pre>[<br/>  {<br/>    "deletion_policy": "DELETE",<br/>    "name": "staging"<br/>  },<br/>  {<br/>    "deletion_policy": "PREVENT",<br/>    "name": "production"<br/>  }<br/>]</pre> | no |
@@ -54,7 +54,7 @@
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_network_ids"></a> [network\_ids](#output\_network\_ids) | Map of environment name -> VPC network ID. Feed into environments/<env>/terraform.tfvars' network\_id. |
 | <a name="output_pods_range_names"></a> [pods\_range\_names](#output\_pods\_range\_names) | Map of environment name -> secondary IP range name for GKE pods. Feed into environments/<env>/terraform.tfvars' pods\_range\_name. |
 | <a name="output_project_ids"></a> [project\_ids](#output\_project\_ids) | Map of environment name -> created project\_id. Feed into environments/<env>/terraform.tfvars' project\_id. |

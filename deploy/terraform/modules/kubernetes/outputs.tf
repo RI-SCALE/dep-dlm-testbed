@@ -3,6 +3,11 @@ output "cluster_name" {
   value       = google_container_cluster.this.name
 }
 
+output "cluster_location" {
+  description = "Zone of the GKE cluster (pass as --location to gcloud container clusters ...)"
+  value       = google_container_cluster.this.location
+}
+
 output "cluster_endpoint" {
   description = "API server endpoint (sensitive-adjacent — treat kubeconfig generation with care)"
   value       = google_container_cluster.this.endpoint
@@ -12,6 +17,11 @@ output "cluster_ca_certificate" {
   description = "Base64-encoded cluster CA certificate"
   value       = google_container_cluster.this.master_auth[0].cluster_ca_certificate
   sensitive   = true
+}
+
+output "node_pool_name" {
+  description = "Name of the cluster's node pool"
+  value       = google_container_node_pool.this.name
 }
 
 output "gateway_static_ip" {

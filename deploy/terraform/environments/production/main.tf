@@ -20,19 +20,23 @@ provider "google" {
 
 locals {
   name_prefix = "dep-dlm-${var.environment}"
+  zone        = "${var.region}-b"
 }
 
 module "kubernetes" {
   source = "../../modules/kubernetes"
 
   project_id          = var.project_id
-  region              = var.region
+  zone                = local.zone
   name_prefix         = local.name_prefix
   network_id          = var.network_id
   subnet_id           = var.subnet_id
   pods_range_name     = var.pods_range_name
   services_range_name = var.services_range_name
   deletion_protection = var.deletion_protection
+  autoscaling_enabled = true
+  min_node_count      = 2
+  max_node_count      = 4
 }
 
 module "rucio_database" {
