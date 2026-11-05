@@ -210,7 +210,7 @@ bootstrap_rucio_db() {
   local rucio_db_host
   rucio_db_host="$(terraform -chdir="$TF_ENV_DIR" output -raw rucio_database_private_ip)"
   "${SCRIPT_DIR}/run-bootstrap-db.sh" --namespace "$APP_NS" \
-    --db-host "$rucio_db_host" --skip-service-check --generate-scripts-secret
+    --db-host "$rucio_db_host" --skip-service-check
 }
 
 # ingest_opa_policies — load authz.rego + data into OPA, rendered from the
