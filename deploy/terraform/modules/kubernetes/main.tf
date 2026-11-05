@@ -43,7 +43,7 @@ resource "google_container_cluster" "this" {
 }
 
 resource "google_container_node_pool" "this" {
-  name     = "${var.name_prefix}-pool"
+  name     = "primary" # node names: gke-dep-dlm-staging-gke-primary-<hash>
   project  = var.project_id
   location = google_container_cluster.this.location
   cluster  = google_container_cluster.this.name
