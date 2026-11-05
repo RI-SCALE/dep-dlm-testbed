@@ -250,6 +250,8 @@ VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call stagin
 VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
 FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_database_private_ip),)
 FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
+RUCIO_DB_HOST     = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_database_private_ip),)
+RUCIO_DB_PASSWORD = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_db_password),)
 
 
 ifeq ($(GITOPS_ENV),staging)
@@ -350,10 +352,11 @@ patches-check: patches ## Fail if patched files changed without regenerating dif
 certs: ## Generate CA and host certificates
 	./scripts/generate-certs.sh
 
-.PHONY: init
 init: ## Init testbed accounts, RSEs, OIDC seed
-	$(TEST_OIDC_ENV) \
+	@$(TEST_OIDC_ENV) \
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
+	RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) GITOPS_ENV=$(GITOPS_ENV) \
+	RUCIO_DB_HOST='$(RUCIO_DB_HOST)' RUCIO_DB_PASSWORD='$(RUCIO_DB_PASSWORD)' \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./scripts/init-testbed.sh

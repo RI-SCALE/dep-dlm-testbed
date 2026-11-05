@@ -122,6 +122,18 @@ except Exception:
 "
 }
 
+# Rucio DB access: bundled ruciodb in sandbox/compose, Cloud SQL (private IP,
+# reachable only from inside the VPC) in staging/production.
+_psql() {
+    if [[ "$RUNTIME" == compose || "${GITOPS_ENV:-sandbox}" == sandbox ]]; then
+        _exec ruciodb env PGPASSWORD=rucio psql -U rucio "$@"
+    else
+        kubectl -n "$K8S_NAMESPACE" run "psql-${RANDOM}" --rm -i --quiet --restart=Never \
+            --image=postgres:16 --env="PGPASSWORD=${RUCIO_DB_PASSWORD:?}" -- \
+            psql -h "${RUCIO_DB_HOST:?}" -U rucio -d rucio "$@"
+    fi
+}
+
 # ── Service URLs ─────────────────────────────────────────────────
 
 ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
@@ -343,7 +355,7 @@ print('      entitlements = ' + str(claims.get('entitlements')))
 assert_identities_unambiguous() {
     echo "=== Checking OIDC identity → account mapping ==="
     local dupes
-    dupes=$(_exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+    dupes=$(_psql -tAc \
       "SELECT identity || ' → ' || count(*) || ' accounts'
          FROM account_map WHERE identity_type='OIDC'
         GROUP BY identity HAVING count(*) > 1;")
@@ -367,7 +379,7 @@ seed_subject_tokens() {
     grant_mode=$(_grant_mode_for_profile)
 
     for acct in "${SEED_ACCOUNTS[@]}"; do
-        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+        _psql -tAc \
         "DELETE FROM tokens WHERE account='${acct}' AND identity LIKE 'SUB=%';"
     done
 
@@ -504,7 +516,7 @@ except Exception as e:
     echo "  Removing non-OIDC token rows for seeded accounts..."
     local acct
     for acct in "${SEED_ACCOUNTS[@]}"; do
-        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+        _psql -tAc \
           "DELETE FROM tokens WHERE account='${acct}' AND identity NOT LIKE 'SUB=%';"
     done
 }
@@ -513,7 +525,7 @@ cleanup_session_tokens() {
     echo "=== Removing non-OIDC session tokens for seeded accounts ==="
     local acct
     for acct in "${SEED_ACCOUNTS[@]}"; do
-        _exec ruciodb env PGPASSWORD=rucio psql -U rucio -tAc \
+        _psql -tAc \
           "DELETE FROM tokens WHERE account='${acct}' AND identity NOT LIKE 'SUB=%';"
     done
 }
