@@ -120,7 +120,7 @@ install_gcloud() {
 
     apt-get update -qq
     # gke-gcloud-auth-plugin: needed for `kubectl` to auth against GKE clusters
-    # provisioned by infra/terraform (see modules/kubernetes) — kubectl auth
+    # provisioned by deploy/terraform (see modules/kubernetes) — kubectl auth
     # against GKE moved off static tokens onto this plugin in newer clusters.
     apt-get install -y -qq google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
 
@@ -202,7 +202,7 @@ install_terraform() {
 }
 
 install_terraform_docs() {
-    local TFDOCS_VERSION="v0.20.0"
+    local TFDOCS_VERSION="v0.24.0"
     echo -e "${BLUE}Installing terraform-docs $TFDOCS_VERSION...${NC}"
     curl -Ls "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-linux-${ARCH}.tar.gz" \
         | tar -xz -C /tmp

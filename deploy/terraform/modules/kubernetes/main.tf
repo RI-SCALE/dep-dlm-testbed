@@ -1,9 +1,15 @@
+# Zonal GKE Standard cluster with one managed node pool (design doc 008,
+# ADR-009). Staging runs a single fixed-size node; production enables the
+# node pool autoscaler. Only the node pool variables differ per environment.
 resource "google_container_cluster" "this" {
   name     = "${var.name_prefix}-gke"
   project  = var.project_id
-  location = var.region # regional cluster for HA control plane
+  location = var.zone # zonal: one node means one node; covered by the GKE free tier credit
 
-  enable_autopilot = true
+  # Nodes come only from google_container_node_pool.this below. GKE requires
+  # an initial default pool at creation, which is removed right after.
+  remove_default_node_pool = true
+  initial_node_count       = 1
 
   network    = var.network_id
   subnetwork = var.subnet_id
@@ -17,6 +23,7 @@ resource "google_container_cluster" "this" {
     channel = var.release_channel
   }
 
+  # ESO authenticates to Secret Manager through Workload Identity.
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
@@ -33,6 +40,44 @@ resource "google_container_cluster" "this" {
   }
 
   deletion_protection = var.deletion_protection
+}
+
+resource "google_container_node_pool" "this" {
+  name     = "primary" # node names: gke-dep-dlm-staging-gke-primary-<hash>
+  project  = var.project_id
+  location = google_container_cluster.this.location
+  cluster  = google_container_cluster.this.name
+
+  # Fixed size (staging) or autoscaled (production), never both.
+  node_count         = var.autoscaling_enabled ? null : var.node_count
+  initial_node_count = var.autoscaling_enabled ? var.min_node_count : null
+
+  dynamic "autoscaling" {
+    for_each = var.autoscaling_enabled ? [1] : []
+    content {
+      min_node_count = var.min_node_count
+      max_node_count = var.max_node_count
+    }
+  }
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true # required with a release channel
+  }
+
+  node_config {
+    machine_type = var.machine_type
+    disk_size_gb = var.disk_size_gb
+
+    # Default compute service account, as with Autopilot before; access is
+    # governed by its IAM roles, not by scopes.
+    oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+
+    # Serve the GKE metadata server so pods use Workload Identity (ESO).
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
 }
 
 # Static external IP for the public Gateway — reserved via Terraform so

@@ -7,6 +7,10 @@ informed: DEP component owners, partner RIs
 ---
 # Cloud Provider for Staging/Production Infrastructure
 
+> **Cluster mode revisited in [ADR-009](./adr-009-standard-gke-fixed-staging-node.md):**
+> GKE Standard (fixed node for staging, autoscaling for production) instead of
+> Autopilot. The provider decision (GCP) is unaffected.
+
 ## Context and Problem Statement
 
 Staging and production validation of the DEP DLM GitOps deployment

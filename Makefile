@@ -250,6 +250,8 @@ VALIDATION_STORAGE_HOSTNAME = $(if $(filter staging,$(GITOPS_ENV)),$(call stagin
 VALIDATION_STORAGE_IP       = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,validation_storage_ip),)
 FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_database_private_ip),)
 FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
+RUCIO_DB_HOST     = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_database_private_ip),)
+RUCIO_DB_PASSWORD = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_db_password),)
 
 
 ifeq ($(GITOPS_ENV),staging)
@@ -350,10 +352,11 @@ patches-check: patches ## Fail if patched files changed without regenerating dif
 certs: ## Generate CA and host certificates
 	./scripts/generate-certs.sh
 
-.PHONY: init
 init: ## Init testbed accounts, RSEs, OIDC seed
-	$(TEST_OIDC_ENV) \
+	@$(TEST_OIDC_ENV) \
 	SCOPE_PROFILE=$(SCOPE_PROFILE) \
+	RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) GITOPS_ENV=$(GITOPS_ENV) \
+	RUCIO_DB_HOST='$(RUCIO_DB_HOST)' RUCIO_DB_PASSWORD='$(RUCIO_DB_PASSWORD)' \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
 	./scripts/init-testbed.sh
@@ -725,15 +728,16 @@ tf-output: ## Show Terraform outputs for TF_ENV
 .PHONY: tf-kubeconfig
 tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 	@$(TF_RESOLVE_ENV); \
-	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"; \
-	mkdir -p $(CURDIR)/.kube; \
 	CLUSTER_NAME=$$($(TERRAFORM) output -raw cluster_name); \
+	CLUSTER_LOCATION=$$($(TERRAFORM) output -raw cluster_location); \
+	gcloud container clusters get-credentials "$$CLUSTER_NAME" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID"; \
+	mkdir -p $(CURDIR)/.kube; \
 	CLUSTER_ENDPOINT=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID" \
 	  --format='value(endpoint)'); \
 	CLUSTER_CA=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID" \
 	  --format='value(masterAuth.clusterCaCertificate)'); \
 	ACCESS_TOKEN=$$(gcloud auth print-access-token); \
 	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-cluster gke \

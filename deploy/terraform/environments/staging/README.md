@@ -58,6 +58,7 @@
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | n/a |
+| <a name="output_cluster_location"></a> [cluster\_location](#output\_cluster\_location) | n/a |
 | <a name="output_cluster_name"></a> [cluster\_name](#output\_cluster\_name) | n/a |
 | <a name="output_eso_service_account_email"></a> [eso\_service\_account\_email](#output\_eso\_service\_account\_email) | Annotate the ESO k8s ServiceAccount with iam.gke.io/gcp-service-account=<this> to complete the Workload Identity binding |
 | <a name="output_fts_database_connection_name"></a> [fts\_database\_connection\_name](#output\_fts\_database\_connection\_name) | n/a |

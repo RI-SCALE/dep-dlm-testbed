@@ -20,19 +20,23 @@ provider "google" {
 
 locals {
   name_prefix = "dep-dlm-${var.environment}"
+  # Zonal GKE cluster and validation-storage VM share one zone of the
+  # bootstrap region (ADR-009: one fixed node needs a zonal cluster).
+  zone = "${var.region}-b"
 }
 
 module "kubernetes" {
   source = "../../modules/kubernetes"
 
   project_id          = var.project_id
-  region              = var.region
+  zone                = local.zone
   name_prefix         = local.name_prefix
   network_id          = var.network_id
   subnet_id           = var.subnet_id
   pods_range_name     = var.pods_range_name
   services_range_name = var.services_range_name
   deletion_protection = var.deletion_protection
+  # Staging: module defaults, one fixed e2-standard-4 node, no autoscaling
 }
 
 module "rucio_database" {
@@ -101,7 +105,7 @@ module "validation_storage" {
 
   project_id            = var.project_id
   region                = var.region
-  zone                  = "europe-west3-b"
+  zone                  = local.zone
   network_id            = var.network_id
   subnet_id             = var.subnet_id
   name_prefix           = "dep-dlm-staging"
