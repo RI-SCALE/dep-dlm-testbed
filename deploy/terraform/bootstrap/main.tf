@@ -105,7 +105,7 @@ resource "google_project_iam_member" "terraform_ci_roles" {
   member  = "serviceAccount:${google_service_account.terraform_ci[each.value.env].email}"
 }
 
-# GKE Autopilot node VMs run under the project's default compute SA
+# GKE node VMs run under the project's default compute SA
 resource "google_service_account_iam_member" "terraform_ci_compute_sa_user" {
   for_each = local.environments
 

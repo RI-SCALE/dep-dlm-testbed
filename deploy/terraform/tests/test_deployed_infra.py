@@ -148,15 +148,8 @@ def _run_db_check_pod_once(
         capture_output=True,
     )
     try:
-        # Explicit low resource requests via --overrides (kubectl run has
-        # no --requests flag) — Autopilot's implicit default (500m/2Gi)
-        # was too heavy for a single one-shot SELECT 1 and repeatedly
-        # triggered cluster-autoscaler scale-up, which then hit
-        # zone-specific GCE capacity failures. Running in APP_NS (not
-        # "default") also helps the scheduler place into existing node
-        # headroom rather than needing fresh capacity at all, but isn't
-        # sufficient alone — the smaller request is what actually lets
-        # it fit without triggering scale-up in the first place.
+        # Explicit small requests: a one-shot check
+        # pod must fit beside the workloads on staging's single fixed node (ADR-009)
         overrides = {
             "apiVersion": "v1",
             "spec": {
@@ -309,9 +302,7 @@ def test_fts_database_connection(tf_outputs):
 def test_kubeconfig_can_reach_cluster(tf_outputs):
     # Assumes `make tf-kubeconfig TF_ENV=...` already ran — this only
     # checks the resulting context actually works, doesn't fetch it itself.
-    # Listing namespaces (not nodes) deliberately: GKE Autopilot provisions
-    # nodes lazily on first scheduled pod, so `kubectl get nodes` can be
-    # empty even on a perfectly healthy, reachable cluster.
+    # Listing namespaces: a cheap authenticated call proving the kubeconfig works
     result = subprocess.run(
         ["kubectl", "get", "ns"],
         capture_output=True,

@@ -69,7 +69,7 @@ resource "google_container_node_pool" "this" {
     machine_type = var.machine_type
     disk_size_gb = var.disk_size_gb
 
-    # Default compute service account, as with Autopilot before; access is
+    # Default compute service account; access is
     # governed by its IAM roles, not by scopes.
     oauth_scopes = ["https://www.googleapis.com/auth/cloud-platform"]
 

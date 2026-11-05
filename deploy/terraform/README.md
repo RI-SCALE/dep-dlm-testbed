@@ -6,8 +6,8 @@ Terraform IaC for DEP DLM staging/production infrastructure on GCP. See
 the deployment view.
 
 **Provisions**: `dep-dlm-staging`/`dep-dlm-production` GCP Projects +
-VPC/subnet/private-services-access networking (`bootstrap/`); GKE
-Autopilot + Workload Identity binding, Secret Manager containers (values
+VPC/subnet/private-services-access networking (`bootstrap/`); GKE Standard
+(zonal, one node pool) + Workload Identity binding, Secret Manager containers (values
 rendered from `.tftpl` templates, not out-of-band), Cloud SQL for
 Postgres (`rucio`) and MySQL (`fts`), both private-IP (`environments/<env>`).
 
@@ -25,7 +25,7 @@ deploy/terraform/
 │   └── production/              # placeholder — NOT YET VALIDATED
 ├── modules/
 │   ├── networking/               # instantiated by bootstrap/, not environments/<env>
-│   ├── kubernetes/               # GKE Autopilot + Workload Identity
+│   ├── kubernetes/               # GKE Standard (zonal, one node pool) + Workload Identity
 │   ├── secrets/                  # Secret Manager + rendered rucio.cfg/fts3config/etc.
 │   ├── database-postgres/        # rucio
 │   └── database-mysql/           # fts
@@ -116,6 +116,12 @@ make tf-apply TF_ENV=staging
 make tf-kubeconfig TF_ENV=staging
 make tf-smoke-test TF_ENV=staging    # secrets/DB/kubeconfig checks against the live deploy
 ```
+
+**Local apply (staging):** the validation-storage cert must carry the VM's
+external IP and hostname, so run
+`VALSTORAGE_EXTERNAL_SAN="<ip>,<hostname>" make certs` before `make tf-apply`,
+then `gcloud compute instances reset <vm> --zone=<zone> --project=<project>`
+so the VM fetches the new cert. CI does both.
 
 `AUTO_APPROVE=1` for non-interactive apply/destroy (CI always passes
 this; local defaults to an interactive prompt).

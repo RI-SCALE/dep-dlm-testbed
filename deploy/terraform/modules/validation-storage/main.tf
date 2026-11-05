@@ -54,7 +54,7 @@ resource "google_project_iam_member" "monitoring" {
 # service account to attach it at instance-creation time — project-level
 # roles alone (even iam.serviceAccountAdmin, which only covers managing the
 # SA itself, not using/attaching it) don't grant this. Same pattern
-# bootstrap/main.tf already uses for GKE Autopilot's compute SA
+# bootstrap/main.tf already uses for GKE nodes' compute SA
 # (terraform_ci_compute_sa_user).
 resource "google_service_account_iam_member" "ci_can_use_valstorage_sa" {
   service_account_id = google_service_account.this.name
