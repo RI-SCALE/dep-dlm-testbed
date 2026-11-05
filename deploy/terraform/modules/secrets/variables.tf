@@ -125,11 +125,12 @@ variable "fts_db_password" {
 }
 
 variable "storage_ip" {
-  description = "External IP address of the validation-storage GCE instance, used to populate FTS's hostAliases so it can resolve valstorage.dep-dlm-<env>.example.com without a real DNS record."
+  description = "Public IP of the validation-storage VM (staging only; null where there is none)"
   type        = string
+  default     = null
 
   validation {
-    condition     = can(cidrhost("${var.storage_ip}/32", 0))
+    condition     = var.storage_ip == null ? true : can(cidrhost("${var.storage_ip}/32", 0))
     error_message = "storage_ip must be a valid IPv4 address."
   }
 }
