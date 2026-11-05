@@ -144,6 +144,14 @@ jobs:
       - name: make init
         run: make init
 
+      - name: Map identity to seeded account
+        run: |
+          kubectl -n "$K8S_NAMESPACE" exec deploy/rucio-server -c rucio-server -- \
+            rucio-admin identity add --type OIDC \
+              --id "SUB=${OIDC_IDENTITY_SUB}, ISS=${OIDC_ISSUER}" \
+              --account randomaccount --email marvin.gajek@cern.ch \
+            || echo "identity already mapped"
+
       - name: make test-rucio-transfers
         run: make test-rucio-transfers
 
