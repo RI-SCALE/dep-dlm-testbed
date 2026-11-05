@@ -725,15 +725,16 @@ tf-output: ## Show Terraform outputs for TF_ENV
 .PHONY: tf-kubeconfig
 tf-kubeconfig: ## Fetch kubectl credentials for TF_ENV's cluster
 	@$(TF_RESOLVE_ENV); \
-	gcloud container clusters get-credentials $$($(TERRAFORM) output -raw cluster_name) \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID"; \
-	mkdir -p $(CURDIR)/.kube; \
 	CLUSTER_NAME=$$($(TERRAFORM) output -raw cluster_name); \
+	CLUSTER_LOCATION=$$($(TERRAFORM) output -raw cluster_location); \
+	gcloud container clusters get-credentials "$$CLUSTER_NAME" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID"; \
+	mkdir -p $(CURDIR)/.kube; \
 	CLUSTER_ENDPOINT=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID" \
 	  --format='value(endpoint)'); \
 	CLUSTER_CA=$$(gcloud container clusters describe "$$CLUSTER_NAME" \
-	  --region="$$GCP_REGION" --project="$$GCP_PROJECT_ID" \
+	  --location="$$CLUSTER_LOCATION" --project="$$GCP_PROJECT_ID" \
 	  --format='value(masterAuth.clusterCaCertificate)'); \
 	ACCESS_TOKEN=$$(gcloud auth print-access-token); \
 	kubectl config --kubeconfig=$(CURDIR)/.kube/config-$(TF_ENV) set-cluster gke \
