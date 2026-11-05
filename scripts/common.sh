@@ -57,11 +57,9 @@ wait_for_workload() {
 # init-argocd.sh and init-flux.sh (their step 3b/4b/4c blocks).
 #
 # Sandbox's store is a plain, static file (no .tmpl) — this is a no-op for
-# it. staging/production's stores need projectID/region/cluster name, which
-# are dynamic (bootstrap-generated), so they're rendered via envsubst here
-# rather than through Argo/Flux's own reconciliation — neither tool has a
-# render step, so a .tmpl file committed as-is would get applied with
-# literal, unexpanded ${VAR} text.
+# it. staging/production's stores need projectID/cluster location/cluster
+# name, which are dynamic (bootstrap-generated, Terraform outputs), so they're
+# rendered via envsubst here
 #
 # Requires these globals already set by the caller:
 #   GITOPS_DIR GITOPS_ENV ESO_SA ESO_SA_NAMESPACE APP_NS CORE_WAIT_TIMEOUT REPO_ROOT
@@ -76,15 +74,18 @@ provision_cluster_secret_store() {
   require_cmd envsubst
   log "Rendering ClusterSecretStore for ${GITOPS_ENV}"
   TF_ENV_DIR="${REPO_ROOT}/deploy/terraform/environments/${GITOPS_ENV}"
-  local gcp_project_id gcp_region gcp_cluster_name
+  local gcp_project_id gke_cluster_location gcp_cluster_name
   gcp_project_id="$(terraform -chdir="$TF_ENV_DIR" output -raw project_id)"
-  gcp_region="$(terraform -chdir="$TF_ENV_DIR" output -raw region)"
+  # Zone for a zonal cluster (ADR-009), not the region: ESO's Workload
+  # Identity token exchange addresses the cluster by its exact location.
+  gke_cluster_location="${GKE_CLUSTER_LOCATION:-$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_location)}"
   gcp_cluster_name="$(terraform -chdir="$TF_ENV_DIR" output -raw cluster_name)"
+  [[ -n "$gke_cluster_location" ]] || die "could not resolve GKE cluster location from ${TF_ENV_DIR} (run 'make tf-init TF_ENV=${GITOPS_ENV}' first)"
   RENDERED_STORE="${GITOPS_DIR}/environments/${GITOPS_ENV}/secrets/clustersecretstore.yaml"
   # shellcheck disable=SC2016
-  GCP_PROJECT_ID="$gcp_project_id" GCP_REGION="$gcp_region" GCP_CLUSTER_NAME="$gcp_cluster_name" GITOPS_ENV="$GITOPS_ENV" \
+  GCP_PROJECT_ID="$gcp_project_id" GKE_CLUSTER_LOCATION="$gke_cluster_location" GCP_CLUSTER_NAME="$gcp_cluster_name" GITOPS_ENV="$GITOPS_ENV" \
     ESO_SA_NAME="$ESO_SA" ESO_SA_NAMESPACE="$ESO_SA_NAMESPACE" \
-    envsubst '${GCP_PROJECT_ID} ${GCP_REGION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV} ${ESO_SA_NAME} ${ESO_SA_NAMESPACE}' < "$store_tmpl" > "$RENDERED_STORE"
+    envsubst '${GCP_PROJECT_ID} ${GKE_CLUSTER_LOCATION} ${GCP_CLUSTER_NAME} ${GITOPS_ENV} ${ESO_SA_NAME} ${ESO_SA_NAMESPACE}' < "$store_tmpl" > "$RENDERED_STORE"
 
   local eso_webhook_svc="${ESO_SA}-webhook"
   log "Waiting for ${eso_webhook_svc} webhook endpoints in ${ESO_SA_NAMESPACE} (up to ${CORE_WAIT_TIMEOUT})"
