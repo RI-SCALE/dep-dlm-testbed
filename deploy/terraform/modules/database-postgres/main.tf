@@ -23,9 +23,10 @@ resource "google_sql_database_instance" "this" {
 }
 
 resource "google_sql_database" "rucio" {
-  name     = "rucio"
-  project  = var.project_id
-  instance = google_sql_database_instance.this.name
+  name            = "rucio"
+  project         = var.project_id
+  instance        = google_sql_database_instance.this.name
+  deletion_policy = "ABANDON" # may still have connections; removed with the instance
 }
 
 resource "random_password" "rucio_db" {
@@ -34,8 +35,9 @@ resource "random_password" "rucio_db" {
 }
 
 resource "google_sql_user" "rucio" {
-  name     = "rucio"
-  project  = var.project_id
-  instance = google_sql_database_instance.this.name
-  password = random_password.rucio_db.result
+  name            = "rucio"
+  project         = var.project_id
+  instance        = google_sql_database_instance.this.name
+  password        = random_password.rucio_db.result
+  deletion_policy = "ABANDON" # role owns Rucio's objects; removed with the instance
 }

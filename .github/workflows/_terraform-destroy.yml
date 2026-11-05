@@ -74,5 +74,13 @@ jobs:
       - name: make tf-init
         run: make tf-init
 
+      # Cloud SQL users/databases are removed with their instance; dropping
+      # them separately fails (role owns objects, open connections).
+      - name: Forget Cloud SQL users and databases (removed with the instance)
+        working-directory: deploy/terraform/environments/${{ inputs.tf_env }}
+        run: |
+          terraform state list | { grep -E '\.google_sql_(user|database)\.' || true; } \
+            | xargs -r terraform state rm
+
       - name: make tf-destroy
         run: make tf-destroy AUTO_APPROVE=1
