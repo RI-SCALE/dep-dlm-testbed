@@ -1,0 +1,372 @@
+{
+  "displayName": "Rucio and FTS overview",
+  "dashboardFilters": [],
+  "mosaicLayout": {
+    "columns": 24,
+    "tiles": [
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "up{job=\"rucio-server\"}"
+            }
+          },
+          "title": "Rucio server"
+        },
+        "xPos": 0,
+        "yPos": 1,
+        "height": 4,
+        "width": 4
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "min(up{job=~\"rucio-db|fts\"})"
+            }
+          },
+          "title": "Exporters"
+        },
+        "xPos": 4,
+        "yPos": 1,
+        "height": 4,
+        "width": 4
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "count(rucio_daemon_heartbeat_age_seconds > 300) or vector(0)"
+            }
+          },
+          "title": "Stale daemons"
+        },
+        "xPos": 8,
+        "yPos": 1,
+        "height": 4,
+        "width": 4
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "(sum(fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum(fts_files_completed_1h{state=\"FAILED\"})) / sum(fts_files_completed_1h{state=~\"FINISHED|FAILED\"})"
+            }
+          },
+          "title": "Transfer efficiency (last hour)"
+        },
+        "xPos": 12,
+        "yPos": 1,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "sum(rucio_rules{state=\"STUCK\"}) or vector(0)"
+            }
+          },
+          "title": "Stuck rules"
+        },
+        "xPos": 18,
+        "yPos": 1,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "((sum(sum_over_time(fts_files_completed_1h{state=\"FINISHED\"}[7d])) or vector(0))\n  / sum(sum_over_time(fts_files_completed_1h{state=~\"FINISHED|FAILED\"}[7d])))"
+            }
+          },
+          "title": "Transfer success (SLO 95 %)"
+        },
+        "xPos": 0,
+        "yPos": 6,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "clamp_min(1 - (1 - ((sum(sum_over_time(fts_files_completed_1h{state=\"FINISHED\"}[7d])) or vector(0))\n  / sum(sum_over_time(fts_files_completed_1h{state=~\"FINISHED|FAILED\"}[7d])))) / (1 - 0.95), 0)"
+            }
+          },
+          "title": "Transfer error budget left"
+        },
+        "xPos": 6,
+        "yPos": 6,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "((sum(sum_over_time(rucio_rules_completed_1h_by_target{within_target=\"true\"}[7d])) or vector(0))\n  / sum(sum_over_time(rucio_rules_completed_1h_by_target[7d])))"
+            }
+          },
+          "title": "Rules within 30 min (SLO 95 %)"
+        },
+        "xPos": 12,
+        "yPos": 6,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "scorecard": {
+            "sparkChartView": {
+              "sparkChartType": "SPARK_LINE"
+            },
+            "thresholds": [],
+            "timeSeriesQuery": {
+              "prometheusQuery": "clamp_min(1 - (1 - ((sum(sum_over_time(rucio_rules_completed_1h_by_target{within_target=\"true\"}[7d])) or vector(0))\n  / sum(sum_over_time(rucio_rules_completed_1h_by_target[7d])))) / (1 - 0.95), 0)"
+            }
+          },
+          "title": "Rule latency error budget left"
+        },
+        "xPos": 18,
+        "yPos": 6,
+        "height": 4,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "Efficiency matrix (last hour)",
+          "timeSeriesTable": {
+            "columnSettings": [
+              {
+                "column": "value",
+                "visible": false
+              }
+            ],
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})"
+                }
+              }
+            ],
+            "metricVisualization": "NUMBER"
+          }
+        },
+        "xPos": 0,
+        "yPos": 11,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Throughput per link (last hour)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (source_se, dest_se) (fts_bytes_finished_1h) / 3600"
+                },
+                "legendTemplate": "${labels.source_se} → ${labels.dest_se}"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 11,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Failures by category (last hour)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (category) (fts_failures_1h)"
+                },
+                "legendTemplate": "${labels.category}"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 19,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Top failure reasons (last hour)",
+          "timeSeriesTable": {
+            "columnSettings": [
+              {
+                "column": "value",
+                "visible": false
+              }
+            ],
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "fts_failure_reasons_1h"
+                }
+              }
+            ],
+            "metricVisualization": "NUMBER"
+          }
+        },
+        "xPos": 12,
+        "yPos": 19,
+        "height": 8,
+        "width": 12
+      },
+      {
+        "widget": {
+          "title": "Rules by state",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (state) (rucio_rules)"
+                },
+                "legendTemplate": "${labels.state}"
+              }
+            ]
+          }
+        },
+        "xPos": 0,
+        "yPos": 28,
+        "height": 8,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "Oldest open rule",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "LINE",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "max by (state) (rucio_rules_oldest_open_age_seconds)"
+                },
+                "legendTemplate": "${labels.state}"
+              }
+            ]
+          }
+        },
+        "xPos": 6,
+        "yPos": 28,
+        "height": 8,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "Rucio transfer requests by state",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (state) (rucio_transfer_requests)"
+                },
+                "legendTemplate": "${labels.state}"
+              }
+            ]
+          }
+        },
+        "xPos": 12,
+        "yPos": 28,
+        "height": 8,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "FTS queue by state",
+          "xyChart": {
+            "dataSets": [
+              {
+                "plotType": "STACKED_AREA",
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (state) (fts_files_active)"
+                },
+                "legendTemplate": "${labels.state}"
+              }
+            ]
+          }
+        },
+        "xPos": 18,
+        "yPos": 28,
+        "height": 8,
+        "width": 6
+      },
+      {
+        "widget": {
+          "title": "Errors across services",
+          "logsPanel": {
+            "filter": "resource.type=\"k8s_container\" resource.labels.namespace_name=~\"^dep-dlm-\" (severity>=ERROR OR textPayload=~\"(?i)error|exception|failed\")"
+          }
+        },
+        "xPos": 0,
+        "yPos": 37,
+        "height": 10,
+        "width": 24
+      },
+      {
+        "widget": {
+          "title": "Logs",
+          "logsPanel": {
+            "filter": "resource.type=\"k8s_container\" resource.labels.namespace_name=~\"^dep-dlm-\""
+          }
+        },
+        "xPos": 0,
+        "yPos": 47,
+        "height": 10,
+        "width": 24
+      }
+    ]
+  },
+  "labels": {
+    "goog-imported-via-script": "",
+    "cloud-monitoring-dashboard-importer": "",
+    "goog-imported-grafana-dashboard": "",
+    "goog-imported-grafana-revision": "8",
+    "goog-imported-grafana-file-name-dep-dlm-overview": ""
+  }
+}

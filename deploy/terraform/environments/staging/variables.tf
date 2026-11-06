@@ -108,3 +108,9 @@ variable "teapot_extra_subs" {
   type        = list(string)
   default     = []
 }
+
+variable "alert_notification_email" {
+  description = "E-mail for alert notifications (null: console only)"
+  type        = string
+  default     = "marvin.gajek@cern.ch"
+}

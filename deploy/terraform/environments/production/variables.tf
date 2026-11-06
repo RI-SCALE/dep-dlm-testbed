@@ -85,3 +85,9 @@ variable "token_mode" {
     error_message = "token_mode must be 'managed' or 'unmanaged'."
   }
 }
+
+variable "alert_notification_email" {
+  description = "E-mail for alert notifications (null: console only)"
+  type        = string
+  default     = "marvin.gajek@cern.ch"
+}

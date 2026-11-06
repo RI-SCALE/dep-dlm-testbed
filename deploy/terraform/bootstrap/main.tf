@@ -32,6 +32,8 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "sts.googleapis.com", # Workload Identity Federation token exchange
     "dns.googleapis.com",
+    "monitoring.googleapis.com",
+    "logging.googleapis.com",
   ]
 }
 
@@ -198,4 +200,16 @@ resource "google_project_iam_member" "os_login_admins" {
   project = google_project.env[each.value.env].project_id
   role    = "roles/compute.osAdminLogin"
   member  = "user:${each.value.user}"
+}
+
+# GKE nodes (default compute SA) write logs and metrics; not implied when
+# the org blocks automatic Editor grants for default service accounts.
+resource "google_project_iam_member" "gke_node_sa" {
+  for_each = local.environments
+
+  project = google_project.env[each.key].project_id
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${google_project.env[each.key].number}-compute@developer.gserviceaccount.com"
+
+  depends_on = [google_project_service.apis]
 }

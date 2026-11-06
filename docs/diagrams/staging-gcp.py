@@ -20,6 +20,15 @@ path. It is resolved through a private Cloud DNS zone, not by IP: FTS's
 gfal2/davix transfer engine does not honour per-pod /etc/hosts entries. It
 trusts the same CA chain from the Secret Manager "certs" secret.
 
+Telemetry lives outside the cluster (design doc 005): Managed Service for
+Prometheus collects metrics from rucio-server, the daemons and the
+sql_exporters into Cloud Monitoring; GKE ships container stdout to Cloud
+Logging. Dashboards and alert policies are Terraform-managed Cloud
+Monitoring resources and logs are read in the Logs Explorer, so visibility
+survives a cluster outage. In-cluster are only the exporters, the
+PodMonitoring resources and GKE's managed agents (GMP collectors, logging
+agent), none of which store data.
+
 Regenerate: python3 staging-gcp.py  (writes generated/staging-gcp.png)
 """
 
@@ -28,6 +37,7 @@ from diagrams.gcp.compute import GKE, ComputeEngine
 from diagrams.gcp.database import SQL
 from diagrams.gcp.network import LoadBalancing, DNS
 from diagrams.gcp.security import SecretManager, Iam
+from diagrams.gcp.operations import Monitoring, Logging
 from diagrams.k8s.compute import Deployment
 from diagrams.k8s.network import Ingress
 from diagrams.onprem.gitops import Argocd
@@ -69,6 +79,10 @@ with Diagram(
         wif = Iam("Workload Identity")
         glb = LoadBalancing("Global External ALB\n(GKE Gateway,\ngateway_static_ip)")
         dns = DNS("Cloud DNS\n(private zone)")
+        monitoring = Monitoring(
+            "Cloud Monitoring\n(Managed Prometheus,\ndashboards, alert policies)"
+        )
+        logging = Logging("Cloud Logging\n(Logs Explorer)")
 
         with Cluster(
             "GKE Standard (zonal): dep-dlm-staging-gke\nnode pool: 1 fixed node, no autoscaling"
@@ -82,6 +96,7 @@ with Diagram(
                 rucio_daemons = Deployment("Rucio Daemons")
                 fts = Deployment("FTS3")
                 opa = Deployment("OPA\n(authz)")
+                exporters = Deployment("sql_exporter\n(Rucio, FTS)")
 
         with Cluster(
             "GCE VM: dep-dlm-staging-validation-storage\n(public IP, not GKE)",
@@ -107,6 +122,14 @@ with Diagram(
     opa >> Edge(label="policy bundle", style="dashed") >> policies
     rucio_daemons >> Edge(label="submit") >> fts
     fts >> fts_db
+
+    # Telemetry (design doc 005): collected in-cluster, stored and viewed outside it
+    rucio_server >> Edge(label="metrics\n(PodMonitoring)", style="dashed") >> monitoring
+    rucio_daemons >> Edge(style="dashed") >> monitoring
+    exporters >> Edge(style="dashed") >> monitoring
+    exporters >> Edge(label="SQL", style="dotted") >> rucio_db
+    exporters >> Edge(style="dotted") >> fts_db
+    gke >> Edge(label="container\nstdout", style="dashed") >> logging
 
     fts >> source_rses
     fts >> dest_rses

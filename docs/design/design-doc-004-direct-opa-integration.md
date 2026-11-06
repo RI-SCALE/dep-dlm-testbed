@@ -1,6 +1,6 @@
 # Design-004: Direct OPA authorization for dep-dlm-testbed (phase6 parity)
 
-- **Status:** Proposed
+- **Status:** Implemented
 - **Owner:** DEP DLM testbed
 - **Related ADR(s):** opa-policy-package's [adr-001-authz-service.md](https://github.com/mgajek-cern/opa-policy-package/blob/main/docs/adrs/adr-001-authz-service.md), [adr-003-opa-deploy-topology.md](https://github.com/mgajek-cern/opa-policy-package/blob/main/docs/adrs/adr-003-opa-deploy-topology.md) — those explain why direct-vs-service exists and why this testbed starts with direct; this doc is the how for reaching parity with opa-policy-package's phase6.
 

@@ -25,3 +25,7 @@ alerts:
 # Dashboard ConfigMap picked up by the Grafana sidecar (label grafana_dashboard).
 dashboards:
   enabled: true
+
+gmp:
+  enabled: false
+  podMonitorings: []

@@ -83,3 +83,13 @@ output "validation_storage_teapot1_pfn_root" {
 output "validation_storage_teapot2_pfn_root" {
   value = module.validation_storage.teapot2_pfn_root
 }
+
+output "monitoring_dashboard_ids" {
+  description = "Cloud Monitoring dashboard IDs (console: Monitoring > Dashboards)"
+  value       = module.monitoring.dashboard_ids
+}
+
+output "pending_alert_policies" {
+  description = "Alerts deferred until their metrics are ingested; rerun tf-apply after the e2e tests"
+  value       = module.monitoring.pending_alert_policies
+}

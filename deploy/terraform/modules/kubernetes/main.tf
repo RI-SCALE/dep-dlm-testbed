@@ -28,6 +28,19 @@ resource "google_container_cluster" "this" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  # Managed Service for Prometheus scrapes what PodMonitoring lists; workload
+  # stdout goes to Cloud Logging. Both store outside the cluster (design doc 005).
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+    managed_prometheus {
+      enabled = true
+    }
+  }
+
+  logging_config {
+    enable_components = ["SYSTEM_COMPONENTS", "WORKLOADS"]
+  }
+
   # Enables the Kubernetes Gateway API controller — GKE's current
   # recommended path for exposing external traffic, preferred over a
   # classic Ingress here for a more portable API shape across

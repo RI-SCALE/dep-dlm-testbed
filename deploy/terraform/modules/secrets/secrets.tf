@@ -49,5 +49,9 @@ resource "google_secret_manager_secret_version" "secrets" {
       fts_db_host = var.fts_db_host
     })
     "valstorage-ip" = var.storage_ip
+    # sql_exporter DSNs (design doc 005), read by the observability chart's
+    # exporters via exporters.<db>.dsnSecret. Passwords are URL-encoded.
+    "rucio-db-dsn" = "postgres://rucio:${urlencode(var.rucio_db_password)}@${var.rucio_db_host}:5432/rucio?sslmode=disable"
+    "fts-db-dsn"   = "mysql://fts:${urlencode(var.fts_db_password)}@${var.fts_db_host}:3306/fts"
   })
 }

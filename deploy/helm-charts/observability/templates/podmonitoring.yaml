@@ -1,0 +1,22 @@
+{{- if .Values.gmp.enabled }}
+{{- range .Values.gmp.podMonitorings }}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .name }}            # becomes the job label
+  namespace: {{ $.Release.Namespace }}
+spec:
+  selector:
+    {{- toYaml .selector | nindent 4 }}
+  endpoints:
+    - port: {{ .port }}
+      path: {{ .path | default "/metrics" }}
+      interval: {{ .interval | default "30s" }}
+  {{- with .fromPod }}
+  targetLabels:
+    fromPod:
+      {{- toYaml . | nindent 6 }}
+  {{- end }}
+{{- end }}
+{{- end }}

@@ -63,6 +63,19 @@ make obs-open               # open Grafana (k8s: port-forwards until Ctrl-C)
 
 ![Rucio and FTS overview dashboard](./docs/images/observability-overview.jpg)
 
+On staging and production (GKE), the same telemetry goes to Google Cloud instead:
+- **Metrics:** Managed Service for Prometheus scrapes the exporters through PodMonitoring.
+- **Logs:** go to Cloud Logging.
+- **Dashboard and alerts:** Terraform creates the Cloud Monitoring dashboard (converted from the Grafana JSON) and the alert policies (from `alerts.yml`).
+
+```bash
+make test-observability GITOPS_ENV=staging   # targets up and Rucio series in Managed Prometheus, logs in Cloud Logging
+```
+
+| Cloud Monitoring dashboard | Logs Explorer |
+|---|---|
+| ![Cloud Monitoring dashboard](./docs/images/observability-gcp-dashboard.jpg) | ![Cloud Logging Logs Explorer](./docs/images/observability-gcp-logs.jpg) |
+
 Design and metric sources: [design doc 005](./docs/design/design-doc-005-observability.md).
 
 ### Copernicus S3 transfers
@@ -176,8 +189,9 @@ Helm-only
   helm-template        Render manifests without installing
 
 Observability
-  test-observability   Observability smoke test: Prometheus targets up, Loki has logs
+  test-observability   Observability smoke test: scrape targets up, Rucio series, rucio-server logs
   obs-open             Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
+  obs-gcm-dashboards   Convert Grafana dashboards to Cloud Monitoring JSON
 
 Tests
   test-rucio-transfers Rucio E2E transfer test

@@ -7,9 +7,11 @@ the deployment view.
 
 **Provisions**: `dep-dlm-staging`/`dep-dlm-production` GCP Projects +
 VPC/subnet/private-services-access networking (`bootstrap/`); GKE Standard
-(zonal, one node pool) + Workload Identity binding, Secret Manager containers (values
-rendered from `.tftpl` templates, not out-of-band), Cloud SQL for
-Postgres (`rucio`) and MySQL (`fts`), both private-IP (`environments/<env>`).
+(zonal, one node pool) with Managed Prometheus and workload logging +
++Workload Identity binding, Secret Manager containers (values rendered from
++`.tftpl` templates, not out-of-band), Cloud SQL for Postgres (`rucio`) and
++MySQL (`fts`), both private-IP, and Cloud Monitoring dashboards and alert
++policies (`environments/<env>`).
 
 **Does NOT provision**: Rucio, FTS, ESO, or any in-cluster workload —
 those are GitOps-managed (Argo CD/Flux), matching ADR-003's boundary.
@@ -28,7 +30,9 @@ deploy/terraform/
 │   ├── kubernetes/               # GKE Standard (zonal, one node pool) + Workload Identity
 │   ├── secrets/                  # Secret Manager + rendered rucio.cfg/fts3config/etc.
 │   ├── database-postgres/        # rucio
-│   └── database-mysql/           # fts
+│   ├── database-mysql/           # fts
+│   ├── monitoring/               # Cloud Monitoring dashboards + alert policies from alerts.yml
+│   └── validation-storage/       # staging-only XRootD/Teapot VM
 ├── scripts/
 │   ├── seed-bootstrap-state.sh   # one-time: seed bootstrap's own state bucket
 │   └── resolve-tf-env.sh         # resolves project/network/etc. from bootstrap's output
@@ -125,6 +129,13 @@ so the VM fetches the new cert. CI does both.
 
 `AUTO_APPROVE=1` for non-interactive apply/destroy (CI always passes
 this; local defaults to an interactive prompt).
+
+**Monitoring:** alert policies are created only for metrics already
+ingested into the project, so a fresh environment lists the rest under
+`pending_alert_policies` until the e2e tests have produced them; the next
+apply (CI: after the e2e tests) creates them. Dashboards come from
+`configs/observability/cloud-monitoring/`, regenerated with
+`make obs-gcm-dashboards` after changing the Grafana JSON.
 
 CI: see [`_terraform-apply.yml`](../../.github/workflows/_terraform-apply.yml)
 — `plan` → `apply` → `smoke-test` (own job, separate

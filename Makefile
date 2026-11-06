@@ -311,6 +311,12 @@ else
   LOKI_URL       ?= http://loki:3100
 endif
 
+ifeq ($(GITOPS_ENV),staging)
+  OBS_ENV = OBSERVABILITY_BACKEND=gmp GCP_PROJECT_ID=$(call staging_tf_output,project_id) GCP_ACCESS_TOKEN=$$(gcloud auth print-access-token)
+else
+  OBS_ENV = PROMETHEUS_URL=$(PROMETHEUS_URL) LOKI_URL=$(LOKI_URL)
+endif
+
 ## Help
 
 .PHONY: help
@@ -574,9 +580,8 @@ helm-template: ## Render manifests without installing
 
 ## Observability
 
-.PHONY: test-observability
-test-observability: ## Observability smoke test: Prometheus targets up, Loki has logs
-	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) PROMETHEUS_URL=$(PROMETHEUS_URL) LOKI_URL=$(LOKI_URL) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_observability.py -v"
+test-observability: ## Observability smoke test: scrape targets up, Rucio series, rucio-server logs
+	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(OBS_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_observability.py -v"
 
 .PHONY: obs-open
 obs-open: ## Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
@@ -592,6 +597,10 @@ ifeq ($(RUNTIME),k8s)
 else
 	@$(OPEN_URL) http://localhost:3000
 endif
+
+.PHONY: obs-gcm-dashboards
+obs-gcm-dashboards: ## Convert Grafana dashboards to Cloud Monitoring JSON
+	@./scripts/convert-dashboards.sh
 
 ## Tests
 
@@ -688,7 +697,8 @@ tf-docs: ## Generate Terraform reference docs. Needs terraform-docs.
 	@command -v terraform-docs >/dev/null 2>&1 || { echo "terraform-docs not found — see .devcontainer/setup.sh's install_terraform_docs()"; exit 1; }
 	@for dir in bootstrap environments/staging environments/production \
 	            modules/networking modules/kubernetes modules/database-postgres \
-				modules/database-mysql modules/secrets modules/validation-storage; do \
+				modules/database-mysql modules/secrets modules/validation-storage \
+				modules/monitoring; do \
 	  echo "Injecting docs into deploy/terraform/$$dir/README.md"; \
 	  terraform-docs markdown table --sort-by required \
 	    --output-file README.md --output-mode inject \
