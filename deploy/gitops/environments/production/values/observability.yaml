@@ -1,0 +1,22 @@
+alerts:
+  enabled: false        # alerts are Cloud Monitoring policies (Terraform)
+dashboards:
+  enabled: false        # no Grafana on GKE
+exporters:
+  fts:
+    dsnSecret: { name: testbed-secrets, key: fts-db-dsn }
+  rucio:
+    dsnSecret: { name: testbed-secrets, key: rucio-db-dsn }
+gmp:
+  enabled: true
+  podMonitorings:       # name = job label, matches alerts.yml and the dashboard
+    - name: rucio-server
+      selector: { matchLabels: { app: rucio-server } }     # verify label
+      port: 80                                              # verify container port
+      path: /metrics/
+    - name: rucio-daemons
+      selector: { matchExpressions: [{ key: rucio-daemon, operator: Exists }] }
+      port: metrics
+      fromPod: [{ from: rucio-daemon, to: daemon }]
+    - { name: fts,      selector: { matchLabels: { app: fts-exporter } },      port: metrics }
+    - { name: rucio-db, selector: { matchLabels: { app: rucio-db-exporter } }, port: metrics }

@@ -64,6 +64,7 @@ variable "terraform_ci_roles" {
     "roles/compute.securityAdmin",
     "roles/resourcemanager.projectIamAdmin",
     "roles/dns.admin",
+    "roles/monitoring.editor",
   ]
 }
 

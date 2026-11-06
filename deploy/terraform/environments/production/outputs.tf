@@ -63,3 +63,13 @@ output "rucio_public_hostname" {
 output "fts_public_hostname" {
   value = module.kubernetes.fts_public_hostname
 }
+
+output "monitoring_dashboard_ids" {
+  description = "Cloud Monitoring dashboard IDs (console: Monitoring > Dashboards)"
+  value       = module.monitoring.dashboard_ids
+}
+
+output "pending_alert_policies" {
+  description = "Alerts deferred until their metrics are ingested; rerun tf-apply after the e2e tests"
+  value       = module.monitoring.pending_alert_policies
+}

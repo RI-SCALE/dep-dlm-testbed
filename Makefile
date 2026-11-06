@@ -593,6 +593,10 @@ else
 	@$(OPEN_URL) http://localhost:3000
 endif
 
+.PHONY: obs-gcm-dashboards
+obs-gcm-dashboards: ## Convert Grafana dashboards to Cloud Monitoring JSON
+	@./scripts/convert-dashboards.sh
+
 ## Tests
 
 test-rucio-transfers: ## Rucio E2E transfer test

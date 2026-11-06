@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
+    }
   }
 }
 
@@ -83,4 +87,14 @@ module "secrets" {
   storage_ip             = null
 
   rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
+}
+
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  project_id         = var.project_id
+  name_prefix        = local.name_prefix
+  alerts_file        = "${path.root}/../../../../configs/observability/prometheus/alerts.yml"
+  dashboards_dir     = "${path.root}/../../../../configs/observability/cloud-monitoring/dashboards"
+  notification_email = var.alert_notification_email
 }

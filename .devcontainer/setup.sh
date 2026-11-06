@@ -219,6 +219,15 @@ install_opa() {
     echo -e "${GREEN}OPA: $(opa version | head -n 1)${NC}\n"
 }
 
+install_node() {
+    local NODE_VERSION="v22.11.0"  # >= 20.4 for the Cloud Monitoring dashboard importer
+    local NODE_ARCH
+    if [ "$ARCH" = "amd64" ]; then NODE_ARCH="x64"; else NODE_ARCH="arm64"; fi
+    echo -e "${BLUE}Installing Node.js $NODE_VERSION...${NC}"
+    curl -Ls "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.gz" \
+        | tar -xz -C /usr/local --strip-components=1
+    echo -e "${GREEN}node: $(node --version)  |  npm: $(npm --version)${NC}\n"
+}
 
 print_summary() {
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -247,4 +256,5 @@ install_precommit
 install_terraform
 install_terraform_docs
 install_opa
+install_node
 print_summary

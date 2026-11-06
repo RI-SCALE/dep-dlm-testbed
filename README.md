@@ -178,6 +178,7 @@ Helm-only
 Observability
   test-observability   Observability smoke test: Prometheus targets up, Loki has logs
   obs-open             Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
+  obs-gcm-dashboards   Convert Grafana dashboards to Cloud Monitoring JSON
 
 Tests
   test-rucio-transfers Rucio E2E transfer test

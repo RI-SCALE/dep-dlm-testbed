@@ -7,11 +7,13 @@ resources:
   - ../../components/rucio-server.yaml
   - ../../components/rucio-daemons.yaml
   - ../../components/opa.yaml
+  - ../../components/observability.yaml        # exporters + PodMonitoring only; no kube-prometheus-stack/Loki/Alloy
 configMapGenerator:
   - { name: rucio-server-values,  namespace: flux-system, files: [ rucio-server.yaml=../../../base/values/rucio-server.yaml ] }
   - { name: rucio-daemons-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../base/values/rucio-daemons.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
   - { name: opa-values,           namespace: flux-system, files: [ opa.yaml=../../../base/values/opa.yaml ] }
+  - { name: observability-values, namespace: flux-system, files: [ observability.yaml=../../../base/values/observability.yaml ] }
   # Staging-specific overlays, layered on top of base via a second
   # valuesFrom entry (patches below) — same role as ArgoCD's second
   # entry in applicationsets/staging.yaml's helm.valueFiles list. Without
@@ -21,6 +23,7 @@ configMapGenerator:
   # testbed-certs) stay referenced, crashing the FTS mount.
   - { name: rucio-daemons-overrides-values, namespace: flux-system, files: [ rucio-daemons.yaml=../../../environments/staging/values/rucio-daemons.yaml ] }
   - { name: fts-overrides-values,           namespace: flux-system, files: [ fts.yaml=../../../environments/staging/values/fts.yaml ] }
+  - { name: observability-overrides-values, namespace: flux-system, files: [ observability.yaml=../../../environments/staging/values/observability.yaml ] }
 generatorOptions:
   disableNameSuffixHash: true
 patches:
@@ -39,6 +42,11 @@ patches:
       - op: add
         path: /spec/valuesFrom/-
         value: { kind: ConfigMap, name: rucio-daemons-overrides-values, valuesKey: rucio-daemons.yaml }
+  - target: { kind: HelmRelease, name: observability }
+    patch: |
+      - op: add
+        path: /spec/valuesFrom/-
+        value: { kind: ConfigMap, name: observability-overrides-values, valuesKey: observability.yaml }
   # rucio-server's dependsOn: postgresql (in components/rucio-server.yaml)
   # is sandbox-only — staging has no bundled postgresql HelmRelease at
   # all (real Cloud SQL instance from Terraform instead), so that
@@ -48,6 +56,10 @@ patches:
   # behind it, which correctly depends on rucio-server — that one stays,
   # it resolves naturally once rucio-server itself converges).
   - target: { kind: HelmRelease, name: rucio-server }
+    patch: |
+      - op: remove
+        path: /spec/dependsOn
+  - target: { kind: HelmRelease, name: observability }
     patch: |
       - op: remove
         path: /spec/dependsOn

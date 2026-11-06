@@ -60,6 +60,16 @@ spec:
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
                   ref: values
+          - name: observability
+            spec:
+              sources:
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  path: deploy/helm-charts/observability
+                  helm: { valueFiles: ["$values/deploy/gitops/base/values/observability.yaml", "$values/deploy/gitops/environments/staging/values/observability.yaml"] }
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
+                  targetRevision: main
+                  ref: values
   template:
     metadata:
       name: '{{ .name }}-staging'
