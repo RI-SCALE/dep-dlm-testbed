@@ -1,6 +1,6 @@
 # Design-008: GKE Standard cluster with per-environment node pools
 
-- **Status:** Proposed
+- **Status:** Implemented
 - **Owner:** DEP DLM testbed
 - **Related ADR(s):** [ADR-009](../adrs/adr-009-standard-gke-fixed-staging-node.md) (why); [ADR-003](../adrs/adr-003-staging-cloud-provider.md) (GCP as provider)
 

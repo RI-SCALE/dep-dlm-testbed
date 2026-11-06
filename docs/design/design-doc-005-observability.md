@@ -1,214 +1,183 @@
 # Design-005: Observability for Rucio and FTS
 
-- **Status:** Proposed
+- **Status:** Accepted (phases 1–2 on Compose and sandbox; staging in progress)
 - **Owner:** DEP DLM testbed
-- **Related ADR(s):** none yet
+- **Related ADR(s):** [ADR-009](../adrs/adr-009-standard-gke-fixed-staging-node.md) (staging node size)
 
 ## Problem
 
 The testbed validates transfers, deletions and authorization end to end, but
 gives no runtime visibility once a deployment is running:
 
-- No metrics: nothing scrapes rucio-server, rucio-daemons or FTS and there
-  are no dashboards for daemon health or rule backlog.
-- No central logs: diagnosing a failed transfer means `docker logs` or
-  `kubectl logs` per container (see `docs/troubleshooting.md`).
-- Transfer events are not collected: `configs/fts/fts-activemq.conf`
-  exists, but no broker or consumer is deployed and Hermes is not configured
-  to emit anywhere.
-- The staging/production runbook for observability is still open in
-  `BACKLOG.md`.
+- No metrics or dashboards for rucio-server, rucio-daemons or FTS.
+- No central logs: a failed transfer means `docker logs`/`kubectl logs` per
+  container.
+- Transfer events are not collected: `configs/fts/fts-activemq.conf` exists,
+  but no broker or consumer is deployed and Hermes emits nowhere.
+- The staging/production observability runbook is open in `BACKLOG.md`.
 
 Partners operating a DEP need the same visibility, so this belongs in the
 GitOps blueprint, not just the sandbox.
 
 ## Goals
 
-- Answer, per environment: Are the Rucio daemons and FTS healthy? What is the
-  transfer rate, failure rate and throughput per RSE? Is the rule backlog
-  growing?
-- Build on Docker Compose first, then translate to Kubernetes as optional
-  GitOps components (Argo CD and Flux) on the existing
-  sandbox/staging/production overlays.
+- Answer per environment: are the daemons and FTS healthy, what are transfer
+  rate, failure rate and throughput per RSE, is the rule backlog growing?
+- Compose first, then Kubernetes as optional GitOps components (Argo CD and
+  Flux) on the sandbox/staging/production overlays.
 - Configuration only: no source patches to Rucio or FTS.
+- Staging and production clusters stay stateless and carry no observability
+  frontend: storage, dashboards and alerting live outside the cluster, so
+  visibility survives a cluster outage or recreate.
 - Each phase is independently useful and validated in CI.
 
 ## Non-goals
 
-- A MONIT-scale pipeline (Kafka, HDFS, long-term analytics). Too heavy for
-  RI-SCALE's scale.
-- Long-term retention or capacity planning. Defaults only.
-- SLAs or on-call commitments. SLOs are internal targets for the testbed
-  [7, 8]; agreements with partners are out of scope.
-- Usage reporting for credits (covered by ADR-005).
+- A MONIT-scale pipeline (Kafka, HDFS, long-term analytics).
+- Capacity planning; retention stays at backend defaults.
+- SLAs or on-call; SLOs are internal testbed targets [7, 8].
+- Usage reporting for credits (ADR-005).
 
 ## Design
 
 Three phases, each off by default (`OBSERVABILITY=1` for Compose,
-`observability.enabled` in the umbrella chart for Kubernetes; the GitOps
-sandbox environment enables them). Each phase is built on Compose first, then
-translated to Kubernetes.
+`observability.enabled` in the umbrella chart). Runtime-independent
+configuration lives in `configs/observability/` (Grafana dashboards,
+`alerts.yml`, `sql_exporter` collectors, Alloy/Vector config, Rucio
+`[monitor]`/Hermes sections) and is the single source for every
+environment; only the wiring differs:
 
-Runtime-independent configuration lives in `configs/observability/` and
-is used by both runtimes: dashboards, datasources, alert rules, the Rucio
-`[monitor]`/Hermes sections, `fts-activemq.conf` and the Vector config. Only
-the wiring differs:
-
-| | Compose | Kubernetes |
+| | Compose / sandbox | Staging / production (GKE) |
 |---|---|---|
-| Metrics | Prometheus with static scrape config | `kube-prometheus-stack` in `dep-dlm-<env>`, scrape config in its values (endpoints discovery) |
-| Logs | Alloy with Docker discovery | Alloy with pod discovery |
-| Dashboards | Grafana file provisioning | Grafana ConfigMap sidecar |
-| Exporters, alerts | Compose services, `rule_files` | `deploy/helm-charts/observability` (Deployments, `PrometheusRule`) |
+| Metrics | Prometheus, in-cluster | Managed Service for Prometheus (GMP): managed collection via `PodMonitoring`, stored in Cloud Monitoring [9] |
+| Logs | Alloy → Loki, in-cluster | GKE logging agent → Cloud Logging |
+| Dashboards | Grafana, provisioned | Cloud Monitoring dashboards (PromQL), generated from the Grafana JSON; Logs Explorer for logs |
+| Alerts | `PrometheusRule` / `rule_files` | Cloud Monitoring PromQL alert policies, generated from `alerts.yml` (evaluated in the cloud, not in-cluster) [9] |
+
+On GKE the in-cluster parts are only the exporters, the `PodMonitoring`
+resources and GKE's own managed agents (GMP collectors in `gmp-system`, the
+logging agent); none of them store data. Dashboards and alert policies are
+Terraform-managed Cloud Monitoring resources; GMP keeps metrics for 24
+months [9]. Any Prometheus-API client, including a Grafana, can still query
+the same data later without changes.
 
 **Phase 1: Metrics**
-- Prometheus and Grafana (Alertmanager only on Kubernetes).
-- Internal metrics from the components, as in the Rucio monitoring guide
-  [2]:
-  - rucio-server: `metrics` in `[api] endpoints` of `rucio.cfg`, with
-    `PROMETHEUS_MULTIPROC_DIR` so all server processes report together. In
-    direct mode the `--run-once` daemons run inside this container, so their
-    metrics appear here too.
-  - rucio-daemons on Kubernetes: `[monitor] enable_metrics` in the daemons'
-    own configuration (chart `config:`), so each daemon pod serves `/metrics`
-    on its `metrics` port; `monitoring.enabled` adds the Service that
-    Prometheus discovers. The server keeps it off: every server process
-    would try to bind the same port.
-  - rucio-daemons on Compose: all daemons share one container, so
-    per-process ports would clash. They write multiprocess files to a shared
-    volume that a small `rucio-daemons-metrics` exporter serves.
-- Data management state from the databases, as WLCG and the Rucio operator
-  guide do [2, 4]: FTS has no Prometheus endpoint, so `sql_exporter` reads
-  transfer state from the FTS database; a second instance reads rules,
-  transfer requests and daemon heartbeats from the Rucio database.
-- Daemon liveness from Rucio's `heartbeats` table [5]: each daemon refreshes
-  its row every cycle and removes it on clean exit, so a stale row means a
-  hung or crashed daemon. This works the same in both runtimes and in both
-  daemon modes, independent of the metrics endpoints.
-- One dashboard, modelled on the WLCG/ATLAS/CMS transfer views [3, 6]:
-  - health: rucio-server, exporters, stale daemons, transfer efficiency,
-    stuck rules
-  - SLOs and remaining error budgets
-  - transfers: efficiency matrix, throughput per link (volume / time),
-    failure categories and top reasons, the views FTS3 monitoring is built
-    around [3]
-  - backlog: rules by state, oldest open rule, Rucio transfer requests (the
-    conveyor queue [2]), FTS queue
-  - logs, collapsed
+- Rucio internal metrics as in the operator guide [2]: rucio-server via
+  `metrics` in `[api] endpoints` with `PROMETHEUS_MULTIPROC_DIR`; daemons via
+  `[monitor] enable_metrics` per pod on Kubernetes, via a shared multiprocess
+  exporter on Compose.
+- Database state [2, 4]: `sql_exporter` reads transfer state from FTS (no
+  Prometheus endpoint) and rules, requests and daemon heartbeats [5] from
+  Rucio. On GKE the DSNs point at Cloud SQL private IPs and come from the
+  Terraform-rendered secrets via ESO.
+- One dashboard modelled on the WLCG/FTS views [3, 6]: health, SLOs and error
+  budgets, transfer efficiency and throughput per link, failure reasons,
+  backlog (rules, conveyor queue, FTS queue), logs.
 
-**Service level objectives**
-- Internal targets over a rolling 7-day window, not SLAs:
-  - transfer success 95 %: finished / (finished + failed) FTS files
-  - rule latency 95 %: rules reaching OK within 30 minutes
-- Alerts in `alerts.yml`:
-  - burn-rate alerts on both SLOs (fast: 14.4x over 1h, slow: 6x over 6h),
-    the multiwindow scheme of the SRE Workbook [8]. Its thresholds assume a
-    30-day budget; on the 7-day window they fire after a larger share of the
-    budget is spent, which is acceptable for a testbed.
-  - component alerts: rucio-server down, exporter down, stale daemon, daemon
-    metrics down, stuck rules, transfer requests blocked before FTS
-    (submission failed, no sources, no matching scheme)
+**Service level objectives** (rolling 7 days, not SLAs)
+- Transfer success 95 % (finished / (finished + failed) FTS files).
+- Rule latency 95 % (rules OK within 30 minutes).
+- Multiwindow burn-rate alerts (14.4x/1h, 6x/6h) [8] plus component alerts:
+  rucio-server or exporter down, stale daemon, stuck rules, requests blocked
+  before FTS.
 
 **Phase 2: Logs**
-- Loki plus Grafana Alloy (Promtail is in LTS; Alloy is its successor),
-  collecting stdout of all DEP DLM containers.
-- Loki as a Grafana datasource; log panels linked from dashboards.
+- Compose/sandbox: Loki plus Grafana Alloy collecting container stdout.
+- GKE: Cloud Logging (default for system and workload logs), read in the
+  Logs Explorer and as log panels on the Cloud Monitoring dashboard.
 
 **Phase 3: Transfer events**
-- ActiveMQ broker; FTS publishes to it via `fts-activemq.conf`.
-- Hermes publishes Rucio events (`transfer-done`, `transfer-failed`,
-  `deletion-done`, `RULE_OK`) directly to OpenSearch or via the broker (see
-  Open questions).
-- OpenSearch plus a STOMP consumer (Vector) writing broker messages to it.
-- Dashboards on the OpenSearch datasource: transfers per RSE pair, failure
-  reasons, throughput.
+- ActiveMQ; FTS publishes via `fts-activemq.conf`; Hermes publishes Rucio
+  events directly to OpenSearch or via the broker; Vector writes broker
+  messages to OpenSearch; dashboards on transfers per RSE pair and failures.
+- Not on staging until the open questions are settled.
 
 ```
-rucio-server/daemons ──metrics────────▶ Prometheus ──┐
-Rucio/FTS DBs ──▶ sql_exporter ───────▶ Prometheus   │
-all containers ──stdout──▶ Alloy ─────▶ Loki ────────┼──▶ Grafana
-FTS ──STOMP──▶ ActiveMQ ──▶ Vector ───▶ OpenSearch ──┘
-Hermes ───────────────────────────────▶ OpenSearch
+                     Compose / sandbox            Staging / production
+metrics (Rucio,  ──▶ Prometheus ──▶ Grafana       GMP ──▶ Cloud Monitoring
+sql_exporter)                                             (dashboards, alerts)
+container stdout ──▶ Alloy → Loki ──▶ Grafana      Cloud Logging (Logs Explorer)
+FTS/Hermes ──▶ ActiveMQ ──▶ Vector ──▶ OpenSearch (phase 3)
 ```
 
 ## Touch points
 
 | File / component | Change |
 |---|---|
-| `configs/observability/` (new) | Dashboards, datasources, alert rules, `sql_exporter` collectors, Alloy and Vector config |
-| `deploy/helm-charts/observability/` (new) | Exporters, `PrometheusRule` and dashboard ConfigMap from `configs/observability` |
-| `deploy/helm-charts/dep-dlm-testbed/` | `observability`, `kube-prometheus-stack`, `loki`, `alloy` dependencies behind `observability.enabled` |
-| `deploy/compose/docker-compose.observability.yml` (new) | Prometheus, Grafana, Loki, Alloy, ActiveMQ, OpenSearch, Vector |
-| `deploy/gitops/flux/components/` | New: `kube-prometheus-stack`, `loki`, `alloy`, `observability`; later `activemq`, `opensearch`, `vector` |
-| `deploy/gitops/argocd/applicationsets/` | Same components for Argo CD |
-| `deploy/gitops/base/values/` | Values for the new components; `PROMETHEUS_MULTIPROC_DIR` for rucio-server; `[monitor] enable_metrics` and `monitoring.enabled` for rucio-daemons; Hermes later |
-| `configs/rucio/` and `deploy/terraform/modules/secrets/templates/rucio.cfg.tftpl` | `[monitor]` and Hermes sections |
-| `configs/fts/fts-activemq.conf` | Broker endpoint per environment |
-| `Makefile` | `OBSERVABILITY=1` toggle for `start`; `obs-open` and `test-observability` targets |
-| `docs/runbooks/07-observability.md` (new) | Operator runbook |
+| `configs/observability/` | Dashboards, `alerts.yml`, collectors, Alloy/Vector config (single source) |
+| `deploy/helm-charts/observability/` | Exporters, `PrometheusRule`; `PodMonitoring` behind a GMP toggle |
+| `deploy/helm-charts/dep-dlm-testbed/` | `kube-prometheus-stack`, `loki`, `alloy` behind `observability.enabled` (sandbox) |
+| `deploy/gitops/{argocd,flux}/` | Sandbox: full stack. Staging/production: `observability` chart only |
+| `deploy/gitops/environments/staging/values/` | GMP toggle, exporter DSNs from Cloud SQL secrets |
+| `deploy/terraform/modules/kubernetes/` | `monitoring_config { managed_prometheus { enabled = true } }`; `logging_config` with `SYSTEM_COMPONENTS`, `WORKLOADS` (explicit) |
+| `deploy/terraform/modules/monitoring/` (new) | `google_monitoring_dashboard`, `google_monitoring_alert_policy`, notification channel |
+| `scripts/` | Grafana JSON → Cloud Monitoring JSON, `alerts.yml` → alert policies; generated files checked in CI |
+| `deploy/compose/docker-compose.observability.yml` | Compose stack |
+| `Makefile` | `OBSERVABILITY=1`, `obs-open` (Grafana or console URLs), `test-observability` (per backend) |
+| `.github/workflows/_gitops-deploy.yml` | `make test-observability` on staging |
+| `docs/runbooks/07-observability.md` | Operator runbook |
 
 ## Fallback / safety behavior
 
-- All components are off by default; enabling them must not change transfer
-  behaviour.
-- Monitoring outages must not block data management: Hermes keeps
-  undelivered messages in the database and FTS buffers messages locally when
-  the broker is down. Bound both with retention settings.
-- Missing broker or OpenSearch config: Hermes and FTS messaging stay disabled
-  rather than failing the containers.
-- No credentials in the repo: local env files for Compose, the existing
-  External Secrets path for Kubernetes.
+- Off by default; enabling must not change transfer behaviour.
+- Monitoring outages never block data management: Hermes keeps undelivered
+  messages in the database, FTS buffers locally; both bounded by retention.
+- Missing broker/OpenSearch config disables messaging instead of failing pods.
+- No credentials in the repo: env files for Compose, ESO and Workload
+  Identity on Kubernetes.
+- Staging stays stateless: recreating the cluster loses no telemetry,
+  dashboards or alerts.
+- A monitoring failure must not fail the e2e transfer tests.
 
 ## Testing
 
-- `make helm-lint` and `helm-template` with observability enabled.
-- `make test-observability` (new), run in the existing Compose and k8s CI
-  jobs:
-  - Phase 1: Prometheus targets for rucio-server and the database
-    exporters (and rucio-daemons in daemons mode) are `up`, rucio-server
-    returns metric series, and the exporters return rule and transfer
-    metrics.
-  - Phase 2: a Loki query returns rucio-server logs.
-  - Phase 3: after `make test-rucio-transfers`, OpenSearch holds at least one
-    `transfer-done` event from Hermes and one completion message from FTS.
-- Dashboards load in Grafana without datasource errors (provisioning check).
+- `make helm-lint`/`helm-template` with observability enabled.
+- `make test-observability` in the Compose, sandbox and Deploy (staging) CI:
+  exporter and rucio-server series present (Prometheus or GMP query API); a
+  log query returns rucio-server logs (Loki or Cloud Logging); phase 3:
+  OpenSearch holds a `transfer-done` event after the transfer tests.
+- Grafana dashboards load without datasource errors; generated Cloud
+  Monitoring dashboards and alert policies are up to date and plan cleanly.
 
 ## Sequencing
 
-1. Phase 1 on Compose, then sandbox Kubernetes, then staging.
-2. Phase 2 on Compose, then sandbox Kubernetes, then staging.
-3. Phase 3 on Compose; decide the open questions; then sandbox Kubernetes
-   and staging.
-4. Runbook `07-observability.md`; close the observability item in `BACKLOG.md`.
+1. Phases 1–2 on Compose and sandbox (done).
+2. Staging: enable GMP in Terraform; deploy the `observability` chart with
+   `PodMonitoring`; wire exporter DSNs to Cloud SQL; generate and apply the
+   dashboard and alert policies; run `make test-observability` in Deploy
+   (staging).
+3. Phase 3 on Compose; decide its open questions; then sandbox and staging.
+4. Runbook `07-observability.md`; close the `BACKLOG.md` item.
 5. Production overlay once staging has run stably.
 
 ## Open questions
 
-- Hermes: write to OpenSearch directly, or via ActiveMQ for a single ingest
-  path? Confirm direct OpenSearch support for this Rucio version.
-- Could events go to Loki instead of OpenSearch, dropping one component?
-- Resource cost of the full stack on GKE staging; whether OpenSearch fits.
-- Keep Compose observability in CI permanently, or only as a development aid
-  once Kubernetes is covered?
-- Who operates this in partner production deployments: bundled, or the
-  partner's existing monitoring stack?
+- Dashboard conversion: which panels (tables, transformations, variables)
+  need hand-tuning, and can the generated output stay untouched?
+- Cost of GMP samples and Cloud Logging ingestion beyond the free tiers.
+- Grafana Cloud as an alternative frontend: identical dashboards everywhere,
+  but a non-GCP data processor (data-protection sign-off).
+- Hermes: OpenSearch directly or via ActiveMQ; could events go to the log
+  backend instead, dropping OpenSearch?
+- Partner production: bundled backend or the partner's existing stack?
+- PromQL labels on GMP (`project_id`, `location`, `cluster`; different
+  `job`/`instance` values): which dashboard and alert queries need adjusting
+  during generation?
 
 ## References
 
 1. M. Barisits et al., "Rucio: Scientific Data Management", *Computing and
    Software for Big Science* 3, 11 (2019),
    [doi:10.1007/s41781-019-0026-3](https://doi.org/10.1007/s41781-019-0026-3).
-2. Rucio operator documentation, [Monitoring](https://rucio.cern.ch/documentation/operator/monitoring):
-   internal metrics, Hermes events, database queries, probes, dashboards.
-3. H. Riahi, M. Salichos, O. Keeble et al., [Quantitative transfer monitoring for FTS3](https://indico.cern.ch/event/304944/contributions/1672313/),
-   CHEP 2015: efficiency between sites, achieved throughput, most common errors.
-4. [WLCG Transfers Dashboard](https://cern.ch/twiki/bin/view/LCG/WLCGTransferDashboard):
-   cross-VO view of FTS and XRootD transfers.
-5. Rucio source, [`lib/rucio/core/heartbeat.py`](https://github.com/rucio/rucio/blob/master/lib/rucio/core/heartbeat.py):
-   daemon heartbeats (`readable` name, hashed `executable`, removal on exit).
-6. [Rucio publications](https://rucio.cern.ch/publications.html), including
-   the ATLAS and CMS operational experience.
+2. Rucio operator documentation, [Monitoring](https://rucio.cern.ch/documentation/operator/monitoring).
+3. H. Riahi et al., [Quantitative transfer monitoring for FTS3](https://indico.cern.ch/event/304944/contributions/1672313/), CHEP 2015.
+4. [WLCG Transfers Dashboard](https://cern.ch/twiki/bin/view/LCG/WLCGTransferDashboard).
+5. Rucio source, [`lib/rucio/core/heartbeat.py`](https://github.com/rucio/rucio/blob/master/lib/rucio/core/heartbeat.py).
+6. [Rucio publications](https://rucio.cern.ch/publications.html).
 7. B. Beyer et al., *Site Reliability Engineering*, O'Reilly (2016),
    [Monitoring Distributed Systems](https://sre.google/sre-book/monitoring-distributed-systems/).
 8. B. Beyer et al., *The Site Reliability Workbook*, O'Reilly (2018),
    [Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/).
+9. Google Cloud, [Managed Service for Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus):
+   managed collection, PromQL in Cloud Monitoring, cloud-evaluated alerts,
+   24-month retention.
