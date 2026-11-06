@@ -176,7 +176,7 @@ Helm-only
   helm-template        Render manifests without installing
 
 Observability
-  test-observability   Observability smoke test: Prometheus targets up, Loki has logs
+  test-observability   Observability smoke test: scrape targets up, Rucio series, rucio-server logs
   obs-open             Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)
   obs-gcm-dashboards   Convert Grafana dashboards to Cloud Monitoring JSON
 
