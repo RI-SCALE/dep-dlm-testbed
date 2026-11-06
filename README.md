@@ -10,7 +10,7 @@ CI covers each supported combination: Compose and Kubernetes; the bundled Keyclo
 - **Identity:** bundled Keycloak, EGI Check-In and LS AAI / Perun; managed and unmanaged token flows
 - **Authorisation:** Rucio delegates permission checks to OPA via a Rego policy package
 - **Storage:** XRootD, Teapot WebDAV and S3 (Copernicus Data Space)
-- **Upstream patches:** minimal patches to Rucio, FTS3, gfal2, davix and Teapot for features not yet upstream — see [docs/patches.md](./docs/patches.md), with decisions in [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/)
+- **Upstream patches:** minimal patches to Rucio, FTS3, gfal2, davix and Teapot for features not yet upstream: patched files in [patches/](./patches/), generated diffs in [diffs/](./diffs/), overview in [docs/patches.md](./docs/patches.md), decisions in [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/)
 
 ## Quick start
 
@@ -23,7 +23,6 @@ export RUNTIME=compose      # compose | k8s (Helm chart)
 export TOKEN_MODE=managed   # FTS token mode: managed | unmanaged
 export DAEMON_MODE=direct   # direct | daemons
 export OBSERVABILITY=0      # 1 adds Prometheus, Grafana, Loki and Alloy
-
 
 make start                  # start the stack
 make init                   # accounts, RSEs, OIDC seed
@@ -64,6 +63,7 @@ make obs-open               # open Grafana (k8s: port-forwards until Ctrl-C)
 ![Rucio and FTS overview dashboard](./docs/images/observability-overview.jpg)
 
 On staging and production (GKE), the same telemetry goes to Google Cloud instead:
+
 - **Metrics:** Managed Service for Prometheus scrapes the exporters through PodMonitoring.
 - **Logs:** go to Cloud Logging.
 - **Dashboard and alerts:** Terraform creates the Cloud Monitoring dashboard (converted from the Grafana JSON) and the alert policies (from `alerts.yml`).
@@ -94,7 +94,7 @@ make test-copernicus-transfers
 
 | Scope profile | Env file | `TOKEN_MODE` |
 |---|---|---|
- | `egi-dev` (EGI Check-In) | `envs/egi-dev.env` | `unmanaged` — `resource=` is supported on token exchange; `requested_token_type=refresh_token` is currently unsupported ([runbook 02](./docs/runbooks/02-bring-your-own-idp.md)) |
+| `egi-dev` (EGI Check-In) | `envs/egi-dev.env` | `unmanaged` — `resource=` is supported on token exchange; `requested_token_type=refresh_token` is currently unsupported ([runbook 02](./docs/runbooks/02-bring-your-own-idp.md)) |
 | `ls-aai-dev` (LS AAI) | `envs/ls-aai-dev.env` | `managed` or `unmanaged` |
 
 Copy `envs/<profile>.env.example` to `envs/<profile>.env` and fill in your `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`, then:
@@ -232,5 +232,5 @@ Cleanup
 
 ## Documentation and backlog
 
-- [docs/](./docs/) — runbooks, design documents, ADRs and patches
+- [docs/](./docs/) — runbooks, design documents, ADRs and the patch overview
 - [BACKLOG.md](./BACKLOG.md) — tracked improvements and planned work
