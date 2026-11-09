@@ -100,9 +100,10 @@ jobs:
 
       - name: Set up kind cluster
         if: inputs.runtime == 'k8s'
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@v1.12.0   # pin; @v1 now defaults to a broken kind download
         with:
           cluster_name: dep-dlm-testbed
+          version: v0.29.0
 
       - name: Install Helm
         if: inputs.runtime == 'k8s'
