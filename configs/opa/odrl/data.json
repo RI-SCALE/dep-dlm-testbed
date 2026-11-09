@@ -17,6 +17,8 @@
     {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
      "assignee": "urn:example:aai.example.org:group:rucio-users:role=member"},
     {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
-     "assignee": "urn:example:aai.example.org:group:atlas-users:role=member"}
+     "assignee": "urn:example:aai.example.org:group:atlas-users:role=member"},
+    {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
+     "assignee": "urn:mace:egi.eu:group:developers.dep.riscale.eu:role=member#aai.egi.eu"}
   ]
 }]}
