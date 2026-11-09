@@ -32,9 +32,11 @@
 ## Documentation & Runbooks
 
 - [ ] Provide runbooks explaining the key configurations to apply (Rucio rucio.cfg, OIDC, FTS, RSE settings, certificates, WP4 token-provider integration) so partners and DEP owners can deploy and operate their own workloads — applying their own sensitive credentials, which are not checked into this repository.
-    - [x] Sandbox quickstart end-to-end — see [01-sandbox-quickstart.md](docs/runbooks/01-sandbox-quickstart.md).
-    - [x] Bring-your-own runbook set (IdP, storage, config reference) + index — see [docs/runbooks/](docs/runbooks/).
-    - [ ] Remaining staging/production runbooks: external Vault secrets, certificate installation (Rucio/FTS) and observability.
+    - [x] Sandbox quickstart end-to-end —
+    - [x] Bring-your-own runbook set (IdP, storage, config reference)
+    - [x] External Vault secrets for staging/production
+    - [ ] Certificate installation (Rucio/FTS) for staging/production
+    - [x] Observability for staging/production
 
 ## External Identity Provider Integration
 
