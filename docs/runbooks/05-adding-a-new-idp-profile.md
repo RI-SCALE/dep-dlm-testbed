@@ -1,195 +1,109 @@
-# Runbook 6 — Adding a New IdP / SCOPE_PROFILE
+# Runbook 5 — Adding a new IdP / SCOPE_PROFILE
 
 ## Purpose
-Generalizes the egi-dev/ls-aai-dev work into a repeatable checklist for
-validating the testbed against a *different* external IdP (another EGI
-Check-In-style federation, a site Keycloak, etc.) without touching the
-`local` profile.
-
-Read runbook 02 first — this doc only lists *where things go*; runbook 02
-covers *why* (the two-client model, CA trust, token_strategy caveats).
+A repeatable checklist for validating the testbed against another external
+IdP (an EGI Check-In-style federation, a site Keycloak, …) without touching
+the `local` profile. Read [runbook 02](02-bring-your-own-idp.md) first: it
+explains *why* (two-client model, CA trust, token strategies); this runbook
+lists *where things go*.
 
 ## The pattern
+A `SCOPE_PROFILE` (e.g. `egi-dev`, `ls-aai-dev`) selects a set of config files
+under `configs/<component>/<profile>/` that overlay the `local` defaults. All
+runtimes resolve it generically:
 
-A `SCOPE_PROFILE` is a name (e.g. `egi-dev`, `ls-aai-dev`) that selects a
-parallel set of config files alongside the `local` defaults. Compose
-resolves the profile via `CONFIG_PROFILE_DIR` (Makefile-derived, empty for
-`local`); Helm resolves it via `global.scopeProfile` + the per-profile
-ConfigMap (`testbed-configs-<profile>`, see `configs-cm.yaml`). Both read
-from the same `<profile>/` subdirectories under `configs/`.
+- **Compose:** `CONFIG_PROFILE_DIR`, derived by the Makefile.
+- **Helm:** `global.scopeProfile`; `testbed-configs.yaml` and
+  `testbed-secrets.yaml` overlay the profile's files.
+- **GitOps (sandbox):** `SCOPE_PROFILE=<profile>` at `make argocd-install` /
+  `make flux-install`, rendered into `scripts/k8s/vault-seed-job.yaml.tmpl`.
 
-To add a profile named `<profile>`, create `<profile>/` subdirectories and
-files as listed below — nothing outside `configs/` needs a new file,
-only edits to reference the new profile name where noted.
+So a new profile needs new files under `configs/`, plus a few explicit
+references in the Makefile and CI (§4).
 
-## 0. Check the IdP's token shape first
-
-Before copying any config, mint a `client_credentials` token from the new
-IdP and decode both its header and its `iss` claim:
+## 1. Check the IdP's token shape
+Find the `token_endpoint` in `<issuer>/.well-known/openid-configuration`,
+mint a `client_credentials` token and decode it:
 
 ```bash
 curl -s -u "<client_id>:<client_secret>" \
-  -d 'grant_type=client_credentials' -d 'scope=openid' \
-  <issuer>/.well-known/openid-configuration  # to find token_endpoint, then POST there
+  -d grant_type=client_credentials -d scope=openid <token_endpoint>
 ```
 
-Two things to check in the decoded token, since they change what you need
-to do below:
+Once the profile is wired into the Makefile (§4),
+`make verify-idp-token SCOPE_PROFILE=<profile>` does this and more. Check:
 
-- **`iss` claim** — note whether it has a trailing slash. Every config value
-  built from or compared against the issuer (`idpsecrets.json` key,
-  `rucio.cfg`, teapot's `trusted_OP`, xrootd's `scitokens.conf`) must match
-  this **exactly**. See `docs/patches.md`'s "OIDC issuer string consistency"
-  section — this is the single most common source of bugs when onboarding
-  a new IdP.
-- **`typ` header** — if it's `at+jwt` (RFC 9068) rather than plain `JWT`,
-  Teapot's downstream Storm-WebDAV needs an `audiences:` list under
-  `oauth.issuers[]` in `application.yml`, *and* the StoRM WebDAV jar bundled
-  in the `teapot` image must be ≥1.13.0 (check `deploy/compose/Dockerfile.teapot`'s
-  `STORM_VERSION` build arg). Without both, every WebDAV request 401s with
-  `"the given typ value needs to be one of [JWT]"` regardless of config
-  correctness elsewhere.
+- **`iss`, including any trailing slash.** Every value compared against the
+  issuer (`idpsecrets.json` key, `rucio.cfg`, Teapot's `trusted_OP`,
+  XRootD's `scitokens.conf`) must match it exactly; see "OIDC issuer string
+  consistency" in [patches.md](../patches.md). This is the most common
+  onboarding bug.
+- **`typ` header.** For `at+jwt` (RFC 9068), Storm-WebDAV needs an
+  `audiences:` list under `oauth.issuers[]` in Teapot's `application.yml`, and
+  `STORM_VERSION` in `deploy/compose/Dockerfile.teapot` must be ≥ 1.13.0.
+  Otherwise every WebDAV request fails with 401
+  `the given typ value needs to be one of [JWT]`.
+- **`sub`.** Note it; Teapot needs it in §2.
 
-## 1. Config files to add (mirror egi-dev's layout exactly)
+## 2. Config files
+Copy each file from `egi-dev/` and adapt the issuer URL, audiences and
+`resource=` targets, Teapot's `trusted_OP` and XRootD's `issuer`/`base_path`.
 
-| Directory | Files to add under `<profile>/` |
+| Directory | Files under `<profile>/` |
 |---|---|
-| `configs/rucio/` | `idpsecrets.json.example`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the new IdP supports RFC 8693 token-exchange with `resource=` — see runbook 02's caveat before assuming it does) |
+| `configs/rucio/` | `idpsecrets.json.example`, `oidc-client.cfg`, `server.client-credentials.cfg`, `server.token-exchange.cfg` (only if the IdP supports RFC 8693 token exchange with `resource=`; see runbook 02) |
 | `configs/fts/` | `fts3config`, `managed.fts3restconfig`, `unmanaged.fts3restconfig` |
 | `configs/teapot/` | `config.ini`, `application.yml`, `data.properties`, `user-mapping.csv` |
 | `configs/xrootd/` | `scitokens.conf` |
 
-Copy the `egi-dev/` version of each as a starting point and edit:
-issuer URL, audience/`resource=` targets, `trusted_OP` (teapot), scitokens
-`issuer`/`base_path` (xrootd), and — critically — **leave `user-mapping.csv`
-with placeholder subs**; real subs get added per-tester as identities are
-mapped (see runbook 02 Step 3), the same way `aa886829a0...@egi.eu` was
-added for egi-dev.
+`user-mapping.csv` needs a row for the client's own `client_credentials`
+`sub` from §1: the Teapot test fixtures authenticate as the client and
+otherwise fail with "local user for sub claim … does not exist". Add tester
+subs later, as identities are mapped (runbook 02).
 
-`user-mapping.csv` also needs a row for the OIDC **client's own**
-`client_credentials` sub, not only the end-user sub — Teapot's automated
-test fixtures (`conftest.py`'s `teapot_token`) authenticate as the client
-itself, not a federated user, and will 401 with a "local user for sub claim
-... does not exist" error without it. This is the `sub` from the decoded
-token in step 0.
+If the IdP's scopes don't match the WLCG defaults (no `fts` scope, or no
+path-scoped `storage.read:/…` scopes), set `fts_client_scope` and
+`scope_map`/`drop_scopes` in the issuer's `capabilities` block; see
+"Per-issuer OIDC capabilities" in [patches.md](../patches.md).
 
-## 2. `idpsecrets.json` — do not commit real secrets
+## 3. Secrets and certificates
+- **`idpsecrets.json`:** track only `idpsecrets.json.example` with the
+  `<valid client id>` / `<valid client secret>` placeholders. Create the
+  real file locally (`cp …/idpsecrets.json.example …/idpsecrets.json`) and
+  never commit it. `.gitignore` lists each profile's file individually: add
+  `configs/rucio/<profile>/idpsecrets.json`, or replace the entries with
+  `configs/rucio/*/idpsecrets.json`.
+- **CA trust:** public IdPs are normally covered by the system CA bundle.
+  For a self-signed IdP, build a combined bundle (system roots, the Rucio dev
+  CA, the issuer's chain) outside `certs/`, and copy it over
+  `certs/rucio_ca.pem` only at test time. Never commit the copy.
 
-The tracked artifact is `idpsecrets.json.example`, keeping `<valid client
-id>` / `<valid client secret>` placeholders (same convention as
-`configs/rucio/egi-dev/idpsecrets.json.example`). The real
-`idpsecrets.json` for each profile is gitignored — create it locally from
-the example before filling in real values:
+## 4. References outside `configs/`
+- **`Makefile`:** `TEST_OIDC_ENV` and the `verify-idp-token` target branch on
+  `SCOPE_PROFILE`; add the profile to both. Make sure `OIDC_TOKEN_URL` is
+  exported, otherwise `conftest.py` falls back to a Keycloak-shaped default.
+- **CI (optional):** copy `egi-dev.yml` or `ls-aai-dev.yml` and set
+  `scope_profile: <profile>`. Start with `token_modes: '["unmanaged"]'`
+  unless the IdP supports `resource=` on token exchange and FTS's
+  refresh-token exchange. Then add the profile to the per-profile mappings in
+  `_run-dep-dlm-testbed.yml` (`OIDC_ISSUER`, `OIDC_TOKEN_URL`,
+  `OIDC_EXPECTED_SCOPE`, `OIDC_IDENTITY_SUB`, and the condition on the
+  *Render idpsecrets.json* step) and, for staging, in `_e2e-test.yml`.
 
-```bash
-cp configs/rucio/<profile>/idpsecrets.json.example \
-   configs/rucio/<profile>/idpsecrets.json
-```
+## 5. Verify
+Run runbook 02's Verification section end to end (CA trust, daemon
+`client_credentials`, TPC `gfal-copy`, interactive `whoami` and upload) with
+`SCOPE_PROFILE=<profile>` exported before `make start` / `make init` and
+`RUCIO_CONFIG=configs/rucio/<profile>/oidc-client.cfg`.
 
-**The current `.gitignore` lists each profile's real `idpsecrets.json`
-individually** (`configs/rucio/egi-dev/idpsecrets.json`,
-`configs/rucio/ls-aai-dev/idpsecrets.json`) rather than as a glob —
-a new profile's real file is **not** covered automatically. Add a line for
-`<profile>` to `.gitignore` as part of this checklist (see §4), or switch
-the existing entries to a single `configs/rucio/*/idpsecrets.json`
-glob so future profiles are covered without a `.gitignore` edit.
-
-Real credentials go into the copied `idpsecrets.json` only on the
-machine/cluster running the test, and are re-seeded via Vault or `helm
---set`, never committed.
-
-If the new IdP's registered scope set doesn't include anything matching the
-WLCG-default literal `"fts"`, or has no WLCG-style path-scoped concept at
-all (i.e. `storage.read:/data`-shaped scopes are rejected outright), see
-`docs/patches.md`'s "Per-issuer OIDC capabilities" section for
-`fts_client_scope` and `scope_map`/`drop_scopes` — these let the issuer's
-`capabilities` block override FTS's own auth scope and drop unsupported
-scopes per grant type, without touching Python.
-
-If RFC 8693 token-exchange 400s complaining about a missing
-`requested_token_type` parameter, that's already handled in `oidc.py` — no
-code change needed, it just confirms this IdP is stricter about the
-parameter than Keycloak/EGI.
-
-## 3. Certs
-
-If the new IdP's TLS chain isn't already covered by the system CA bundle
-(unlikely for a real public IdP, common for another self-signed testbed),
-regenerate the combined bundle the way egi-dev's
-`configs/rucio/egi-dev/rucio_ca.pem` was built: system roots + the
-internal Rucio Dev CA + the new issuer's chain. Do **not** add a full
-`<profile>/rucio_ca.pem` to `certs/` — that directory stays profile-agnostic
-(see `.gitignore`: everything under `certs/*.pem` is ignored except
-`rucio_ca.key.pem`, `rucio_ca.pem`, `tls_ca_bundle.pem`); keep any
-profile-specific combined bundle under `configs/rucio/<profile>/` as
-egi-dev does, and copy it over `certs/rucio_ca.pem` only at test time
-(never commit the copy).
-
-## 4. Wiring — where `<profile>` needs to be *referenced*, not just placed
-
-Nothing in `deploy/` needs new *files* for a new profile — the umbrella Helm
-chart's `configs-cm.yaml` already globs `files/configs/*/<any-profile>/*`
-generically, and every `deploy/compose/docker-compose.*.yml` already resolves
-config paths through `${CONFIG_PROFILE_DIR}`, so compose needs zero edits.
-A few places do need a one-line addition:
-
-- `deploy/helm-charts/dep-dlm-testbed/templates/configs-cm.yaml` —
-  the `{{- range $profile := list "egi-dev" }}` loop is currently hardcoded
-  per profile; add `"<profile>"` to that list so its per-profile ConfigMap
-  actually renders.
-- `.gitignore` — add
-  `configs/rucio/<profile>/idpsecrets.json` (or switch the existing
-  per-profile entries to the `configs/rucio/*/idpsecrets.json` glob
-  mentioned in §2) so the new profile's real secrets file is never
-  accidentally tracked.
-- `deploy/gitops/environments/sandbox/secrets/seed-job.yaml` — **this one is
-  not runtime-configurable.** Its own header comment states `SCOPE_PROFILE`
-  is static: "there is no CLI flag or kustomize patch wired up to override
-  it at deploy time. To change it, edit the env value here directly and
-  commit." So the gitops/ArgoCD-or-Flux path needs a real, committed edit
-  to this file's `SCOPE_PROFILE` env value before a new profile takes
-  effect — unlike compose (env var) or direct `helm install` (`--set
-  global.scopeProfile=...`), both resolved purely at invocation time.
-- `Makefile` — `TEST_OIDC_ENV` and the `verify-idp-token` target both branch
-  on `SCOPE_PROFILE` explicitly; add the new profile to both. Confirm
-  `OIDC_TOKEN_URL` is included in `TEST_OIDC_ENV`'s exported-var list — its
-  absence silently falls back to a Keycloak-shaped default in `conftest.py`.
-- `.github/workflows/` — if the new profile needs its own CI (mirroring
-  `egi-dev.yml`/`ls-aai-dev.yml`), copy one of those workflows, set
-  `scope_profile: <profile>` and `token_modes` appropriately (start with
-  `["unmanaged"]` unless you've confirmed the IdP supports `resource=` on
-  `token-exchange` *and* accepts FTS's internal refresh-token exchange
-  under managed mode). Also copy the `cp idpsecrets.json.example
-  idpsecrets.json` step that precedes the `sed` substitution in
-  `egi-dev.yml`/`ls-aai-dev.yml` — without it there's no real file for
-  `sed -i` to edit.
-
-Everything else — `Makefile`'s `CONFIG_PROFILE_DIR` derivation, the seed-job's
-`$PDIR` computation *once `SCOPE_PROFILE` above is set*, `init-testbed.sh`'s
-`$SCOPE_PROFILE` branches — already takes the profile name as a variable and
-needs no code changes.
-
-## 5. Validate
-
-Follow runbook 02's Verification section end to end (CA-trust check, daemon
-client_credentials check, TPC `gfal-copy` script, interactive `whoami` +
-upload) with `RUCIO_CONFIG` pointed at
-`configs/rucio/<profile>/oidc-client.cfg` and
-`SCOPE_PROFILE=<profile>` exported before `make init`/`make start`.
-
-## Checklist summary
-
-- [ ] Decoded a token from the new IdP: noted `iss` trailing slash, checked `typ` for `at+jwt`
-- [ ] `configs/{rucio,fts,teapot,xrootd}/<profile>/*` created from egi-dev templates
-- [ ] `user-mapping.csv` has rows for both the client's own `client_credentials` sub and (later) real tester subs
-- [ ] `idpsecrets.json.example` has placeholders only (tracked)
-- [ ] Real `idpsecrets.json` created via `cp idpsecrets.json.example idpsecrets.json`, filled with real values, and gitignored — not committed
-- [ ] `.gitignore` covers the new profile's real `idpsecrets.json` (per-profile line, or the `configs/rucio/*/idpsecrets.json` glob)
-- [ ] `fts_client_scope`/`scope_map`/`drop_scopes` set if the IdP's scope set doesn't match WLCG defaults
-- [ ] Combined CA bundle built if the new issuer isn't system-trusted
-- [ ] `<profile>` added to `configs-cm.yaml`'s per-profile ConfigMap loop
-- [ ] `Makefile`'s `TEST_OIDC_ENV` (incl. `OIDC_TOKEN_URL`) and `verify-idp-token` target updated
-- [ ] (gitops runtime only) `seed-job.yaml`'s `SCOPE_PROFILE` env edited and committed
-- [ ] (Optional) new CI workflow copied from `egi-dev.yml`/`ls-aai-dev.yml`, including its `cp idpsecrets.json.example idpsecrets.json` step
-- [ ] If `typ: at+jwt`, confirmed Storm-WebDAV ≥1.13.0 in `Dockerfile.teapot`
-- [ ] Runbook 02's Verification steps all pass under the new profile
+## Checklist
+- [ ] Token decoded: `iss` (trailing slash), `typ` (`at+jwt`?), client `sub`
+- [ ] `configs/{rucio,fts,teapot,xrootd}/<profile>/` created from `egi-dev/`
+- [ ] `user-mapping.csv` has the client's `sub` (tester subs later)
+- [ ] `fts_client_scope` / `scope_map` / `drop_scopes` set if scopes differ from WLCG
+- [ ] Only `idpsecrets.json.example` tracked; `.gitignore` covers the real file
+- [ ] Combined CA bundle built, if the issuer isn't system-trusted
+- [ ] If `typ: at+jwt`: Storm-WebDAV ≥ 1.13.0 and `audiences:` set
+- [ ] `Makefile`: `TEST_OIDC_ENV` (incl. `OIDC_TOKEN_URL`) and `verify-idp-token`
+- [ ] (Optional) CI workflow plus per-profile mappings in `_run-dep-dlm-testbed.yml` / `_e2e-test.yml`
+- [ ] Runbook 02's Verification passes under the new profile
