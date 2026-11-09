@@ -20,25 +20,23 @@ because the package failed to import and Rucio fell back to its generic
 policy), and the other results here would mean nothing. CannotAuthenticate
 means the token never reached has_permission() at all (usually a
 scope/audience mismatch against [oidc] expected_scope/expected_audience).
-
-rucio_rest/deny_reason are defined locally rather than in conftest.py: no
-other test module needs bare-token REST access yet. Promote them to
-conftest.py if a second file needs them.
 """
 
-import base64
-import json
 import os
 import time
 
 import pytest
-import requests
 
 from conftest import (
+    ADMIN_BODY,
+    ADMIN_PATH,
     OIDC_CLIENT_ID,
     OIDC_CLIENT_SECRET,
     OIDC_TOKEN_URL,
+    assert_allowed,
+    assert_opa_denied,
     fetch_token_password,
+    rucio_rest,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -52,67 +50,6 @@ pytestmark = pytest.mark.skipif(
         "SCOPE_PROFILE=local."
     ),
 )
-
-# ── Local REST helpers ──────────────────────────────────────────────────
-
-RUCIO_REST_URL = os.environ.get("RUCIO_URL", "http://rucio-server").rstrip("/")
-
-# Reason the OPA policy package attaches to every denial; Rucio appends it
-# to the AccessDenied message. Must match permission.py.
-OPA_DENY_REASON = "Access denied by OPA policy validation"
-
-
-def rucio_rest(path, token, method="GET", body=None, timeout=30):
-    """Authenticated Rucio REST call with a raw bearer token."""
-    headers = {"X-Rucio-Auth-Token": token}
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    return requests.request(
-        method,
-        f"{RUCIO_REST_URL}{path}",
-        headers=headers,
-        json=body,
-        verify=False,
-        timeout=timeout,
-    )
-
-
-def deny_reason(resp):
-    """(ExceptionClass, ExceptionMessage) from a Rucio error response."""
-    return resp.headers.get("ExceptionClass"), resp.headers.get("ExceptionMessage")
-
-
-def token_claims(token):
-    """The claims authz.rego decides on, for failure messages."""
-    payload = token.split(".")[1]
-    claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-    return {k: claims.get(k) for k in ("sub", "entitlements", "acr")}
-
-
-def assert_opa_denied(resp, who):
-    """The request was denied, by the OPA policy package."""
-    exc_cls, exc_msg = deny_reason(resp)
-    assert resp.status_code in (401, 403), (
-        f"{who}: expected a denial, got HTTP {resp.status_code}"
-    )
-    assert exc_cls == "AccessDenied", (
-        f"{who}: {exc_cls}: {exc_msg} — AccessDenied means a policy denied; "
-        "CannotAuthenticate means the token never reached it"
-    )
-    assert OPA_DENY_REASON in (exc_msg or ""), (
-        f"{who}: denied without the OPA reason ({exc_msg!r}) — Rucio is not using "
-        "the OPA policy package; check [policy] package in rucio.cfg and that "
-        "rucio_opa_v1_policy imports inside rucio-server"
-    )
-
-
-def assert_allowed(resp, who, token, expected=(200, 201)):
-    assert resp.status_code in expected, (
-        f"{who}: HTTP {resp.status_code} {deny_reason(resp)}; token claims "
-        f"{token_claims(token)} — admins need an admin entitlement with the MFA "
-        "acr, users a user-tier entitlement (see odrl/data.json)"
-    )
-
 
 # ── Personas ─────────────────────────────────────────────────────────────
 
@@ -132,10 +69,6 @@ USER_PERSONAS = ["dependuser", "modeldeveloper"]
 # A token missing either is rejected by validate_jwt with 401 BEFORE
 # has_permission() runs — see conftest.py's rucio_token docstring.
 AUTHZ_SCOPE = "openid offline_access storage.read:/ storage.modify:/ aud:rucio"
-
-# Admin-only and argument-free: a deny here is purely a tier decision.
-ADMIN_PATH = "/accounts/ddmlab/limits/local/XRD3"
-ADMIN_BODY = {"bytes": -1}
 
 
 @pytest.fixture
