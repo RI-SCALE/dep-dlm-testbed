@@ -1,68 +1,50 @@
 # Backlog
 
-## Testing
+The testbed validates the DEP DLM architecture; validated patterns are
+promoted into `dep-dlm-deployment` for partner deployments. Sections follow
+that path, from validation to adoption.
 
-- [x] Extend test coverage with
-    - [x] `test_add_dataset` test
-    - [x] `test_add_files_to_dataset` test
-    - [x] XRootD-to-Storm WebDAV transfer test
-- [x] Test replication rule deletion lifecycle via Rucio daemons
+## 1. Architecture validation
 
-## Configuration & Patches
+- [x] E2E tests: transfers (XRootD, Teapot WebDAV, XRootD→Storm-WebDAV, Copernicus S3), datasets, rule deletion lifecycle via the daemons
+- [x] `DAEMON_MODE` (direct | daemons) on Compose and Kubernetes
+- [x] Identity providers: EGI Check-In Dev and LS AAI (Perun), managed and unmanaged token modes — [runbook 05](docs/runbooks/05-adding-a-new-idp-profile.md)
+- [x] Authorization: Rucio delegates to OPA via the `rucio_opa_v1_policy` package, reusing [opa-policy-package](https://github.com/mgajek-cern/opa-policy-package/tree/main); enabled on sandbox and staging
+- [ ] Map EGI user entitlements (e.g. `ri-scale-*` groups) to ODRL tiers
+- [ ] Storage authorization hardening: Teapot VO mapping via `eduperson_entitlement` as an alternative to file mapping; check whether XRootD SciTokens supports group/entitlement-based authorization
+- [x] External storage: testbed-owned XRootD/Teapot VM with public endpoint, registered as RSEs, e2e tests run against it
+- [x] Upstream compatibility: minimal patches to Rucio, FTS, Teapot documented in [docs/patches.md](docs/patches.md); FTS manages the token lifecycle (token exchange)
 
-- [x] Add configuration reference links for the technologies in use (FTS, Rucio, XrootD and Teapot), with emphasis on token-based authentication
-- [x] Patches
-    - [x] Document patches applied to FTS, Rucio and Teapot
-- [x] Adjust patches where possible to support managed configuration using token exchange instead of unmanaged configuration for FTS, allowing FTS to manage the token lifecycle
-- [x] Add a DAEMON_MODE flag (direct | daemons): run Rucio daemons as long-running services in Compose and Kubernetes, with the test harness switching between direct `--run-once` CLI invocation (deterministic, current behaviour) and polling the running daemons
+## 2. Production architecture validation
 
-## GitOps Deployment
+- [x] GitOps with Argo CD and Flux (sandbox, staging), upstream charts with DEP DLM overlays
+- [x] Terraform on GCP: GKE, Cloud SQL, Secret Manager + External Secrets, Gateway API public endpoints; full rebuild validated in CI
+- [x] Observability: Managed Prometheus, Cloud Logging, Cloud Monitoring dashboards and alert policies — [design doc 005](docs/design/design-doc-005-observability.md)
+- [ ] Observability phase 3 and open questions (design doc 005)
+- [ ] Production reference environment applied and validated end to end
+- [ ] Certificates: Rucio/FTS certificate installation; public TLS for the Gateway hostnames (cert-manager, CA choice open)
+- [ ] On-premises validation: clarify partner ownership of Kubernetes, PostgreSQL and Vault provisioning; evaluate fleet offerings (GKE Enterprise, Azure Arc, EKS Anywhere) and GitOps against attached clusters
 
-- [x] Enable GitOps-based deployment for DEP DLM data orchestration layer workloads (Argo CD or Flux), using the testbed Helm charts as the initial blueprint. Prefer upstream charts where available (e.g. the official rucio/helm-charts for rucio-server and rucio-daemons, Bitnami PostgreSQL) with DEP DLM-specific overlays on top.
-- [x] Validate staging GitOps deployment against real external infrastructure on a hyperscaler: provisioned a managed Kubernetes cluster (GKE), PostgreSQL (Cloud SQL), and GCP Secret Manager (via External Secrets Operator) as the testbed's own validation target, automated via Terraform; wired to external AAI federation hubs as the OIDC issuer (both EGI Check-In Dev and LS AAI Perun); confirmed convergence on both Argo CD and Flux, verified at the pod level (rucio-server, rucio-daemons, fts Running with correct DB connections, OIDC credentials, and certs).
-- [x] Expose rucio-server/fts via a public endpoint — Gateway API preferred over classic Ingress (GKE's current recommended path, and more portable in API shape across hyperscalers than provider-specific Ingress controllers). Confirms external reachability; doesn't require a registered RSE.
-- [x] Provision a testbed-owned XRootD/Teapot validation target with a public endpoint (separate Terraform module, e.g. `modules/validation-storage` — GCP VMs, a lean install script for XRootD/Teapot), register it as an RSE against the module's own Terraform outputs (VM IP/hostname) — protocol/PFN config, distance/attribute setup, extending the existing seeding mechanism (`init-testbed.sh`, which currently only knows sandbox's hardcoded values) — and run the existing e2e transfer tests (`test-rucio-transfers`, `test-copernicus-transfers`, `test-rucio-deletion`) against it. Genuinely validates the full external-storage integration path — real network reachability, real WebDAV/XRootD protocol handling, real OIDC token flow — not just in-cluster plumbing, since it's publicly reachable and runs the same software stack a partner endpoint would. Not necessarily representative of scale or backend specifics for every RI-SCALE use case's actual storage.
-- [ ] **Optional:** extend/repeat the above once RI-SCALE use cases register a real RSE against their own data holdings — same protocol/PFN/distance-attribute pattern, against a real production endpoint. Data holdings are owned by the use cases, not this testbed, so this remains an extension the use cases opt into rather than a required follow-on. Follow-on to runbook 03 (bring-your-own-storage).
-    - [ ] Public holdings: validate end-to-end in CI.
-    - [ ] Sensitive/personal holdings: validate in CI too, but source from testbed's own XRootD/Teapot (as in staging) instead of the actual data — the real HPC destination is still exercised, only the source data is synthetic.
-- [ ] **Optional:** Extend the above to a second hyperscaler (EKS/AKS) for multi-cloud parity, and/or validate a Vault-on-hyperscaler variant — this round deliberately moved staging/production off Vault onto GCP Secret Manager (sandbox keeps Vault), so Vault-backed secrets management on a hyperscaler remains unvalidated.
-- [ ] Validate the same against on-premise infrastructure: provisioning of Vault, PostgreSQL and the Kubernetes cluster is anticipated to require manual or partner-managed setup rather than automated tooling — needs clarification with the partner on who owns this provisioning and whether it happens via IaC outside the GitOps deployment scope. Worth evaluating whether a hyperscaler-native fleet/control-plane offering (GKE Enterprise/Anthos, Azure Arc, AWS EKS Anywhere/Outposts) is viable for centralized visibility and policy over the partner's on-prem cluster(s) — these attach an existing on-prem Kubernetes cluster to a hyperscaler's control plane for fleet management, config sync, and observability, without relocating the actual workloads or data off-prem. Would need to confirm the partner's on-prem cluster is a supported distribution/version for whichever offering, and whether GitOps deployment (ArgoCD/Flux) works unmodified against an Arc/Anthos-attached cluster or needs its own validation pass.
-- [ ] Set up a dedicated `dep-dlm-deployment` repo (Terraform to provision managed Kubernetes/DB/secrets on a public cloud, plus the GitOps convergence on top — for partners without on-premises infrastructure, or for whom maintaining it is impractical), separate from the testbed.
+## 3. Production enablement
 
-## Documentation & Runbooks
+- [ ] `dep-dlm-deployment` repository: curated Terraform and GitOps for partners, not a copy of the testbed
+- [ ] Promotion process: each promoted component has a validated source commit, supported version, CI evidence, configuration requirements and known limitations
+- [ ] Production configuration and defaults extracted from the testbed
+- [ ] Deployment CI
+- [ ] Upgrade and rollback procedures
+- [ ] Partner runbooks for configuration (Rucio, OIDC, FTS, RSEs, certificates, WP4 token provider), with credentials supplied by the partner
+    - [x] [01–07](docs/runbooks/): sandbox quickstart, IdP, storage, validation storage, IdP profiles, secrets (Secret Manager + ESO), observability
+    - [ ] Certificates (Rucio/FTS, public TLS)
 
-- [ ] Provide runbooks explaining the key configurations to apply (Rucio rucio.cfg, OIDC, FTS, RSE settings, certificates, WP4 token-provider integration) so partners and DEP owners can deploy and operate their own workloads — applying their own sensitive credentials, which are not checked into this repository.
-    - [x] Sandbox quickstart end-to-end —
-    - [x] Bring-your-own runbook set (IdP, storage, config reference)
-    - [x] External Vault secrets for staging/production
-    - [ ] Certificate installation (Rucio/FTS) for staging/production
-    - [x] Observability for staging/production
+## 4. Technology evolution
 
-## External Identity Provider Integration
+- [ ] FTS4, once mature; not blocking `dep-dlm-deployment`
+- [ ] **Optional:** second hyperscaler (EKS/AKS) and Vault-backed secrets on a hyperscaler
+- [ ] Additional storage technologies, as use cases require
 
-- [x] Replicate the CERN FTS and Rucio test-instance configurations for integration against an external token provider (EGI Check-In Dev), with proper certificate installation for trusted connections to the IAM backend — see [06-adding-a-new-idp-profile.md](docs/runbooks/06-adding-a-new-idp-profile.md) and the `SCOPE_PROFILE=egi-dev` CI workflow. Sensitive values (real idpsecrets, cert keys) are NOT checked in — supplied per-environment via Vault/external-secrets or local env files; the repo holds only templated/example configs.
-- [x] Integrate the testbed against LS AAI (Perun) as a second external token provider, following the `06-adding-a-new-idp-profile.md` pattern. Confirm `resource=` support on client_credentials and token-exchange first - constraints differ from EGI/IAM and may require `scope_profile` to become a per-IdP capability flag rather than a binary wlcg/egi switch.
+## 5. Research infrastructure adoption
 
-## Authorization
-
-- **Storage identity mapping per ADR-007 (XRootD + Teapot/StoRM WebDAV):**
-  per-user UID from `preferred_username`, entitlement-based path/role
-  authorization, project GID via setgid directories; Teapot `VO` mode is not
-  the target. Implement per
-  [Design-006](docs/designs/design-doc-006-storage-identity-mapping.md).
-  - [ ] Keycloak claims and narrow scopes
-  - [ ] XRootD: `scitokens-module.cfg`, authdb, multiuser
-  - [ ] Teapot: `mapping = KEYCLOAK`, policy template patch
-  - [ ] Site directories and ACLs
-  - [ ] `act` / entitlement logging
-  - [ ] Test matrix passes on both endpoints
-- [x] Integrate authorization for this testbed by reusing [opa-policy-package's](https://github.com/mgajek-cern/opa-policy-package/tree/main) Rego policy bundles and OIDC/Keycloak integration, rather than rebuilding authorization logic here.
-
-## FTS 4
-
-- [ ] Evaluate and migrate the testbed from FTS3 to [FTS4](https://gitlab.cern.ch/fts/fts) once a stable release is tagged (its container setup is still marked experimental and development-only)
-    - [ ] Replace the single `fts` container and MySQL `ftsdb` with FTS4's split services (scheduler, staging scheduler, transfer, tape, ActiveMQ, REST, web UI) on PostgreSQL, in Compose and the Helm charts
-    - [ ] Re-check each FTS patch against FTS4 (`middleware.py`, `openidconnect.py`, `tokenproviders.py`, `JobBuilder.py`, `cloudStorage.py`/`cloud.py`): drop patches FTS4 makes unnecessary, port the rest, and update `docs/patches.md`
-    - [ ] Check the FTS REST calls in `init-testbed.sh` (`/config/token_providers`, `/config/cloud_storage`, `/config/se`) against the FTS4 REST API
-    - [ ] Port the FTS observability collector (`sql-exporter/fts`) from MySQL to the FTS4 PostgreSQL schema, and compare it with FTS4's own monitoring
-    - [ ] Run the existing e2e transfer tests (managed and unmanaged token modes, Copernicus S3 source) against FTS4 for every IdP profile
+- [ ] **Optional:** use cases register real RSEs for their data holdings ([runbook 03](docs/runbooks/03-bring-your-own-storage.md))
+    - [ ] Public holdings: validated end to end in CI
+    - [ ] Sensitive/personal holdings: real destination in CI, synthetic source from the testbed's own storage
+- [ ] Partner integration and operational handover
