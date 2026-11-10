@@ -663,7 +663,7 @@ test-rego: ## Rego unit tests (all phases, no stack needed)
 .PHONY: fmt-rego
 fmt-rego: ## Format all Rego files in place (fixes the opa-fmt pre-commit hook)
 	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
-	opa fmt -w configs/opa
+	opa fmt -w $$(find configs/opa -name '*.rego' -not -path '*/vendor/*')
 	opa check --strict configs/opa
 
 ## Terraform
@@ -794,6 +794,15 @@ userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches 
 	  --secret="dep-dlm-$(TF_ENV)-secrets" \
 	  --project="$$GCP_PROJECT_ID" \
 	| python3 -c "import sys,json; d=json.load(sys.stdin); open('userpass-client.cfg','w').write(d['userpass-client.cfg'])"
+
+.PHONY: oidc-client-sync
+oidc-client-sync: ## Fetch oidc-client.cfg from Secret Manager into oidc-client.$(TF_ENV).cfg (interactive OIDC login against TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-secrets" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json; d=json.load(sys.stdin); open('oidc-client.$(TF_ENV).cfg','w').write(d['oidc-client.cfg'])"
+	@echo "Wrote oidc-client.$(TF_ENV).cfg — use: RUCIO_CONFIG=oidc-client.$(TF_ENV).cfg rucio whoami"
 
 ## Cleanup
 
