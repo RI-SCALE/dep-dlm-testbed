@@ -47,6 +47,7 @@ _user_actions := [
 	["detach_dids", {"scope": "ddmlab", "name": "c"}],
 	["add_replicas", {"rse": "COPERNICUS_S3", "files": _foreign_files}],
 	["delete_replicas", {"rse": "XRD3", "files": _foreign_files}],
+	["update_replicas_states", {"rse": "XRD3"}],
 ]
 
 _admin_actions := [
@@ -59,7 +60,6 @@ _admin_actions := [
 	["approve_rule", {"rule_id": _rule_id}],
 	["reduce_rule", {"rule_id": _rule_id}],
 	["move_rule", {"rule_id": _rule_id}],
-	["update_replicas_states", {"rse": "XRD3"}],
 	["some_unknown_action", {}],
 ]
 
