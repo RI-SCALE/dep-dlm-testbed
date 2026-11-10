@@ -114,7 +114,8 @@ TF_VAR_project_id="$$GCP_PROJECT_ID" \
 	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
 	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
 	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	TF_VAR_token_mode="$(TOKEN_MODE)"
+	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	TF_VAR_scope_profile="$(SCOPE_PROFILE)"
 endef
 
 # Optional -target for a partial/targeted apply -- e.g. reserving

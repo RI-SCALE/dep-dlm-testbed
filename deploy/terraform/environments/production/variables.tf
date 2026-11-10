@@ -91,3 +91,8 @@ variable "alert_notification_email" {
   type        = string
   default     = "marvin.gajek@cern.ch"
 }
+
+variable "scope_profile" {
+  description = "IdP profile under configs/rucio/ (egi-dev, ls-aai-dev); see module.secrets"
+  type        = string
+}

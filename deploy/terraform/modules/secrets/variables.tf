@@ -134,3 +134,8 @@ variable "storage_ip" {
     error_message = "storage_ip must be a valid IPv4 address."
   }
 }
+
+variable "scope_profile" {
+  description = "IdP profile under configs/rucio/ (e.g. egi-dev, ls-aai-dev); its idpsecrets.json.example supplies scope and capabilities, so staging matches the sandbox profile."
+  type        = string
+}

@@ -1,3 +1,10 @@
+locals {
+  # The profile's single entry; the issuer key, client id/secret are placeholders there.
+  idp_profile = one(values(jsondecode(file(
+    "${path.module}/../../../../configs/rucio/${var.scope_profile}/idpsecrets.json.example"
+  ))))
+}
+
 resource "google_secret_manager_secret_version" "secrets" {
   secret = google_secret_manager_secret.this["secrets"].id
   secret_data = jsonencode({
@@ -20,6 +27,8 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_client_id        = var.oidc_client_id
       oidc_client_secret    = var.oidc_client_secret
       rucio_public_hostname = var.rucio_host
+      idp_scope             = local.idp_profile.scope
+      idp_capabilities      = local.idp_profile.capabilities
     })
     "oidc-client.cfg" = templatefile("${path.module}/templates/oidc-client.cfg.tftpl", {
       rucio_host          = var.rucio_host

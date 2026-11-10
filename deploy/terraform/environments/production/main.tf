@@ -86,7 +86,8 @@ module "secrets" {
   token_mode             = var.token_mode
   storage_ip             = null
 
-  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
+  rucio_host    = "http://${module.kubernetes.rucio_public_hostname}"
+  scope_profile = var.scope_profile
 }
 
 module "monitoring" {
