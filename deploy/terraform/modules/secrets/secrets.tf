@@ -3,6 +3,11 @@ locals {
   idp_profile = one(values(jsondecode(file(
     "${path.module}/../../../../configs/rucio/${var.scope_profile}/idpsecrets.json.example"
   ))))
+  # FTS token-exchange profile from the sandbox profile's fts3config (e.g. lsaai); empty if unset.
+  fts_resource_profile = try(regex(
+    "OidcResourceIndicatorProfile=(\\S+)",
+    file("${path.module}/../../../../configs/fts/${var.scope_profile}/fts3config")
+  )[0], "")
 }
 
 resource "google_secret_manager_secret_version" "secrets" {
@@ -51,9 +56,10 @@ resource "google_secret_manager_secret_version" "secrets" {
       allow_non_managed_tokens = var.token_mode == "unmanaged"
     })
     "fts3config" = templatefile("${path.module}/templates/fts3config.tftpl", {
-      site_name       = var.site_name
-      fts_db_host     = var.fts_db_host
-      fts_db_password = var.fts_db_password
+      site_name            = var.site_name
+      fts_db_host          = var.fts_db_host
+      fts_db_password      = var.fts_db_password
+      fts_resource_profile = local.fts_resource_profile
     })
     "docker-entrypoint.sh" = templatefile("${path.module}/templates/fts3-docker-entrypoint.sh.tftpl", {
       fts_db_host = var.fts_db_host
