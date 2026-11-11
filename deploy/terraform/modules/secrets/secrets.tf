@@ -1,3 +1,15 @@
+locals {
+  # The profile's single entry; the issuer key, client id/secret are placeholders there.
+  idp_profile = one(values(jsondecode(file(
+    "${path.module}/../../../../configs/rucio/${var.scope_profile}/idpsecrets.json.example"
+  ))))
+  # FTS token-exchange profile from the sandbox profile's fts3config (e.g. lsaai); empty if unset.
+  fts_resource_profile = try(regex(
+    "OidcResourceIndicatorProfile=(\\S+)",
+    file("${path.module}/../../../../configs/fts/${var.scope_profile}/fts3config")
+  )[0], "")
+}
+
 resource "google_secret_manager_secret_version" "secrets" {
   secret = google_secret_manager_secret.this["secrets"].id
   secret_data = jsonencode({
@@ -10,6 +22,7 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_issuer            = var.oidc_issuer
       oidc_token_strategy    = var.token_mode == "managed" ? "exchange" : "client_credentials"
       oidc_expected_scope    = var.oidc_expected_scope
+      oidc_expected_audience = var.oidc_expected_audience
     })
     "alembic.ini" = templatefile("${path.module}/templates/alembic.ini.tftpl", {
       rucio_db_host     = var.rucio_db_host
@@ -20,6 +33,8 @@ resource "google_secret_manager_secret_version" "secrets" {
       oidc_client_id        = var.oidc_client_id
       oidc_client_secret    = var.oidc_client_secret
       rucio_public_hostname = var.rucio_host
+      idp_scope             = local.idp_profile.scope
+      idp_capabilities      = local.idp_profile.capabilities
     })
     "oidc-client.cfg" = templatefile("${path.module}/templates/oidc-client.cfg.tftpl", {
       rucio_host          = var.rucio_host
@@ -41,9 +56,10 @@ resource "google_secret_manager_secret_version" "secrets" {
       allow_non_managed_tokens = var.token_mode == "unmanaged"
     })
     "fts3config" = templatefile("${path.module}/templates/fts3config.tftpl", {
-      site_name       = var.site_name
-      fts_db_host     = var.fts_db_host
-      fts_db_password = var.fts_db_password
+      site_name            = var.site_name
+      fts_db_host          = var.fts_db_host
+      fts_db_password      = var.fts_db_password
+      fts_resource_profile = local.fts_resource_profile
     })
     "docker-entrypoint.sh" = templatefile("${path.module}/templates/fts3-docker-entrypoint.sh.tftpl", {
       fts_db_host = var.fts_db_host

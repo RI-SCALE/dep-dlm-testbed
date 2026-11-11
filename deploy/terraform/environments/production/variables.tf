@@ -91,3 +91,14 @@ variable "alert_notification_email" {
   type        = string
   default     = "marvin.gajek@cern.ch"
 }
+
+variable "scope_profile" {
+  description = "IdP profile under configs/rucio/ (egi-dev, ls-aai-dev); see module.secrets"
+  type        = string
+}
+
+variable "oidc_expected_audience" {
+  description = "Audience rucio.cfg's [oidc] expected_audience validates, and the resource Rucio requests its initial token for. Same logical name as the sandbox's external profiles (configs/rucio/<profile>/server.*.cfg); IdPs like LS AAI accept only absolute URIs here."
+  type        = string
+  default     = "https://fts.example.org/"
+}

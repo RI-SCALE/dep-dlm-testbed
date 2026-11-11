@@ -31,7 +31,7 @@ allow if {
 # approve_rule, reduce_rule, move_rule, update_replicas_states, ...) is
 # admin-only.
 _user_actions := {
-	"add_rule", "update_rule", "del_rule",
+	"add_rule", "update_rule", "update_replicas_states", "del_rule",
 	"add_did", "add_dids", "attach_dids", "attach_dids_to_dids", "detach_dids",
 	"add_replicas", "delete_replicas",
 }

@@ -13,6 +13,11 @@ import os
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import hashlib
+import json
+import time
+from urllib.request import Request, urlopen
+
 if TYPE_CHECKING:
     from typing import Optional
 
@@ -58,6 +63,10 @@ _PASSTHROUGH_KEYS: frozenset[str] = frozenset(
         "files",
     }
 )
+
+_USERINFO_TIMEOUT = float(os.environ.get("RUCIO_OPA_USERINFO_TIMEOUT", "3"))
+_USERINFO_CACHE: dict[str, tuple[float, list[str]]] = {}  # sha256(token) -> (exp, entitlements)
+_USERINFO_ENDPOINTS: dict[str, str] = {}  # iss -> userinfo_endpoint
 
 
 def has_permission(
@@ -121,11 +130,60 @@ def _as_list(value: Any) -> list[str]:
     return list(value)
 
 
+def _bearer_token() -> str:
+    """The raw access token of the current request (Rucio's header or Authorization)."""
+    from flask import request
+
+    token = request.headers.get("X-Rucio-Auth-Token", "")
+    auth = request.headers.get("Authorization", "")
+    if not token and auth.lower().startswith("bearer "):
+        token = auth[7:]
+    return token
+
+
+def _userinfo_entitlements(claims: dict[str, Any]) -> list[str]:
+    """
+    eduperson_entitlement from the issuer's userinfo endpoint, for AARC-style
+    IdPs (e.g. EGI Check-In) that keep entitlements out of the access token.
+    Cached per token until it expires; any failure yields [] (fails closed).
+    """
+    raw = _bearer_token()
+    if not raw or "iss" not in claims:
+        return []
+    key = hashlib.sha256(raw.encode()).hexdigest()
+    hit = _USERINFO_CACHE.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]
+    try:
+        iss = claims["iss"].rstrip("/")
+        if iss not in _USERINFO_ENDPOINTS:
+            with urlopen(
+                f"{iss}/.well-known/openid-configuration", timeout=_USERINFO_TIMEOUT
+            ) as resp:
+                _USERINFO_ENDPOINTS[iss] = json.load(resp)["userinfo_endpoint"]
+        req = Request(_USERINFO_ENDPOINTS[iss], headers={"Authorization": f"Bearer {raw}"})
+        with urlopen(req, timeout=_USERINFO_TIMEOUT) as resp:
+            ents = _as_list(json.load(resp).get("eduperson_entitlement"))
+    except Exception as err:  # noqa: BLE001
+        log.warning("OPA: userinfo lookup failed for iss=%s: %s", claims.get("iss"), err)
+        return []
+    if len(_USERINFO_CACHE) > 1000:
+        _USERINFO_CACHE.clear()
+    _USERINFO_CACHE[key] = (float(claims.get("exp", time.time() + 300)), ents)
+    return ents
+
+
 def _token_claims() -> dict[str, Any]:
     claims = _request_claims()
     token: dict[str, Any] = {
         key: _as_list(claims.get(claim)) for key, claim in _LIST_CLAIMS.items()
     }
+    # AARC-style IdPs name the claim eduperson_entitlement, and some only
+    # serve it from userinfo.
+    if claims and not token["entitlements"]:
+        token["entitlements"] = _as_list(
+            claims.get("eduperson_entitlement")
+        ) or _userinfo_entitlements(claims)
     for key in _SCALAR_CLAIMS:
         if key in claims:
             token[key] = claims[key]

@@ -91,7 +91,9 @@ module "secrets" {
   token_mode             = var.token_mode
   storage_ip             = module.validation_storage.external_ip
 
-  rucio_host = "http://${module.kubernetes.rucio_public_hostname}"
+  rucio_host             = "http://${module.kubernetes.rucio_public_hostname}"
+  scope_profile          = var.scope_profile
+  oidc_expected_audience = var.oidc_expected_audience
 }
 
 # zone created once, shared

@@ -5,6 +5,7 @@ Covers XRootD SciTokens (xrd3/xrd4) and Teapot WebDAV (teapot1/teapot2).
 Runtime-agnostic: respects $RUNTIME (compose | k8s, default compose).
 """
 
+import base64
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ import pytest
 import requests
 import urllib3
 from urllib.parse import urlparse
+from rucio.common.config import config_get
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -885,3 +887,75 @@ def xrd4_write_token():
     transfers and the dataset tests; needed now that prepare_xrd_dest is
     protocol-based (auth-enforced) instead of exec-based."""
     return _mint(OIDC_EXPECTED_SCOPE, resource=_rse_resource("xrd4"))
+
+
+# ── Authorization (OPA policy package) ────────────────────────
+# Bare-token REST helpers shared by the authz tests: call Rucio with a raw
+# bearer token and tell an OPA denial apart from an authentication failure.
+
+RUCIO_REST_URL = (
+    os.environ.get("RUCIO_REST_URL")
+    or config_get(
+        "client", "rucio_host", raise_exception=False, default="http://rucio-server"
+    )
+).rstrip("/")
+
+# Reason the OPA policy package attaches to every denial; Rucio appends it
+# to the AccessDenied message. Must match permission.py.
+OPA_DENY_REASON = "Access denied by OPA policy validation"
+
+# Admin-only and argument-free: a deny here is purely a tier decision.
+ADMIN_PATH = "/accounts/ddmlab/limits/local/XRD3"
+ADMIN_BODY = {"bytes": -1}
+
+
+def rucio_rest(path, token, method="GET", body=None, timeout=30):
+    """Authenticated Rucio REST call with a raw bearer token."""
+    headers = {"X-Rucio-Auth-Token": token}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    return requests.request(
+        method,
+        f"{RUCIO_REST_URL}{path}",
+        headers=headers,
+        json=body,
+        verify=False,
+        timeout=timeout,
+    )
+
+
+def deny_reason(resp):
+    """(ExceptionClass, ExceptionMessage) from a Rucio error response."""
+    return resp.headers.get("ExceptionClass"), resp.headers.get("ExceptionMessage")
+
+
+def token_claims(token):
+    """The claims authz.rego decides on, for failure messages."""
+    payload = token.split(".")[1]
+    claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    return {k: claims.get(k) for k in ("sub", "entitlements", "acr")}
+
+
+def assert_opa_denied(resp, who):
+    """The request was denied, by the OPA policy package."""
+    exc_cls, exc_msg = deny_reason(resp)
+    assert resp.status_code in (401, 403), (
+        f"{who}: expected a denial, got HTTP {resp.status_code}"
+    )
+    assert exc_cls == "AccessDenied", (
+        f"{who}: {exc_cls}: {exc_msg} — AccessDenied means a policy denied; "
+        "CannotAuthenticate means the token never reached it"
+    )
+    assert OPA_DENY_REASON in (exc_msg or ""), (
+        f"{who}: denied without the OPA reason ({exc_msg!r}) — Rucio is not using "
+        "the OPA policy package; check [policy] package in rucio.cfg and that "
+        "rucio_opa_v1_policy imports inside rucio-server"
+    )
+
+
+def assert_allowed(resp, who, token, expected=(200, 201)):
+    assert resp.status_code in expected, (
+        f"{who}: HTTP {resp.status_code} {deny_reason(resp)}; token claims "
+        f"{token_claims(token)} — admins need an admin entitlement with the MFA "
+        "acr, users a user-tier entitlement (see odrl/data.json)"
+    )

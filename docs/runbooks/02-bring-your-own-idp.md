@@ -208,11 +208,8 @@ the one actually mounted:
   kubectl -n <ns> rollout restart deploy/rucio-server
   ```
 - `oidc-client.cfg` is Terraform-rendered (`modules/secrets`) — fetch it
-  instead of hand-editing:
-  ```bash
-  gcloud secrets versions access latest --secret=<env>-secrets \
-    | jq -r '.["oidc-client.cfg"]' > /tmp/oidc-client.cfg
-  export RUCIO_CONFIG=/tmp/oidc-client.cfg
+  instead of hand-editing: `make oidc-client-sync` writes
+  `oidc-client.$TF_ENV.cfg` (gitignored).
   ```
 
 ## Steps
@@ -323,3 +320,20 @@ rucio -v upload --rse TEAPOT1 --scope randomaccount /tmp/hello-egi.txt
 ```
 LS AAI: swap `RUCIO_CONFIG` to `ls-aai-dev/oidc-client.cfg`; remember the
 VO-membership prerequisite (access-denied page ≠ OIDC error).
+
+### Against staging
+```bash
+make oidc-client-sync && export RUCIO_CONFIG=$PWD/oidc-client.staging.cfg
+# /etc/hosts (dev container and laptop): rucio/fts → gateway_static_ip,
+# valstorage → validation_storage_ip (make tf-output)
+rucio whoami   # open the printed link with http://, not https://
+F=hello-$(date +%s).txt; echo hello > /tmp/$F
+rucio upload --rse XRD3 --scope randomaccount /tmp/$F
+rucio add-rule randomaccount:$F 1 XRD4          # → rule-info State: OK
+rucio download --rses XRD4 --dir /tmp/dl randomaccount:$F
+```
+- Use Chrome or Firefox: Safari's Private Relay ignores `/etc/hosts`.
+- The identity must be mapped to `randomaccount` (Steps §3, `-n dep-dlm-staging`).
+- Uploads need the user tier: the entitlement must match a `rucio:user`
+  assignee in `configs/opa/odrl/data.json` (EGI serves it from userinfo only).
+  A 401 loop at the end of `rucio upload` means the tier is missing.

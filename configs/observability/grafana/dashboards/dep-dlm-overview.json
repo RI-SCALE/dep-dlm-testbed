@@ -8,7 +8,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 8,
+  "version": 9,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -584,9 +584,9 @@
       }
     },
     {
-      "type": "table",
-      "title": "Efficiency matrix (last hour)",
-      "description": "Transfer efficiency per source (rows) and destination (columns), as in the ATLAS DDM and WLCG transfer dashboards. Empty cells: no transfers on that link.",
+      "type": "timeseries",
+      "title": "Transfer efficiency per link (last hour)",
+      "description": "Finished / (finished + failed) files per source and destination, as on WLCG transfer dashboards. A line below 100 % marks a failing link; see Top failure reasons.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -595,41 +595,34 @@
         {
           "refId": "A",
           "expr": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "groupingToMatrix",
-          "options": {
-            "columnField": "dest_se",
-            "rowField": "source_se",
-            "valueField": "Value",
-            "emptyValue": "null"
-          }
+          "legendFormat": "{{source_se}} → {{dest_se}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
+          "min": 0,
+          "max": 1,
           "decimals": 0,
           "custom": {
-            "cellOptions": {
-              "type": "color-background"
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": 600000,
+            "stacking": {
+              "mode": "none"
             },
-            "align": "center"
+            "thresholdsStyle": {
+              "mode": "line"
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
-              },
-              {
                 "color": "red",
-                "value": 0
+                "value": null
               },
               {
                 "color": "orange",
@@ -641,30 +634,18 @@
               }
             ]
           }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "source_se\\dest_se"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "auto"
-                }
-              },
-              {
-                "id": "custom.align",
-                "value": "left"
-              }
-            ]
-          }
-        ]
+        }
       },
       "options": {
-        "showHeader": true
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
       },
       "id": 12,
       "gridPos": {

@@ -985,25 +985,22 @@ main() {
     wait_for_infrastructure
     setup_accounts_and_identities
 
-    if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
-        # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2 containers/pods,
-        # Copernicus S3 source RSE, FTS S3 cloud_storage config, and
-        # in-cluster ruciodb session-token maintenance — none of these
-        # exist or apply once GITOPS_ENV points at a real Terraform-managed
-        # environment (staging/production), where Postgres is Cloud SQL
-        # and the only storage target is validation-storage.
-        if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
-            if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
-                grant_token_exchange
-            fi
-            seed_subject_tokens
+    # Managed mode: Rucio exchanges each account's subject token for storage
+    # tokens, so seed them in every environment, not just the sandbox.
+    if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
+        if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
+            grant_token_exchange
         fi
+        seed_subject_tokens
+    fi
+
+    if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
+        # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2, in-cluster
+        # ruciodb session-token maintenance, authz test identities.
         configure_rses
         cleanup_session_tokens
         setup_authz_test_identities
-    fi
-
-    if [ "${GITOPS_ENV:-sandbox}" != "sandbox" ]; then
+    else
         configure_validation_storage_rses
     fi
 

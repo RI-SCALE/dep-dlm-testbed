@@ -114,7 +114,8 @@ TF_VAR_project_id="$$GCP_PROJECT_ID" \
 	TF_VAR_oidc_issuer_name="$(OIDC_ISSUER_NAME)" \
 	TF_VAR_teapot_audiences='$(TEAPOT_AUDIENCES)' \
 	TF_VAR_teapot_extra_subs='$(TEAPOT_EXTRA_SUBS)' \
-	TF_VAR_token_mode="$(TOKEN_MODE)"
+	TF_VAR_token_mode="$(TOKEN_MODE)" \
+	TF_VAR_scope_profile="$(SCOPE_PROFILE)"
 endef
 
 # Optional -target for a partial/targeted apply -- e.g. reserving
@@ -252,6 +253,7 @@ FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_outpu
 FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
 RUCIO_DB_HOST     = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_database_private_ip),)
 RUCIO_DB_PASSWORD = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_db_password),)
+RUCIO_REST_URL = $(if $(filter staging,$(GITOPS_ENV)),http://$(RUCIO_PUBLIC_HOSTNAME),)
 
 
 ifeq ($(GITOPS_ENV),staging)
@@ -360,7 +362,7 @@ certs: ## Generate CA and host certificates
 
 init: ## Init testbed accounts, RSEs, OIDC seed
 	@$(TEST_OIDC_ENV) \
-	SCOPE_PROFILE=$(SCOPE_PROFILE) \
+	SCOPE_PROFILE=$(SCOPE_PROFILE) TOKEN_MODE=$(TOKEN_MODE) \
 	RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) GITOPS_ENV=$(GITOPS_ENV) \
 	RUCIO_DB_HOST='$(RUCIO_DB_HOST)' RUCIO_DB_PASSWORD='$(RUCIO_DB_PASSWORD)' \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
@@ -652,6 +654,11 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
 	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
 
+.PHONY: test-authz-egi-user
+test-authz-egi-user: ## Authz tier from EGI userinfo for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
+	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
+	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) EGI_USER_TOKEN='$(BEARER_TOKEN)' $(if $(RUCIO_REST_URL),RUCIO_REST_URL=$(RUCIO_REST_URL)) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_egi_user.py -v"
+
 ## Rego
 
 .PHONY: test-rego
@@ -662,7 +669,7 @@ test-rego: ## Rego unit tests (all phases, no stack needed)
 .PHONY: fmt-rego
 fmt-rego: ## Format all Rego files in place (fixes the opa-fmt pre-commit hook)
 	@command -v opa >/dev/null || { echo "opa not on PATH — see https://www.openpolicyagent.org/docs#1-download-opa"; exit 1; }
-	opa fmt -w configs/opa
+	opa fmt -w $$(find configs/opa -name '*.rego' -not -path '*/vendor/*')
 	opa check --strict configs/opa
 
 ## Terraform
@@ -793,6 +800,15 @@ userpass-client-sync: ## Fetch userpass-client.cfg from Secret Manager (matches 
 	  --secret="dep-dlm-$(TF_ENV)-secrets" \
 	  --project="$$GCP_PROJECT_ID" \
 	| python3 -c "import sys,json; d=json.load(sys.stdin); open('userpass-client.cfg','w').write(d['userpass-client.cfg'])"
+
+.PHONY: oidc-client-sync
+oidc-client-sync: ## Fetch oidc-client.cfg from Secret Manager into oidc-client.$(TF_ENV).cfg (interactive OIDC login against TF_ENV)
+	@$(TF_RESOLVE_ENV); \
+	gcloud secrets versions access latest \
+	  --secret="dep-dlm-$(TF_ENV)-secrets" \
+	  --project="$$GCP_PROJECT_ID" \
+	| python3 -c "import sys,json; d=json.load(sys.stdin); open('oidc-client.$(TF_ENV).cfg','w').write(d['oidc-client.cfg'])"
+	@echo "Wrote oidc-client.$(TF_ENV).cfg — use: RUCIO_CONFIG=oidc-client.$(TF_ENV).cfg rucio whoami"
 
 ## Cleanup
 

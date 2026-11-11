@@ -168,22 +168,17 @@
       },
       {
         "widget": {
-          "title": "Efficiency matrix (last hour)",
-          "timeSeriesTable": {
-            "columnSettings": [
-              {
-                "column": "value",
-                "visible": false
-              }
-            ],
+          "title": "Transfer efficiency per link (last hour)",
+          "xyChart": {
             "dataSets": [
               {
+                "plotType": "LINE",
                 "timeSeriesQuery": {
                   "prometheusQuery": "(sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FINISHED\"}) or 0 * sum by (source_se, dest_se) (fts_files_completed_1h{state=\"FAILED\"})) / sum by (source_se, dest_se) (fts_files_completed_1h{state=~\"FINISHED|FAILED\"})"
-                }
+                },
+                "legendTemplate": "${labels.source_se} → ${labels.dest_se}"
               }
-            ],
-            "metricVisualization": "NUMBER"
+            ]
           }
         },
         "xPos": 0,
@@ -366,7 +361,7 @@
     "goog-imported-via-script": "",
     "cloud-monitoring-dashboard-importer": "",
     "goog-imported-grafana-dashboard": "",
-    "goog-imported-grafana-revision": "8",
+    "goog-imported-grafana-revision": "9",
     "goog-imported-grafana-file-name-dep-dlm-overview": ""
   }
 }
