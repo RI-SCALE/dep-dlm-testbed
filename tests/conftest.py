@@ -18,6 +18,7 @@ import pytest
 import requests
 import urllib3
 from urllib.parse import urlparse
+from rucio.common.config import config_get
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -892,7 +893,12 @@ def xrd4_write_token():
 # Bare-token REST helpers shared by the authz tests: call Rucio with a raw
 # bearer token and tell an OPA denial apart from an authentication failure.
 
-RUCIO_REST_URL = os.environ.get("RUCIO_URL", "http://rucio-server").rstrip("/")
+RUCIO_REST_URL = (
+    os.environ.get("RUCIO_REST_URL")
+    or config_get(
+        "client", "rucio_host", raise_exception=False, default="http://rucio-server"
+    )
+).rstrip("/")
 
 # Reason the OPA policy package attaches to every denial; Rucio appends it
 # to the AccessDenied message. Must match permission.py.

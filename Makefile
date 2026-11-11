@@ -253,6 +253,7 @@ FTS_DATABASE_HOST = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_outpu
 FTS_DB_PASSWORD    = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,fts_db_password),)
 RUCIO_DB_HOST     = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_database_private_ip),)
 RUCIO_DB_PASSWORD = $(if $(filter staging,$(GITOPS_ENV)),$(call staging_tf_output,rucio_db_password),)
+RUCIO_REST_URL = $(if $(filter staging,$(GITOPS_ENV)),http://$(RUCIO_PUBLIC_HOSTNAME),)
 
 
 ifeq ($(GITOPS_ENV),staging)
@@ -652,6 +653,11 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 .PHONY: test-authz-personas
 test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
 	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
+
+.PHONY: test-authz-egi-user
+test-authz-egi-user: ## Authz tier from EGI userinfo for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
+	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
+	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) EGI_USER_TOKEN='$(BEARER_TOKEN)' $(if $(RUCIO_REST_URL),RUCIO_REST_URL=$(RUCIO_REST_URL)) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_egi_user.py -v"
 
 ## Rego
 
