@@ -10,7 +10,8 @@ that path, from validation to adoption.
 - [x] `DAEMON_MODE` (direct | daemons) on Compose and Kubernetes
 - [x] Identity providers: EGI Check-In Dev and LS AAI (Perun), managed and unmanaged token modes — [runbook 05](docs/runbooks/05-adding-a-new-idp-profile.md)
 - [x] Authorization: Rucio delegates to OPA via the `rucio_opa_v1_policy` package, reusing [opa-policy-package](https://github.com/mgajek-cern/opa-policy-package/tree/main); enabled on sandbox and staging
-- [ ] Map EGI user entitlements (e.g. `ri-scale-*` groups) to ODRL tiers
+- [x] Map EGI user entitlements (e.g. `ri-scale-*` groups) to ODRL tiers
+- [ ] Map LS AAI user entitlements to ODRL tiers
 - [ ] Storage authorization hardening: Teapot VO mapping via `eduperson_entitlement` as an alternative to file mapping; check whether XRootD SciTokens supports group/entitlement-based authorization
 - [x] External storage: testbed-owned XRootD/Teapot VM with public endpoint, registered as RSEs, e2e tests run against it
 - [x] Upstream compatibility: minimal patches to Rucio, FTS, Teapot documented in [docs/patches.md](docs/patches.md); FTS manages the token lifecycle (token exchange)
