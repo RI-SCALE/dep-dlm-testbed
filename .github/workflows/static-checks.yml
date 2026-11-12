@@ -22,6 +22,8 @@ jobs:
         with:
           tflint_version: "v0.64.0"
       - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
       - name: Install helm-git plugin
         run: |
           if [ ! -d "${HELM_PLUGINS:-$HOME/.local/share/helm/plugins}/helm-git" ]; then
