@@ -82,6 +82,10 @@ jobs:
           cluster_name: dep-dlm-gitops
           version: v0.29.0
 
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
       - name: Install Flux CLI
         uses: fluxcd/flux2/action@main
 
