@@ -202,7 +202,7 @@ Tests
   probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
   probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
   test-authz-personas  Authz entitlement-tier test across DEP persona accounts
-  test-authz-egi-user  Authz tier from EGI userinfo for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
+  test-authz-user      Authz tier from userinfo entitlements for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
 
 Rego
   test-rego            Rego unit tests (all phases, no stack needed)
