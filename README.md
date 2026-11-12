@@ -202,6 +202,7 @@ Tests
   probe-fts-teapot     Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
   probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
   test-authz-personas  Authz entitlement-tier test across DEP persona accounts
+  test-authz-egi-user  Authz tier from EGI userinfo for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
 
 Rego
   test-rego            Rego unit tests (all phases, no stack needed)
@@ -224,6 +225,7 @@ Terraform
   tf-force-unlock      Force-unlock TF_ENV's state after a stale/abandoned lock. Usage: make tf-force-unlock LOCK_ID=<id from the lock error>. Confirm nothing else is actually running against TF_ENV first — see the Lock Info 'Who' field.
   certs-sync           Fetch current certs from Secret Manager (matches what's deployed to TF_ENV)
   userpass-client-sync Fetch userpass-client.cfg from Secret Manager (matches what's deployed to TF_ENV)
+  oidc-client-sync     Fetch oidc-client.cfg from Secret Manager into oidc-client.$(TF_ENV).cfg (interactive OIDC login against TF_ENV)
 
 Cleanup
   clear-artifacts      Remove certs, volumes, Terraform/Python/Helm artifacts
