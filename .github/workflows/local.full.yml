@@ -13,22 +13,22 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: compose
             daemon_mode: direct
             observability: "1"
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: compose
             daemon_mode: daemons
             observability: "1"
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: k8s
             daemon_mode: direct
             observability: "1"
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: k8s
             daemon_mode: daemons
             observability: "1"

@@ -38,7 +38,7 @@ env:
 jobs:
   apply:
     name: plan, apply & smoke test (infra only)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write

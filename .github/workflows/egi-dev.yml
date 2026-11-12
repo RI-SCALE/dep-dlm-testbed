@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: compose
             daemon_mode: direct
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
             runtime: k8s
             daemon_mode: direct
     name: ${{ matrix.arch }} | ${{ matrix.runtime }} | ${{ matrix.daemon_mode }} | egi-dev

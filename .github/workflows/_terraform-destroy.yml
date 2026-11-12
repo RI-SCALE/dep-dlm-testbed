@@ -33,7 +33,7 @@ env:
 jobs:
   destroy:
     name: destroy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ inputs.environment_name }} # same GitHub Environment as apply — same reviewers, same gate
     permissions:
       id-token: write

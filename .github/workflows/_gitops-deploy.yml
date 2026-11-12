@@ -69,7 +69,7 @@ env:
 jobs:
   deploy:
     name: ${{ inputs.gitops_engine }} deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write

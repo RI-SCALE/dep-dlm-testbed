@@ -69,7 +69,7 @@ env:
 jobs:
   e2e:
     name: e2e transfer tests (${{ inputs.token_mode }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ${{ inputs.environment_name }}
     permissions:
       id-token: write
