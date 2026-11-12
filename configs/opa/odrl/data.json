@@ -19,6 +19,8 @@
     {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
      "assignee": "urn:example:aai.example.org:group:atlas-users:role=member"},
     {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
-     "assignee": "urn:mace:egi.eu:group:developers.dep.riscale.eu:role=member#aai.egi.eu"}
+     "assignee": "urn:mace:egi.eu:group:developers.dep.riscale.eu:role=member#aai.egi.eu"},
+    {"action": "rucio:user", "target": "https://dep-dlm.example.org/rucio",
+     "assignee": "urn:geant:lifescience-ri.eu:group:lifescience:relying_services:RI-SCALE%20DEP%20DLM%20testbed#aai.lifescience-ri.eu"}
   ]
 }]}
