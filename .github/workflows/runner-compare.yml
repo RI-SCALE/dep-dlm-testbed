@@ -1,0 +1,103 @@
+name: Runner comparison (24.04 vs latest)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  helm-plugin:
+    name: helm-git | ${{ matrix.os }} | helm ${{ matrix.helm }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-latest]
+        helm: [v3.17.3, latest]
+    steps:
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ matrix.helm }}
+      - name: Install helm-git, with and without --verify=false
+        run: |
+          helm version --short
+          if helm plugin install https://github.com/aslafy-z/helm-git; then
+            echo "RESULT: plain install works"
+          else
+            helm plugin uninstall helm-git >/dev/null 2>&1 || true
+            helm plugin install https://github.com/aslafy-z/helm-git --verify=false \
+              && echo "RESULT: needs --verify=false" \
+              || { echo "RESULT: fails even with --verify=false"; exit 1; }
+          fi
+          helm plugin list
+
+  sandbox-e2e:
+    name: sandbox e2e | ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-latest]
+    env:
+      GITOPS_ENV: sandbox
+      GITOPS_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+      GITOPS_REVISION: ${{ github.ref_name }}
+      SCOPE_PROFILE: local
+      TOKEN_MODE: managed
+      RUNTIME: k8s
+      DAEMON_MODE: daemons
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Runner facts
+        run: |
+          cat /etc/os-release | grep PRETTY; uname -r
+          nproc; free -h; df -h /
+          stat -fc %T /sys/fs/cgroup     # cgroup2fs = cgroup v2
+          docker version --format 'docker {{.Server.Version}}'
+          docker info --format 'cgroup={{.CgroupDriver}} v{{.CgroupVersion}} runtime={{.DefaultRuntime}}'
+
+      - uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: dep-dlm-gitops
+          version: v0.29.0
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Start load sampling
+        run: nohup sh -c 'while true; do date +%T; docker stats --no-stream --format "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}"; sleep 15; done' > load.log 2>&1 &
+
+      - name: Install and wait
+        run: |
+          start=$(date +%s)
+          make argocd-install
+          for i in $(seq 1 80); do
+            bad=$(kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.status.health.status}{"\n"}{end}' | grep -vc Healthy || true)
+            [ "$bad" = 0 ] && break; sleep 15
+          done
+          ns=dep-dlm-sandbox
+          kubectl -n $ns wait --for=condition=complete job/rucio-bootstrap-db --timeout=300s
+          for d in $(kubectl -n $ns get deploy -o name | grep -E 'rucio-(server|daemons)'); do
+            kubectl -n $ns rollout status "$d" --timeout=300s
+          done
+          echo "INSTALL_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Transfer tests
+        run: |
+          start=$(date +%s)
+          make init && make test-rucio-transfers
+          echo "TEST_SECONDS=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnostics
+        if: always()
+        run: |
+          kubectl -n dep-dlm-sandbox get events --field-selector type=Warning --sort-by=.lastTimestamp | tail -30 || true
+          sudo dmesg | tail -30 || true
+          tail -40 load.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-${{ matrix.os }}
+          path: load.log
