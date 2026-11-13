@@ -254,7 +254,7 @@ ensure_helm_chart_deps() {
 
   if ! helm plugin list 2>/dev/null | awk '$1 == "helm-git" { found = 1 } END { exit !found }'; then
     log "Installing helm-git plugin (needed for git+https chart dependencies)"
-    helm plugin install https://github.com/aslafy-z/helm-git --version 1.5.2 \
+    helm plugin install https://github.com/aslafy-z/helm-git "$(helm version --short | grep -q '^v4' && echo --verify=false)" --version 1.5.2 \
       || die "helm-git plugin install failed — required for the rucio-server/rucio-daemons fork dependency in Chart.yaml"
   fi
 
