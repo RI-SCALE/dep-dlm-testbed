@@ -84,7 +84,7 @@ jobs:
 
       - uses: azure/setup-helm@v4
         with:
-          version: v3.17.3
+          version: v4.3.1
 
       - name: Install Argo CD + bootstrap ${{ matrix.env }}
         run: make argocd-install

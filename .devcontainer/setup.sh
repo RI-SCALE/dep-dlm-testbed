@@ -143,7 +143,7 @@ install_helm_git() {
         return 0
     fi
 
-    helm plugin install https://github.com/aslafy-z/helm-git
+    helm plugin install https://github.com/aslafy-z/helm-git $(helm version --short | grep -q '^v4' && echo --verify=false)
 
     if [[ ! -d "$plugin_dir" ]]; then
         echo -e "${RED}helm-git install failed — check the output above${NC}"

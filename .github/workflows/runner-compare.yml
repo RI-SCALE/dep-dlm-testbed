@@ -63,7 +63,7 @@ jobs:
 
       - uses: azure/setup-helm@v4
         with:
-          version: v3.17.3
+          version: v4.3.1
 
       - name: Start load sampling
         run: nohup sh -c 'while true; do date +%T; docker stats --no-stream --format "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}"; sleep 15; done' > load.log 2>&1 &
