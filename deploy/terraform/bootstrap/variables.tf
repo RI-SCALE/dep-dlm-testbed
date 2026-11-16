@@ -24,8 +24,32 @@ variable "billing_account_id" {
 }
 
 variable "github_repo" {
-  description = "GitHub org/repo the Workload Identity Federation provider trusts (format org/repo). Scoped via attribute_condition so no other repo can mint tokens these providers accept."
+  description = "GitHub org/repo the Workload Identity Federation provider trusts (format org/repo). Scoped via attribute_condition so no other repo can mint tokens these providers accept unless listed in additional_github_repos."
   type        = string
+}
+
+variable "additional_github_repos" {
+  description = <<-EOT
+    Further GitHub org/repos the same Workload Identity Federation providers
+    trust, each with workloadIdentityUser on the environment's
+    dep-dlm-terraform-ci service account. E.g. RI-SCALE/dep-dlm-deployment,
+    whose on-premise reference VM runs in the staging project. Empty: only
+    github_repo (unchanged single-repo condition).
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "os_login_admins" {
+  description = <<-EOT
+    Users granted roles/compute.osAdminLogin (sudo-capable OS Login) and
+    roles/iap.tunnelResourceAccessor (IAP TCP tunnels) on every environment
+    project — for humans who SSH into validation-storage or the on-premise
+    reference VM, or tunnel to its kube-apiserver and Vault. Not the same as
+    terraform_ci's service account access; this is direct human IAM.
+  EOT
+  type        = list(string)
+  default     = ["marvin.gajek@cern.ch"]
 }
 
 variable "state_bucket_location" {
@@ -89,15 +113,4 @@ variable "environments" {
     { name = "staging", deletion_policy = "DELETE" },
     { name = "production", deletion_policy = "PREVENT" },
   ]
-}
-
-variable "os_login_admins" {
-  description = <<-EOT
-    Users granted roles/compute.osAdminLogin (sudo-capable OS Login) on
-    every environment project — for humans who need to SSH into
-    validation-storage or other VMs for debugging. Not the same as
-    terraform_ci's service account access; this is direct human IAM.
-  EOT
-  type        = list(string)
-  default     = ["marvin.gajek@cern.ch"]
 }

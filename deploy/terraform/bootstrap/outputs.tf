@@ -42,3 +42,8 @@ output "state_buckets" {
   description = "Map of environment name -> GCS bucket name for that environment's own Terraform state. Feed into environments/<env>'s `terraform init -backend-config=bucket=...` (and the TF_STATE_BUCKET repo variable each environment's CI workflow already reads)."
   value       = { for k, v in google_storage_bucket.tf_state : k => v.name }
 }
+
+output "trusted_github_repos" {
+  description = "GitHub org/repos whose Actions may use the Workload Identity Federation providers (github_repo + additional_github_repos)."
+  value       = local.github_repos
+}

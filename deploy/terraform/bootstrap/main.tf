@@ -21,6 +21,11 @@ provider "google" {
 locals {
   environments = { for e in var.environments : e.name => e }
 
+  # Repositories whose GitHub Actions may impersonate an environment's CI
+  # service account: this repo plus e.g. dep-dlm-deployment, whose
+  # on-premise reference VM runs in the staging project.
+  github_repos = concat([var.github_repo], var.additional_github_repos)
+
   required_apis = [
     "compute.googleapis.com",
     "container.googleapis.com",
@@ -31,6 +36,7 @@ locals {
     "iamcredentials.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "sts.googleapis.com", # Workload Identity Federation token exchange
+    "iap.googleapis.com", # IAP TCP tunnels (dep-dlm-deployment's on-premise reference VM)
     "dns.googleapis.com",
     "monitoring.googleapis.com",
     "logging.googleapis.com",
@@ -141,7 +147,13 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
   }
-  attribute_condition = "assertion.repository=='${var.github_repo}'"
+  # Unchanged single-repo form while no additional repos are trusted, so
+  # enabling the list later is an in-place update of this provider only.
+  attribute_condition = (
+    length(local.github_repos) == 1
+    ? "assertion.repository=='${var.github_repo}'"
+    : "assertion.repository in ${jsonencode(local.github_repos)}"
+  )
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -154,6 +166,19 @@ resource "google_service_account_iam_member" "github_wif_binding" {
   service_account_id = google_service_account.terraform_ci[each.key].name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github[each.key].name}/attribute.repository/${var.github_repo}"
+}
+
+# Same for the additional repos; a separate resource so the existing
+# bindings above keep their state addresses.
+resource "google_service_account_iam_member" "github_wif_binding_additional" {
+  for_each = {
+    for pair in setproduct(keys(local.environments), var.additional_github_repos) :
+    "${pair[0]}.${pair[1]}" => { env = pair[0], repo = pair[1] }
+  }
+
+  service_account_id = google_service_account.terraform_ci[each.value.env].name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github[each.value.env].name}/attribute.repository/${each.value.repo}"
 }
 
 # --- Per-environment remote-state bucket ---------------------------------
@@ -181,6 +206,8 @@ resource "google_storage_bucket_iam_member" "tf_state_ci_access" {
   member = "serviceAccount:${google_service_account.terraform_ci[each.key].email}"
 }
 
+# --- Human access: OS Login (SSH) and IAP tunnels ------------------------
+
 resource "google_compute_project_metadata_item" "enable_oslogin" {
   for_each = local.environments
 
@@ -200,6 +227,21 @@ resource "google_project_iam_member" "os_login_admins" {
   project = google_project.env[each.value.env].project_id
   role    = "roles/compute.osAdminLogin"
   member  = "user:${each.value.user}"
+}
+
+# IAP TCP forwarding (SSH, kube-apiserver and Vault of the on-premise
+# reference VM are reachable only this way).
+resource "google_project_iam_member" "iap_tunnel_users" {
+  for_each = {
+    for pair in setproduct(keys(local.environments), var.os_login_admins) :
+    "${pair[0]}.${pair[1]}" => { env = pair[0], user = pair[1] }
+  }
+
+  project = google_project.env[each.value.env].project_id
+  role    = "roles/iap.tunnelResourceAccessor"
+  member  = "user:${each.value.user}"
+
+  depends_on = [google_project_service.apis]
 }
 
 # GKE nodes (default compute SA) write logs and metrics; not implied when
