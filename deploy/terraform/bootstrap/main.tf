@@ -113,6 +113,20 @@ resource "google_project_iam_member" "terraform_ci_roles" {
   member  = "serviceAccount:${google_service_account.terraform_ci[each.value.env].email}"
 }
 
+resource "google_project_iam_member" "terraform_ci_extra_roles" {
+  for_each = {
+    for pair in flatten([
+      for env, roles in var.terraform_ci_extra_roles : [
+        for role in roles : { env = env, role = role }
+      ] if contains(keys(local.environments), env)
+    ]) : "${pair.env}.${pair.role}" => pair
+  }
+
+  project = google_project.env[each.value.env].project_id
+  role    = each.value.role
+  member  = "serviceAccount:${google_service_account.terraform_ci[each.value.env].email}"
+}
+
 # GKE node VMs run under the project's default compute SA
 resource "google_service_account_iam_member" "terraform_ci_compute_sa_user" {
   for_each = local.environments

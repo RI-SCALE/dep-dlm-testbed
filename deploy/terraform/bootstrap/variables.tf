@@ -68,10 +68,10 @@ variable "terraform_ci_roles" {
     environments/<env>'s CI identity now only ever ATTACHES resources
     (GKE cluster, Cloud SQL) to an already-existing network; it never
     creates/modifies/deletes network resources itself, so it no longer
-    needs networkAdmin's broader create/delete rights — networkUser (attach
-    to an existing network) is the correct minimum. Revert to networkAdmin
-    only if environments/<env> ever needs to manage networking directly
-    again.
+    needs networkAdmin's broader create/delete rights — networkUser
+    (attach to an existing network) is the correct minimum. Revert to
+    networkAdmin only if environments/<env> ever needs to manage
+    networking directly again. Per-environment exceptions: terraform_ci_extra_roles.
   EOT
   type        = list(string)
   default = [
@@ -91,6 +91,24 @@ variable "terraform_ci_roles" {
     "roles/monitoring.editor",
     "roles/logging.viewer",
   ]
+}
+
+variable "terraform_ci_extra_roles" {
+  description = <<-EOT
+    Additional roles per environment for that environment's
+    dep-dlm-terraform-ci service account. Staging: dep-dlm-deployment's
+    on-premise reference creates its own VPC (networkAdmin) and its CI
+    reaches the VM through IAP and OS Login (kubeconfig, Vault init, smoke
+    test).
+  EOT
+  type        = map(list(string))
+  default = {
+    staging = [
+      "roles/compute.networkAdmin",
+      "roles/iap.tunnelResourceAccessor",
+      "roles/compute.osAdminLogin",
+    ]
+  }
 }
 
 variable "environments" {
