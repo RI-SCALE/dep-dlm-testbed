@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: superseeded
 date: 2026-10-07 (revised from 2026-09-04)
 decision-makers: DEP DLM testbed
 consulted: RI-SCALE
@@ -7,6 +7,8 @@ informed:
 ---
 
 # ADR-005: Usage Reporting for Credits — Rucio as Source, Credits Owned by RI-SCALE
+
+Superseded by [ADR-010](adr-010-report-transfer-usage-to-argo.md).
 
 ## Context and Problem Statement
 
