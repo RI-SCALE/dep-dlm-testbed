@@ -1,6 +1,6 @@
 # Design-005: Observability for Rucio and FTS
 
-- **Status:** Accepted (phases 1–2 on Compose and sandbox; staging in progress)
+- **Status:** Accepted (phases 1–2 on Compose and sandbox; staging in progress; phase 3 deferred)
 - **Owner:** DEP DLM testbed
 - **Related ADR(s):** [ADR-009](../adrs/adr-009-standard-gke-fixed-staging-node.md) (staging node size)
 

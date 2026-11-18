@@ -21,17 +21,17 @@ that path, from validation to adoption.
 - [x] GitOps with Argo CD and Flux (sandbox, staging), upstream charts with DEP DLM overlays
 - [x] Terraform on GCP: GKE, Cloud SQL, Secret Manager + External Secrets, Gateway API public endpoints; full rebuild validated in CI
 - [x] Observability: Managed Prometheus, Cloud Logging, Cloud Monitoring dashboards and alert policies — [design doc 005](docs/design/design-doc-005-observability.md)
-- [ ] Observability phase 3 and open questions (design doc 005)
+- [ ] Decide whether transfer events are needed beyond metrics and logs (design-005 phase 3: Hermes to the log backend vs ActiveMQ/OpenSearch)
 - [ ] Production reference environment applied and validated end to end
-- [ ] Certificates: Rucio/FTS certificate installation; public TLS for the Gateway hostnames (cert-manager, CA choice open)
-- [ ] On-premises validation: clarify partner ownership of Kubernetes, PostgreSQL and Vault provisioning; evaluate fleet offerings (GKE Enterprise, Azure Arc, EKS Anywhere) and GitOps against attached clusters
+- [ ] TLS and trust: align with the CERN Rucio instance and the partner documentation (Confluence); partners bring a private PKI or a public CA for Rucio/FTS host certificates and public TLS on the Gateway (cert-manager); FTS trusts the IGTF/public CAs of real RSEs
+- [ ] On-premises: single-node reference validated in `dep-dlm-deployment` (kubeadm, PostgreSQL, Vault); open: partner ownership of Kubernetes, databases and Vault; fleet offerings (GKE Enterprise, Azure Arc, EKS Anywhere) and GitOps against attached clusters
 
 ## 3. Production enablement
 
 Tracked in [dep-dlm-deployment](https://github.com/RI-SCALE/dep-dlm-deployment) (curated Terraform/GitOps, deployment CI, promotion, upgrades).
 Testbed side:
 
-- [ ] Partner runbooks: [01–07](docs/runbooks/) done; open: certificates (Rucio/FTS, public TLS)
+- [ ] Partner runbooks: [01–07](docs/runbooks/) done; open: TLS and trust (once decided, section 2)
 
 ## 4. Technology evolution
 
@@ -41,7 +41,6 @@ Testbed side:
 
 ## 5. Research infrastructure adoption
 
-- [ ] **Optional:** use cases register real RSEs for their data holdings ([runbook 03](docs/runbooks/03-bring-your-own-storage.md))
-    - [ ] Public holdings: validated end to end in CI
-    - [ ] Sensitive/personal holdings: real destination in CI, synthetic source from the testbed's own storage
+- [ ] Third-party copies from public RI holdings on the CERN RI-SCALE instance (ENES_*, EBI_BIA_*, EISCAT_WEBDAV): pick small public datasets, check which token issuer/audience or X.509 identity the sources accept and which CA bundle FTS needs; replicate into the testbed's own storage, Compose first, then CI. MUSICA_* and TUBITAK_WEBDAV as destinations later
+- [ ] **Optional:** use cases register further RSEs for their data holdings ([runbook 03](docs/runbooks/03-bring-your-own-storage.md)); sensitive/personal holdings (e.g. BBMRI): real destination in CI, synthetic source from the testbed's own storage
 - [ ] Partner integration and operational handover
