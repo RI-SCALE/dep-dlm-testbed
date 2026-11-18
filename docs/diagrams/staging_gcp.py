@@ -1,33 +1,15 @@
 """
 DEP DLM GitOps Deployment View — Staging (GCP)
 
-Only the data-orchestration engine (Rucio + FTS) and its policy decision
-point (OPA, policies from the external ODRL repository) run in-cluster, on a
-zonal GKE Standard cluster with a single fixed-size node (ADR-009). Secrets
-(Secret Manager), databases (Cloud SQL for PostgreSQL and MySQL), IdP
-(external AAI federation hub) and storage RSEs are external. Production has
-the same shape with an autoscaling node pool.
+Rucio, FTS and OPA run on a zonal GKE Standard cluster with one fixed node
+(ADR-009); secrets, databases, IdP, storage RSEs and telemetry storage are
+external. The GKE Gateway (global external ALB on gateway_static_ip) routes
+rucio.* and fts.* by Host header. validation-storage is a testbed-owned GCE VM
+(XRootD xrd3/xrd4, Teapot teapot1/teapot2) resolved via a private DNS zone.
 
-Public ingress is the GKE Gateway API (gatewayClassName
-gke-l7-global-external-managed), which provisions a global external
-Application Load Balancer on the reserved static IP (gateway_static_ip).
-rucio.* and fts.* route through the same Gateway via Host-header matching.
-
-validation-storage is a testbed-owned GCE VM (Container-Optimized OS, not
-GKE) running XRootD (xrd3/xrd4) and Teapot WebDAV (teapot1/teapot2) via
-docker compose, registered as real RSEs so FTS exercises an external network
-path. It is resolved through a private Cloud DNS zone, not by IP: FTS's
-gfal2/davix transfer engine does not honour per-pod /etc/hosts entries. It
-trusts the same CA chain from the Secret Manager "certs" secret.
-
-Telemetry lives outside the cluster (design doc 005): Managed Service for
-Prometheus collects metrics from rucio-server, the daemons and the
-sql_exporters into Cloud Monitoring; GKE ships container stdout to Cloud
-Logging. Dashboards and alert policies are Terraform-managed Cloud
-Monitoring resources and logs are read in the Logs Explorer, so visibility
-survives a cluster outage. In-cluster are only the exporters, the
-PodMonitoring resources and GKE's managed agents (GMP collectors, logging
-agent), none of which store data.
+Edges carry no labels (Graphviz misplaces labels on orthogonal edges):
+  solid = request/control, dashed = config (GitOps, secrets, certs, policy, DNS),
+  dotted = telemetry, bold = data (bytes).
 
 Regenerate: python3 staging-gcp.py  (writes generated/staging-gcp.png)
 """
@@ -49,7 +31,7 @@ graph_attr = {
     "fontsize": "22",
     "bgcolor": "white",
     "pad": "0.6",
-    "splines": "ortho",
+    "splines": "polyline",
     "nodesep": "0.7",
     "ranksep": "0.9",
 }
@@ -108,33 +90,33 @@ with Diagram(
             )
             valstorage_fw >> valstorage_vm
 
-    gitops >> Edge(label="sync", style="dashed") >> rucio_server
+    gitops >> Edge(style="dashed") >> rucio_server
 
-    glb >> Edge(label="rucio.* / fts.*\n(Host header)") >> gateway
+    glb >> gateway
     gateway >> rucio_server
     gateway >> fts
 
-    wif >> Edge(label="federated\ncredential", style="dotted") >> eso
-    eso >> sm
+    wif >> Edge(style="dashed") >> eso
+    eso >> Edge(style="dashed") >> sm
     rucio_server >> rucio_db
     rucio_server >> idp_ext
-    rucio_server >> Edge(label="authz") >> opa
-    opa >> Edge(label="policy bundle", style="dashed") >> policies
-    rucio_daemons >> Edge(label="submit") >> fts
+    rucio_server >> opa
+    opa >> Edge(style="dashed") >> policies
+    rucio_daemons >> fts
     fts >> fts_db
 
     # Telemetry (design doc 005): collected in-cluster, stored and viewed outside it
-    rucio_server >> Edge(label="metrics\n(PodMonitoring)", style="dashed") >> monitoring
-    rucio_daemons >> Edge(style="dashed") >> monitoring
-    exporters >> Edge(style="dashed") >> monitoring
-    exporters >> Edge(label="SQL", style="dotted") >> rucio_db
+    rucio_server >> Edge(style="dotted") >> monitoring
+    rucio_daemons >> Edge(style="dotted") >> monitoring
+    exporters >> Edge(style="dotted") >> monitoring
+    exporters >> Edge(style="dotted") >> rucio_db
     exporters >> Edge(style="dotted") >> fts_db
-    gke >> Edge(label="container\nstdout", style="dashed") >> logging
+    gke >> Edge(style="dotted") >> logging
 
     fts >> source_rses
     fts >> dest_rses
-    source_rses >> Edge(label="direct copy", style="bold") >> dest_rses
+    source_rses >> Edge(style="bold") >> dest_rses
 
-    dns >> Edge(label="A record", style="dashed") >> valstorage_vm
+    dns >> Edge(style="dashed") >> valstorage_vm
     fts >> valstorage_vm
-    sm >> Edge(label="certs +\nCA chain") >> valstorage_vm
+    sm >> Edge(style="dashed") >> valstorage_vm

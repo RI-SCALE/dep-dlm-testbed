@@ -1,9 +1,14 @@
 """
 DEP DLM GitOps Deployment View — Sandbox
-Everything internal: bundled IdP, bundled storage, in-cluster Vault + DB,
-OPA as policy decision point, and (OBSERVABILITY=1) the full observability
-stack: Alloy ships logs to Loki, Prometheus scrapes Rucio/FTS and the
-SQL exporters, Grafana reads both.
+
+Everything in-cluster: bundled IdP (Keycloak), storage (XRootD, StoRM WebDAV),
+Vault and PostgreSQL, OPA with ODRL policies, and with OBSERVABILITY=1
+Prometheus, Loki (fed by Alloy) and Grafana.
+
+Edges carry no labels (Graphviz misplaces labels on orthogonal edges):
+  solid = request/control, dashed = config (GitOps, secrets),
+  dotted = telemetry.
+
 Regenerate: python3 sandbox.py  (writes generated/sandbox.png)
 """
 
@@ -15,7 +20,7 @@ from diagrams.onprem.gitops import Argocd
 from diagrams.onprem.monitoring import Prometheus, Grafana
 from diagrams.onprem.logging import Loki
 
-graph_attr = {"fontsize": "22", "bgcolor": "white", "pad": "0.6", "splines": "ortho"}
+graph_attr = {"fontsize": "22", "bgcolor": "white", "pad": "0.6", "splines": "polyline"}
 node_attr = {"fontsize": "11"}
 
 with Diagram(
@@ -32,36 +37,32 @@ with Diagram(
     with Cluster("k8s: dep-dlm-sandbox"):
         eso = Deployment("External Secrets\nOperator")
         vault = Vault("Vault (dev)\nseeded by Job")
-        db = PostgreSQL("PostgreSQL\n(in-cluster)")
-        idp = Deployment("Keycloak\n(bundled IdP,\nself-signed CA)")
-        opa = Deployment("OPA\n(authz, ODRL policies\ningested by Job)")
+        db = PostgreSQL("PostgreSQL")
+        idp = Deployment("Keycloak\n(bundled IdP)")
+        opa = Deployment("OPA\n(ODRL policies\nby Job)")
         rucio_server = Deployment("Rucio Server")
         rucio_daemons = Deployment("Rucio Daemons")
         fts = Deployment("FTS3")
-        storage = Deployment("XRootD + Storm-WebDAV\n(bundled RSEs)")
+        storage = Deployment("XRootD +\nStoRM WebDAV")
         client = Pod("Rucio Client\n(test harness)")
 
         with Cluster("Observability (OBSERVABILITY=1)"):
-            exporters = Deployment("SQL exporters\n(Rucio DB, FTS DB)")
-            alloy = Deployment("Alloy\n(pod logs)")
+            exporters = Deployment("SQL exporters")
+            alloy = Deployment("Alloy")
             prom = Prometheus("Prometheus\n+ Alertmanager")
             loki = Loki("Loki")
             grafana = Grafana("Grafana")
 
-        gitops >> Edge(label="sync", style="dashed") >> rucio_server
+        gitops >> Edge(style="dashed") >> rucio_server
 
-        eso >> Edge(label="reads secrets") >> vault
+        eso >> Edge(style="dashed") >> vault
         rucio_server >> db
-        rucio_server >> Edge(label="OIDC") >> idp
-        rucio_server >> Edge(label="authz") >> opa
+        rucio_server >> idp
+        rucio_server >> opa
         client >> rucio_server
-        rucio_daemons >> Edge(label="submit") >> fts
-        fts >> Edge(label="TPC (davs)") >> storage
+        rucio_daemons >> fts
+        fts >> storage
 
-        (
-            prom
-            >> Edge(label="scrape", style="dotted")
-            >> [rucio_server, rucio_daemons, fts, exporters]
-        )
-        alloy >> Edge(label="push logs", style="dotted") >> loki
+        prom >> Edge(style="dotted") >> [rucio_server, rucio_daemons, fts, exporters]
+        alloy >> Edge(style="dotted") >> loki
         grafana >> Edge(style="dotted") >> [prom, loki]
