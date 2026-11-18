@@ -28,14 +28,10 @@ that path, from validation to adoption.
 
 ## 3. Production enablement
 
-- [ ] `dep-dlm-deployment` repository: curated Terraform and GitOps for partners, not a copy of the testbed
-- [ ] Promotion process: each promoted component has a validated source commit, supported version, CI evidence, configuration requirements and known limitations
-- [ ] Production configuration and defaults extracted from the testbed
-- [ ] Deployment CI
-- [ ] Upgrade and rollback procedures
-- [ ] Partner runbooks for configuration (Rucio, OIDC, FTS, RSEs, certificates, WP4 token provider), with credentials supplied by the partner
-    - [x] [01–07](docs/runbooks/): sandbox quickstart, IdP, storage, validation storage, IdP profiles, secrets (Secret Manager + ESO), observability
-    - [ ] Certificates (Rucio/FTS, public TLS)
+Tracked in [dep-dlm-deployment](https://github.com/RI-SCALE/dep-dlm-deployment) (curated Terraform/GitOps, deployment CI, promotion, upgrades).
+Testbed side:
+
+- [ ] Partner runbooks: [01–07](docs/runbooks/) done; open: certificates (Rucio/FTS, public TLS)
 
 ## 4. Technology evolution
 
