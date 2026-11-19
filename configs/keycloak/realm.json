@@ -5,7 +5,10 @@
   "refreshTokenMaxReuse": 1,
   "roles": {
     "realm": [
-      { "name": "offline_access", "description": "Role for creating offline tokens" }
+      {
+        "name": "offline_access",
+        "description": "Role for creating offline tokens"
+      }
     ]
   },
   "groups": [
@@ -13,16 +16,28 @@
       "name": "rucio",
       "path": "/rucio",
       "subGroups": [
-        { "name": "admins", "path": "/rucio/admins" },
-        { "name": "users", "path": "/rucio/users" }
+        {
+          "name": "admins",
+          "path": "/rucio/admins"
+        },
+        {
+          "name": "users",
+          "path": "/rucio/users"
+        }
       ]
     },
     {
       "name": "atlas",
       "path": "/atlas",
       "subGroups": [
-        { "name": "production", "path": "/atlas/production" },
-        { "name": "users", "path": "/atlas/users" }
+        {
+          "name": "production",
+          "path": "/atlas/production"
+        },
+        {
+          "name": "users",
+          "path": "/atlas/users"
+        }
       ]
     }
   ],
@@ -46,15 +61,27 @@
       "directAccessGrantsEnabled": true,
       "fullScopeAllowed": true,
       "defaultClientScopes": [
-        "wlcg", "fts", "entitlements",
-        "storage.read", "storage.modify",
-        "storage.read:/data", "storage.modify:/data",
-        "storage.read:/", "storage.modify:/", "pep:rucio"
+        "wlcg",
+        "fts",
+        "entitlements",
+        "storage.read",
+        "storage.modify",
+        "storage.read:/data",
+        "storage.modify:/data",
+        "storage.read:/",
+        "storage.modify:/",
+        "pep:rucio"
       ],
       "optionalClientScopes": [
         "offline_access",
-        "aud:fts", "aud:xrd3", "aud:xrd4",
-        "aud:teapot1", "aud:teapot2", "aud:rucio"
+        "aud:fts",
+        "aud:xrd3",
+        "aud:xrd4",
+        "aud:teapot1",
+        "aud:teapot2",
+        "aud:rucio",
+        "aud:esgf3.dkrz.de",
+        "aud:ftp.ebi.ac.uk"
       ],
       "attributes": {
         "oidc.ciba.grant.enabled": "false",
@@ -73,15 +100,24 @@
       "secret": "fts-secret",
       "serviceAccountsEnabled": true,
       "defaultClientScopes": [
-        "wlcg", "fts",
-        "storage.read", "storage.modify",
-        "storage.read:/data", "storage.modify:/data",
-        "storage.read:/", "storage.modify:/"
+        "wlcg",
+        "fts",
+        "storage.read",
+        "storage.modify",
+        "storage.read:/data",
+        "storage.modify:/data",
+        "storage.read:/",
+        "storage.modify:/"
       ],
       "optionalClientScopes": [
         "offline_access",
-        "aud:fts", "aud:xrd3", "aud:xrd4",
-        "aud:teapot1", "aud:teapot2"
+        "aud:fts",
+        "aud:xrd3",
+        "aud:xrd4",
+        "aud:teapot1",
+        "aud:teapot2",
+        "aud:esgf3.dkrz.de",
+        "aud:ftp.ebi.ac.uk"
       ],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true",
@@ -102,7 +138,9 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "defaultClientScopes": [ "aud:xrd3" ],
+      "defaultClientScopes": [
+        "aud:xrd3"
+      ],
       "optionalClientScopes": [],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true"
@@ -122,7 +160,9 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "defaultClientScopes": [ "aud:xrd4" ],
+      "defaultClientScopes": [
+        "aud:xrd4"
+      ],
       "optionalClientScopes": [],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true"
@@ -142,7 +182,9 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "defaultClientScopes": [ "aud:teapot1" ],
+      "defaultClientScopes": [
+        "aud:teapot1"
+      ],
       "optionalClientScopes": [],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true"
@@ -162,7 +204,53 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "defaultClientScopes": [ "aud:teapot2" ],
+      "defaultClientScopes": [
+        "aud:teapot2"
+      ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
+    },
+    {
+      "clientId": "esgf3.dkrz.de",
+      "name": "esgf3.dkrz.de public RI source (token-exchange audience target)",
+      "description": "Registered so tokens for the public source esgf3.dkrz.de carry aud=esgf3.dkrz.de. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "esgf3.dkrz.de-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "aud:esgf3.dkrz.de"
+      ],
+      "optionalClientScopes": [],
+      "attributes": {
+        "token.exchange.standard.flow.enabled": "true"
+      }
+    },
+    {
+      "clientId": "ftp.ebi.ac.uk",
+      "name": "ftp.ebi.ac.uk public RI source (token-exchange audience target)",
+      "description": "Registered so tokens for the public source ftp.ebi.ac.uk carry aud=ftp.ebi.ac.uk. Not used for interactive login.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ftp.ebi.ac.uk-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "aud:ftp.ebi.ac.uk"
+      ],
       "optionalClientScopes": [],
       "attributes": {
         "token.exchange.standard.flow.enabled": "true"
@@ -179,17 +267,28 @@
       "email": "randomaccount@rucio",
       "emailVerified": true,
       "requiredActions": [],
-      "realmRoles": [ "offline_access" ],
-      "credentials": [
-        { "type": "password", "value": "secret", "temporary": false }
+      "realmRoles": [
+        "offline_access"
       ],
-      "groups": [ "/rucio/users", "/atlas/users" ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/rucio/users",
+        "/atlas/users"
+      ],
       "attributes": {
         "entitlements": [
           "urn:example:aai.example.org:group:rucio-users:role=member",
           "urn:example:aai.example.org:group:atlas-users:role=member"
         ],
-        "acr": ["https://refeds.org/profile/mfa"]
+        "acr": [
+          "https://refeds.org/profile/mfa"
+        ]
       }
     },
     {
@@ -201,62 +300,115 @@
       "email": "admin@rucio",
       "emailVerified": true,
       "requiredActions": [],
-      "realmRoles": [ "offline_access" ],
-      "credentials": [
-        { "type": "password", "value": "admin123", "temporary": false }
+      "realmRoles": [
+        "offline_access"
       ],
-      "groups": [ "/rucio/admins", "/atlas/production" ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/rucio/admins",
+        "/atlas/production"
+      ],
       "attributes": {
         "entitlements": [
           "urn:example:aai.example.org:group:rucio-admins:role=member",
           "urn:example:aai.example.org:group:atlas-production:role=member"
         ],
-        "acr": ["https://refeds.org/profile/mfa"]
+        "acr": [
+          "https://refeds.org/profile/mfa"
+        ]
       }
     },
     {
       "username": "depoperator",
       "id": "9a1c2e4d-6b3f-4a8e-9d5c-1f7a3b5e8c2d",
       "enabled": true,
-      "firstName": "DEP", "lastName": "Operator",
-      "email": "depoperator@rucio", "emailVerified": true,
+      "firstName": "DEP",
+      "lastName": "Operator",
+      "email": "depoperator@rucio",
+      "emailVerified": true,
       "requiredActions": [],
-      "realmRoles": ["offline_access"],
-      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "realmRoles": [
+        "offline_access"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
       "groups": [],
       "attributes": {
-        "entitlements": ["urn:example:aai.example.org:group:dep-operator:role=member"],
-        "acr": ["https://refeds.org/profile/mfa"]
+        "entitlements": [
+          "urn:example:aai.example.org:group:dep-operator:role=member"
+        ],
+        "acr": [
+          "https://refeds.org/profile/mfa"
+        ]
       }
     },
     {
       "username": "dependuser",
       "id": "3e7b9f1a-2c4d-4e6f-8a0b-5d9c3e7f1a2b",
       "enabled": true,
-      "firstName": "DEP", "lastName": "End User",
-      "email": "dependuser@rucio", "emailVerified": true,
+      "firstName": "DEP",
+      "lastName": "End User",
+      "email": "dependuser@rucio",
+      "emailVerified": true,
       "requiredActions": [],
-      "realmRoles": ["offline_access"],
-      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "realmRoles": [
+        "offline_access"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
       "groups": [],
       "attributes": {
-        "entitlements": ["urn:example:aai.example.org:group:dep-end-user:role=member"],
-        "acr": ["https://refeds.org/profile/mfa"]
+        "entitlements": [
+          "urn:example:aai.example.org:group:dep-end-user:role=member"
+        ],
+        "acr": [
+          "https://refeds.org/profile/mfa"
+        ]
       }
     },
     {
       "username": "modeldeveloper",
       "id": "6d4a8c2e-9f1b-4c3d-a7e5-2b8f4d6a9c1e",
       "enabled": true,
-      "firstName": "Model", "lastName": "Developer",
-      "email": "modeldeveloper@rucio", "emailVerified": true,
+      "firstName": "Model",
+      "lastName": "Developer",
+      "email": "modeldeveloper@rucio",
+      "emailVerified": true,
       "requiredActions": [],
-      "realmRoles": ["offline_access"],
-      "credentials": [{ "type": "password", "value": "secret", "temporary": false }],
+      "realmRoles": [
+        "offline_access"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "secret",
+          "temporary": false
+        }
+      ],
       "groups": [],
       "attributes": {
-        "entitlements": ["urn:example:aai.example.org:group:model-developer:role=member"],
-        "acr": ["https://refeds.org/profile/mfa"]
+        "entitlements": [
+          "urn:example:aai.example.org:group:model-developer:role=member"
+        ],
+        "acr": [
+          "https://refeds.org/profile/mfa"
+        ]
       }
     },
     {
@@ -349,15 +501,42 @@
         }
       ]
     },
-    { "name": "fts", "protocol": "openid-connect" },
-    { "name": "pep:rucio", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" } },
-    { "name": "storage.read", "protocol": "openid-connect" },
-    { "name": "storage.modify", "protocol": "openid-connect" },
-    { "name": "storage.read:/data", "protocol": "openid-connect" },
-    { "name": "storage.modify:/data", "protocol": "openid-connect" },
-    { "name": "storage.read:/", "protocol": "openid-connect" },
-    { "name": "storage.modify:/", "protocol": "openid-connect" },
-
+    {
+      "name": "fts",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "pep:rucio",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "storage.read",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "storage.modify",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "storage.read:/data",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "storage.modify:/data",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "storage.read:/",
+      "protocol": "openid-connect"
+    },
+    {
+      "name": "storage.modify:/",
+      "protocol": "openid-connect"
+    },
     {
       "name": "aud:fts",
       "description": "Adds fts to the token's aud claim. Request alongside 'fts' scope to get an FTS-submission token.",
@@ -464,7 +643,7 @@
       ]
     },
     {
-     "name": "aud:rucio",
+      "name": "aud:rucio",
       "description": "Adds rucio to the token's aud claim. Required so a subject token satisfies the Rucio server's expected_audience gate in get_token_for_account_operation.",
       "protocol": "openid-connect",
       "attributes": {
@@ -478,6 +657,48 @@
           "protocolMapper": "oidc-audience-mapper",
           "config": {
             "included.custom.audience": "rucio",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud:esgf3.dkrz.de",
+      "description": "Adds esgf3.dkrz.de to the token's aud claim (public RI source, test_rucio_public_ri.py).",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-esgf3.dkrz.de",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "esgf3.dkrz.de",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud:ftp.ebi.ac.uk",
+      "description": "Adds ftp.ebi.ac.uk to the token's aud claim (public RI source, test_rucio_public_ri.py).",
+      "protocol": "openid-connect",
+      "attributes": {
+        "display.on.consent.screen": "false",
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-ftp.ebi.ac.uk",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "ftp.ebi.ac.uk",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }

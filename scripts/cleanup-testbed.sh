@@ -34,7 +34,7 @@ ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$
 # Testbed's known RSEs — sandbox internal + validation-storage external.
 # Harmless to reference ones that don't exist for this run (guarded
 # throughout), so this list is deliberately the union of both.
-ALL_RSES=(XRD3 XRD4 TEAPOT1 TEAPOT2 COPERNICUS_S3)
+ALL_RSES=(XRD3 XRD4 TEAPOT1 TEAPOT2 COPERNICUS_S3 ENES_DKRZ EBI_BIA_BIOSTUDIES)
 
 # Scopes the testbed's own test suites write into — matches
 # test_rucio_transfers.py's SCOPE="ddmlab" and init-testbed.sh's
@@ -100,6 +100,8 @@ delete_rse_distances() {
         "TEAPOT1 TEAPOT2" "TEAPOT2 TEAPOT1"
         "XRD3 TEAPOT1" "TEAPOT1 XRD3"
         "COPERNICUS_S3 TEAPOT2" "COPERNICUS_S3 XRD4"
+        "ENES_DKRZ TEAPOT1" "ENES_DKRZ XRD3"
+        "EBI_BIA_BIOSTUDIES TEAPOT1" "EBI_BIA_BIOSTUDIES XRD3"
     )
     for pair in "${pairs[@]}"; do
         read -r src dst <<< "$pair"

@@ -25,6 +25,15 @@ KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
 
+# Same endpoints as ENES_DKRZ / EBI_BIA_BIOSTUDIES on the CERN RI-SCALE instance:
+# plain HTTPS download servers (GET/HEAD only, no WebDAV). Each host also has a
+# Keycloak client and aud:<host> scope in the realm import, and is a
+# token-exchange target. Opt-in: PUBLIC_RI=1.
+PUBLIC_RI_RSES=(
+    "ENES_DKRZ:esgf3.dkrz.de:/thredds/fileServer/cmip6"
+    "EBI_BIA_BIOSTUDIES:ftp.ebi.ac.uk:/biostudies/fire/S-BIAD"
+)
+
 SCOPE_PROFILE="${SCOPE_PROFILE:-local}"
 
 OIDC_ISSUER="${OIDC_ISSUER:-https://keycloak:8443/realms/rucio}"
@@ -577,10 +586,13 @@ configure_rses() {
             --impl rucio.rse.protocols.gfal.Default \
             --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
 
+        # https is second choice for third-party copies: Rucio only submits
+        # with tokens over davs, and https sources (public RI) would else
+        # pull the destination onto https as well.
         ra rse add-protocol "$rse" --scheme https \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":2}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":2,"third_party_copy_write":2},"lan":{"read":1,"write":1,"delete":2}}' || true
     done
     ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
     ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
@@ -695,6 +707,53 @@ CONF"
 
     echo "  Restarting fts to pick up new cloud_storage entry..."
     _restart fts
+}
+
+# ── Public RI holdings (read-only sources from the CERN RI-SCALE instance) ──
+configure_public_ri_rses() {
+    if [ "${PUBLIC_RI:-0}" != "1" ]; then
+        echo "=== Public RI RSEs skipped (PUBLIC_RI not set) ==="
+        return 0
+    fi
+    echo "=== Configuring public RI source RSEs ==="
+
+    # Tokens are all or nothing per job: without oidc_support the job falls
+    # back to X.509 (no delegation here). Rucio derives a token's audience
+    # and scope from davs protocols only, so each RSE also gets a davs
+    # protocol ranked below https (priority 9; 0 would sort first). With
+    # oidc_base_path set to the prefix the token is aud=<host> (realm scope
+    # aud:<host>), scope=storage.read:/. The anonymous source ignores it.
+    # Transfers use https: gfal2 stats davs sources with PROPFIND (405 here).
+    local resource_param
+    resource_param=$(_cap "client_credentials.resource_param" "false")
+
+    local entry rse host prefix dest acct
+    for entry in "${PUBLIC_RI_RSES[@]}"; do
+        IFS=: read -r rse host prefix <<< "$entry"
+        ra rse add --non-deterministic "$rse" || true
+        ra rse set-attribute --rse "$rse" --key fts             --value "$FTS_OIDC"
+        ra rse set-attribute --rse "$rse" --key oidc_support    --value True
+        ra rse set-attribute --rse "$rse" --key oidc_base_path  --value "$prefix"
+        if [ "$resource_param" = "true" ]; then
+            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}/"
+        fi
+        ra rse set-attribute --rse "$rse" --key verify_checksum --value False
+        ra rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
+            --prefix "$prefix" \
+            --impl rucio.rse.protocols.gfal.Default \
+            --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
+        # Trailing slash: minus oidc_base_path it leaves "/" (scope storage.read:/).
+        ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 443 \
+            --prefix "$prefix/" \
+            --impl rucio.rse.protocols.gfal.Default \
+            --domain-json '{"wan":{"read":9,"write":0,"delete":0,"third_party_copy_read":9,"third_party_copy_write":0},"lan":{"read":9,"write":0,"delete":0}}' || true
+        for dest in TEAPOT1 XRD3; do
+            ra rse add-distance "$rse" "$dest" --distance 1 || true
+        done
+        for acct in root ddmlab randomaccount; do
+            ra account set-limits "$acct" "$rse" -1 || true
+        done
+    done
 }
 
 # ── External validation-storage RSEs (see modules/validation-storage) ────
@@ -887,8 +946,18 @@ grant_token_exchange() {
     requester_uuids_json=$(printf '"%s",' "${requester_uuids[@]}")
     requester_uuids_json="[${requester_uuids_json%,}]"
 
+    # Public RI hosts become exchange targets too: FTS exchanges the source
+    # token for an audience named after the storage host.
+    local targets=( "${EXCHANGE_TARGETS[@]}" ) entry rse host prefix
+    if [ "${PUBLIC_RI:-0}" = "1" ]; then
+        for entry in "${PUBLIC_RI_RSES[@]}"; do
+            IFS=: read -r rse host prefix <<< "$entry"
+            targets+=( "$host" )
+        done
+    fi
+
     local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
-    for target in "${EXCHANGE_TARGETS[@]}"; do
+    for target in "${targets[@]}"; do
         echo "  === target: $target ==="
 
         target_uuid=$(_kc get clients -r "$KC_REALM" \
@@ -1006,6 +1075,7 @@ main() {
 
     configure_s3_source_rse
     configure_fts_cloud_storage
+    configure_public_ri_rses
 
     setup_scopes_and_quotas
     setup_fts_oidc_provider

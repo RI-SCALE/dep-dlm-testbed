@@ -41,6 +41,7 @@ Testbed side:
 
 ## 5. Research infrastructure adoption
 
-- [ ] Third-party copies from public RI holdings on the CERN RI-SCALE instance (ENES_*, EBI_BIA_*, EISCAT_WEBDAV): pick small public datasets, check which token issuer/audience or X.509 identity the sources accept and which CA bundle FTS needs; replicate into the testbed's own storage, Compose first, then CI. MUSICA_* and TUBITAK_WEBDAV as destinations later
+- [ ] Third-party copies from public RI holdings (ENES_DKRZ, EBI_BIA_BIOSTUDIES; anonymous HTTPS, same endpoints as on the CERN RI-SCALE instance): one small file per RI replicated into the testbed's own storage (`make test-public-ri-transfers`), Compose first, then CI; settle which CA bundle FTS and Teapot need for public endpoints
+- [ ] Third-party copies from token-protected RI holdings (EISCAT_WEBDAV, Teapot): clarify the accepted issuer/audience, then the same test with a token-capable source. MUSICA_* and TUBITAK_WEBDAV as destinations later
 - [ ] **Optional:** use cases register further RSEs for their data holdings ([runbook 03](docs/runbooks/03-bring-your-own-storage.md)); sensitive/personal holdings (e.g. BBMRI): real destination in CI, synthetic source from the testbed's own storage
 - [ ] Partner integration and operational handover

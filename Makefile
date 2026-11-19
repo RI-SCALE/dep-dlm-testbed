@@ -49,6 +49,9 @@ FLUX_NAMESPACE ?= flux-system
 S3_ACCESS_KEY ?=
 S3_SECRET_KEY ?=
 
+# Public RI holdings (ENES_DKRZ, EBI_BIA_BIOSTUDIES): read-only source RSEs, opt-in
+PUBLIC_RI ?= 0
+
 # OIDC provider (env-overridable; empty = use test defaults / Keycloak)
 OIDC_ISSUER           ?=
 OIDC_TOKEN_URL        ?=
@@ -359,13 +362,14 @@ patches-check: patches ## Fail if patched files changed without regenerating dif
 certs: ## Generate CA and host certificates
 	./scripts/generate-certs.sh
 
-init: ## Init testbed accounts, RSEs, OIDC seed
+init: ## Init testbed accounts, RSEs, OIDC seed (PUBLIC_RI=1 adds public RI source RSEs)
 	@$(TEST_OIDC_ENV) \
 	SCOPE_PROFILE=$(SCOPE_PROFILE) TOKEN_MODE=$(TOKEN_MODE) \
 	RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) GITOPS_ENV=$(GITOPS_ENV) \
 	RUCIO_DB_HOST='$(RUCIO_DB_HOST)' RUCIO_DB_PASSWORD='$(RUCIO_DB_PASSWORD)' \
 	S3_ACCESS_KEY='$(S3_ACCESS_KEY)' \
 	S3_SECRET_KEY='$(S3_SECRET_KEY)' \
+	PUBLIC_RI='$(PUBLIC_RI)' \
 	./scripts/init-testbed.sh
 
 .PHONY: vendor-opa-ri-scale
@@ -607,6 +611,10 @@ obs-gcm-dashboards: ## Convert Grafana dashboards to Cloud Monitoring JSON
 
 test-rucio-transfers: ## Rucio E2E transfer test
 	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+
+.PHONY: test-public-ri-transfers
+test-public-ri-transfers: ## Rucio E2E copies from public RI holdings (ENES, EBI) into testbed storage. Needs `make init PUBLIC_RI=1`.
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) PUBLIC_RI=1 DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_public_ri.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
