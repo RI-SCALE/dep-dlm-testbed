@@ -20,7 +20,6 @@ AUTHZ_TEST_USERS=(
     "modeldeveloper:secret:modeldeveloper"
 )
 
-KCADM="/opt/keycloak/bin/kcadm.sh"
 KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
@@ -145,9 +144,50 @@ _psql() {
 
 # ── Service URLs ─────────────────────────────────────────────────
 
-ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
+# rucio-admin calls are queued and run in batches: ra_flush sends the queue
+# in ONE exec into rucio-server, where one Python process runs rucio-admin
+# per command (runpy). One interpreter start and one exec per init step
+# instead of one per call, which matters most on k8s (kubectl exec).
+#   ra    <args>  must succeed: a failure stops init, as before
+#   ra_ok <args>  failure tolerated (was: ra <args> || true)
+# step() flushes after every init step, so later steps see the results.
+RA_QUEUE=()
 
-_kc() { _exec keycloak "$KCADM" "$@"; }
+_ra_enqueue() {
+    local strict=$1 a line=""; shift
+    for a in "$@"; do line+=" b$(printf '%s' "$a" | base64 | tr -d '\n')"; done
+    RA_QUEUE+=("${strict}${line}")
+}
+
+ra()    { _ra_enqueue 1 "$@"; }
+ra_ok() { _ra_enqueue 0 "$@"; }
+
+_RA_BATCH_RUNNER='
+import base64, runpy, shutil, sys
+path = shutil.which("rucio-admin")
+lines = sys.argv[1:]
+for line in lines:
+    strict, *enc = line.split()
+    args = [base64.b64decode(e[1:]).decode() for e in enc]
+    sys.argv = ["rucio-admin", "-S", "userpass", "-u", "ddmlab", "--password", "secret", *args]
+    try:
+        runpy.run_path(path, run_name="__main__")
+        code = 0
+    except SystemExit as e:
+        code = 0 if e.code is None else (e.code if isinstance(e.code, int) else 1)
+    if code and strict == "1":
+        print("  ✗ rucio-admin " + " ".join(args) + " failed (" + str(code) + ")", file=sys.stderr)
+        sys.exit(code)
+print("  ✓ " + str(len(lines)) + " rucio-admin call(s) in one process")
+'
+
+ra_flush() {
+    [ "${#RA_QUEUE[@]}" -eq 0 ] && return 0
+    local queue=("${RA_QUEUE[@]}")
+    RA_QUEUE=()
+    _exec rucio-server python3 -c "$_RA_BATCH_RUNNER" "${queue[@]}"
+}
+
 
 _fts_admin() {
     local attempt rc
@@ -206,18 +246,18 @@ wait_for_infrastructure() {
 setup_accounts_and_identities() {
     echo "=== Configuring Rucio Accounts ==="
 
-    ra account add --type SERVICE --email ddmlab@rucio ddmlab || true
-    ra identity add --type USERPASS --id ddmlab --email ddmlab@rucio \
-        --account ddmlab --password secret || true
-    ra account add-attribute ddmlab --key admin --value True || true
-    ra account update --account ddmlab --key type --value SERVICE || true
-    ra account add --type USER --email randomaccount@rucio randomaccount || true
-    ra account add-attribute randomaccount --key admin --value True || true
+    ra_ok account add --type SERVICE --email ddmlab@rucio ddmlab
+    ra_ok identity add --type USERPASS --id ddmlab --email ddmlab@rucio \
+        --account ddmlab --password secret
+    ra_ok account add-attribute ddmlab --key admin --value True
+    ra_ok account update --account ddmlab --key type --value SERVICE
+    ra_ok account add --type USER --email randomaccount@rucio randomaccount
+    ra_ok account add-attribute randomaccount --key admin --value True
 
-    ra account add --type USER --email adminuser@rucio adminuser || true
-    ra account add --type USER --email depoperator@rucio depoperator || true
-    ra account add --type USER --email dependuser@rucio dependuser || true
-    ra account add --type USER --email modeldeveloper@rucio modeldeveloper || true
+    ra_ok account add --type USER --email adminuser@rucio adminuser
+    ra_ok account add --type USER --email depoperator@rucio depoperator
+    ra_ok account add --type USER --email dependuser@rucio dependuser
+    ra_ok account add --type USER --email modeldeveloper@rucio modeldeveloper
 
     local grant_mode
     grant_mode=$(_grant_mode_for_profile)
@@ -550,7 +590,7 @@ configure_rses() {
     for rse in XRD3 XRD4; do
         local host
         host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
+        ra_ok rse add "$rse"
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
@@ -560,18 +600,18 @@ configure_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
+        ra_ok rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance XRD3 XRD4 --distance 1 || true
-    ra rse add-distance XRD4 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 XRD4 --distance 1
+    ra_ok rse add-distance XRD4 XRD3 --distance 1
 
     for rse in TEAPOT1 TEAPOT2; do
         local instance
         instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
+        ra_ok rse add "$rse"
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
@@ -581,24 +621,24 @@ configure_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "$instance"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
 
         # https is second choice for third-party copies: Rucio only submits
         # with tokens over davs, and https sources (public RI) would else
         # pull the destination onto https as well.
-        ra rse add-protocol "$rse" --scheme https \
+        ra_ok rse add-protocol "$rse" --scheme https \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":2,"third_party_copy_write":2},"lan":{"read":1,"write":1,"delete":2}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":2,"third_party_copy_write":2},"lan":{"read":1,"write":1,"delete":2}}'
     done
-    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
-    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+    ra_ok rse add-distance TEAPOT1 TEAPOT2 --distance 1
+    ra_ok rse add-distance TEAPOT2 TEAPOT1 --distance 1
 
-    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
-    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 TEAPOT1 --distance 1
+    ra_ok rse add-distance TEAPOT1 XRD3 --distance 1
 }
 
 # ── S3 source RSE ──
@@ -615,22 +655,22 @@ configure_s3_source_rse() {
 
     echo "=== Configuring S3 source RSE (COPERNICUS_S3) → s3s://${s3_endpoint}/${s3_bucket}/ ==="
 
-    ra rse add --non-deterministic COPERNICUS_S3 || true
+    ra_ok rse add --non-deterministic COPERNICUS_S3
     ra rse set-attribute --rse COPERNICUS_S3 --key fts             --value "$FTS_OIDC"
     ra rse set-attribute --rse COPERNICUS_S3 --key verify_checksum --value False
 
-    ra rse add-protocol COPERNICUS_S3 --scheme s3s \
+    ra_ok rse add-protocol COPERNICUS_S3 --scheme s3s \
         --hostname "${s3_endpoint}" --port 443 \
         --prefix "/${s3_bucket}" \
         --impl rucio.rse.protocols.gfal.Default \
-        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
+        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
 
-    ra rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1 || true
-    ra rse add-distance COPERNICUS_S3 XRD4    --distance 1 || true
+    ra_ok rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1
+    ra_ok rse add-distance COPERNICUS_S3 XRD4    --distance 1
 
     local acct
     for acct in root ddmlab randomaccount; do
-        ra account set-limits "$acct" COPERNICUS_S3 -1 || true
+        ra_ok account set-limits "$acct" COPERNICUS_S3 -1
     done
 }
 
@@ -727,7 +767,7 @@ configure_public_ri_rses() {
     local entry rse host prefix dest acct
     for entry in "${PUBLIC_RI_RSES[@]}"; do
         IFS=: read -r rse host prefix <<< "$entry"
-        ra rse add --non-deterministic "$rse" || true
+        ra_ok rse add --non-deterministic "$rse"
         ra rse set-attribute --rse "$rse" --key fts             --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support    --value True
         ra rse set-attribute --rse "$rse" --key oidc_base_path  --value "$prefix"
@@ -735,20 +775,20 @@ configure_public_ri_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "https://teapot1.example.org/"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
+        ra_ok rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
             --prefix "$prefix" \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
+            --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
         # Trailing slash: minus oidc_base_path it leaves "/" (scope storage.read:/).
-        ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 443 \
+        ra_ok rse add-protocol "$rse" --scheme davs --hostname "$host" --port 443 \
             --prefix "$prefix/" \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":9,"write":0,"delete":0,"third_party_copy_read":9,"third_party_copy_write":0},"lan":{"read":9,"write":0,"delete":0}}' || true
+            --domain-json '{"wan":{"read":9,"write":0,"delete":0,"third_party_copy_read":9,"third_party_copy_write":0},"lan":{"read":9,"write":0,"delete":0}}'
         for dest in TEAPOT1 XRD3; do
-            ra rse add-distance "$rse" "$dest" --distance 1 || true
+            ra_ok rse add-distance "$rse" "$dest" --distance 1
         done
         for acct in root ddmlab randomaccount; do
-            ra account set-limits "$acct" "$rse" -1 || true
+            ra_ok account set-limits "$acct" "$rse" -1
         done
     done
 }
@@ -776,8 +816,8 @@ configure_validation_storage_rses() {
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         local host
         host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
-        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra_ok rse add "$rse"
+        ra_ok rse set-attribute --rse "$rse" --key "$rse" --value True
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
@@ -787,21 +827,21 @@ configure_validation_storage_rses() {
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
         fi
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance XRD3 XRD4 --distance 1 || true
-    ra rse add-distance XRD4 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 XRD4 --distance 1
+    ra_ok rse add-distance XRD4 XRD3 --distance 1
 
     # Teapot/WebDAV side — ports 8081/8082
     for rse_port in "TEAPOT1:8081" "TEAPOT2:8082"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         local instance
         instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
-        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra_ok rse add "$rse"
+        ra_ok rse set-attribute --rse "$rse" --key "$rse" --value True
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
@@ -811,21 +851,21 @@ configure_validation_storage_rses() {
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${instance}"
         fi
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
-    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+    ra_ok rse add-distance TEAPOT1 TEAPOT2 --distance 1
+    ra_ok rse add-distance TEAPOT2 TEAPOT1 --distance 1
 
-    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
-    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 TEAPOT1 --distance 1
+    ra_ok rse add-distance TEAPOT1 XRD3 --distance 1
 
     local acct
     for acct in root ddmlab randomaccount; do
         for rse in XRD3 XRD4 TEAPOT1 TEAPOT2; do
-            ra account set-limits "$acct" "$rse" -1 || true
+            ra_ok account set-limits "$acct" "$rse" -1
         done
     done
 }
@@ -892,56 +932,96 @@ setup_scopes_and_quotas() {
     # admins (depoperator with MFA, accounts in admin_accounts) may do
     # everything. Register shared data once, in one scope — a second scope
     # for the same files would only create duplicate catalog entries.
-    ra scope add --account root --scope test || true
-    ra scope add --account ddmlab --scope ddmlab || true
-    ra scope add --account randomaccount --scope randomaccount || true
-    ra scope add --account dependuser --scope dependuser || true
-    ra scope add --account modeldeveloper --scope modeldeveloper || true
+    ra_ok scope add --account root --scope test
+    ra_ok scope add --account ddmlab --scope ddmlab
+    ra_ok scope add --account randomaccount --scope randomaccount
+    ra_ok scope add --account dependuser --scope dependuser
+    ra_ok scope add --account modeldeveloper --scope modeldeveloper
 
     for rse in XRD3 XRD4; do
-        ra account set-limits root "$rse" -1 || true
-        ra account set-limits randomaccount "$rse" -1 || true
-        ra account set-limits ddmlab "$rse" -1 || true
-        ra account set-limits dependuser "$rse" -1 || true
-        ra account set-limits modeldeveloper "$rse" -1 || true
+        ra_ok account set-limits root "$rse" -1
+        ra_ok account set-limits randomaccount "$rse" -1
+        ra_ok account set-limits ddmlab "$rse" -1
+        ra_ok account set-limits dependuser "$rse" -1
+        ra_ok account set-limits modeldeveloper "$rse" -1
     done
 
     for rse in TEAPOT1 TEAPOT2; do
-        ra account set-limits root "$rse" -1 || true
-        ra account set-limits randomaccount "$rse" -1 || true
-        ra account set-limits ddmlab "$rse" -1 || true
-        ra account set-limits dependuser "$rse" -1 || true
-        ra account set-limits modeldeveloper "$rse" -1 || true
+        ra_ok account set-limits root "$rse" -1
+        ra_ok account set-limits randomaccount "$rse" -1
+        ra_ok account set-limits ddmlab "$rse" -1
+        ra_ok account set-limits dependuser "$rse" -1
+        ra_ok account set-limits modeldeveloper "$rse" -1
     done
 }
 
-# ── Token-exchange grant (merged from grant-token-exchange.sh) ────
+# ── Token-exchange grant ─────────────────────────────────────────
+# Lets the requesters (fts, rucio) exchange tokens for each target audience:
+# per target, enable fine-grained permissions, bind a client policy with the
+# requesters to its token-exchange permission. Keycloak admin REST from one
+# Python process inside rucio-server (kcadm would start one JVM per call).
+_KC_GRANT_EXCHANGE='
+import json, os, re, sys, urllib.error, urllib.parse, urllib.request
+
+KC, REALM = os.environ["KC_URL"].rstrip("/"), os.environ["KC_REALM"]
+TOKEN = None
+
+def call(method, path, body=None, form=None, allow=()):
+    headers, data = {}, None
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+    elif body is not None:
+        data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
+    if TOKEN:
+        headers["Authorization"] = "Bearer " + TOKEN
+    req = urllib.request.Request(KC + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req) as r:
+            raw = r.read()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        if e.code in allow:
+            return None
+        sys.exit("  ✗ %s %s: HTTP %s %s" % (method, path, e.code, e.read().decode()[:200]))
+
+def client_uuid(client_id):
+    found = [c for c in call("GET", "/admin/realms/%s/clients?clientId=%s" % (REALM, client_id))
+             if c["clientId"] == client_id]
+    if not found:
+        sys.exit("  ✗ client %r not found (is it in the realm import?)" % client_id)
+    return found[0]["id"]
+
+TOKEN = call("POST", "/realms/master/protocol/openid-connect/token", form={
+    "grant_type": "password", "client_id": "admin-cli",
+    "username": "admin", "password": "admin"})["access_token"]
+
+requesters = [client_uuid(c) for c in os.environ["REQUESTERS"].split()]
+authz = "/admin/realms/%s/clients/%s/authz/resource-server" % (REALM, client_uuid("realm-management"))
+
+for target in os.environ["TARGETS"].split():
+    perms = call("PUT", "/admin/realms/%s/clients/%s/management/permissions"
+                 % (REALM, client_uuid(target)), {"enabled": True})
+    perm_id = perms["scopePermissions"]["token-exchange"]
+
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", "exchange-to-" + target)
+    policy = {"type": "client", "name": name, "logic": "POSITIVE", "clients": requesters}
+    call("POST", authz + "/policy/client", policy, allow=(409,))  # 409: exists, updated below
+    policy["id"] = [x for x in call("GET", authz + "/policy?" + urllib.parse.urlencode({"name": name}))
+                    if x["name"] == name][0]["id"]
+    call("PUT", authz + "/policy/client/" + policy["id"], policy)
+
+    perm = call("GET", authz + "/permission/scope/" + perm_id)
+    perm["policies"] = [policy["id"]]
+    call("PUT", authz + "/permission/scope/" + perm_id, perm)
+    print("  ✓ %s: policy %s bound to token-exchange" % (target, name))
+'
+
 grant_token_exchange() {
     if [ "${SCOPE_PROFILE:-local}" != "local" ]; then
         echo "  ✗ grant_token_exchange requires SCOPE_PROFILE=local (local Keycloak) — got '${SCOPE_PROFILE}'" >&2
         return 0
     fi
     echo "=== Granting token-exchange permissions ==="
-
-    _kc config credentials \
-        --server http://localhost:8080 \
-        --realm master --user admin --password admin
-
-    local rc uuid
-    local requester_uuids=()
-    for rc in "${EXCHANGE_REQUESTERS[@]}"; do
-        uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId="$rc" --fields id --format csv --noquotes | tr -d '\r')
-        if [ -z "$uuid" ]; then
-            echo "  ERROR: requester client '$rc' not found" >&2
-            exit 1
-        fi
-        echo "  requester $rc UUID: $uuid"
-        requester_uuids+=( "$uuid" )
-    done
-    local requester_uuids_json
-    requester_uuids_json=$(printf '"%s",' "${requester_uuids[@]}")
-    requester_uuids_json="[${requester_uuids_json%,}]"
 
     # Public RI hosts become exchange targets too: FTS exchanges the source
     # token for an audience named after the storage host.
@@ -951,61 +1031,10 @@ grant_token_exchange() {
         targets+=( "$host" )
     done
 
-    local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
-    for target in "${targets[@]}"; do
-        echo "  === target: $target ==="
-
-        target_uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId="$target" --fields id --format csv --noquotes | tr -d '\r')
-        if [ -z "$target_uuid" ]; then
-            echo "  ERROR: target client '$target' not found — is it imported?" >&2
-            exit 1
-        fi
-        echo "    target UUID: $target_uuid"
-
-        _kc update "clients/$target_uuid/management/permissions" -r "$KC_REALM" \
-            -s enabled=true
-        echo "    management permissions enabled"
-
-        rm_uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId=realm-management --fields id --format csv --noquotes | tr -d '\r')
-
-        policy_name="exchange-to-${target}"
-        policy_name=$(echo "$policy_name" | tr -c 'A-Za-z0-9_.-' '_')
-
-        echo "    creating client policy: $policy_name  members=$requester_uuids_json"
-        _kc create "clients/$rm_uuid/authz/resource-server/policy/client" -r "$KC_REALM" \
-            -s "name=$policy_name" \
-            -s "clients=$requester_uuids_json" \
-            -s "logic=POSITIVE" \
-            || echo "    (policy may already exist — updating it instead)"
-
-        policy_id=$(_kc get \
-            "clients/$rm_uuid/authz/resource-server/policy?name=$policy_name" \
-            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
-
-        if [ -n "$policy_id" ]; then
-            _kc update \
-                "clients/$rm_uuid/authz/resource-server/policy/client/$policy_id" \
-                -r "$KC_REALM" -s "clients=$requester_uuids_json" \
-                || echo "    (could not update policy membership — check manually)"
-        fi
-
-        perm_name="token-exchange.permission.client.$target_uuid"
-        perm_id=$(_kc get \
-            "clients/$rm_uuid/authz/resource-server/permission?name=$perm_name" \
-            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
-
-        if [ -z "$perm_id" ] || [ -z "$policy_id" ]; then
-            echo "  ERROR: could not resolve perm_id ($perm_id) or policy_id ($policy_id)." >&2
-            exit 1
-        fi
-
-        _kc update \
-            "clients/$rm_uuid/authz/resource-server/permission/scope/$perm_id" \
-            -r "$KC_REALM" -s "policies=[\"$policy_id\"]"
-        echo "    policy bound to token-exchange permission"
-    done
+    _exec rucio-server env \
+        KC_URL="${KC_ADMIN_URL:-http://keycloak:8080}" KC_REALM="$KC_REALM" \
+        REQUESTERS="${EXCHANGE_REQUESTERS[*]}" TARGETS="${targets[*]}" \
+        python3 -c "$_KC_GRANT_EXCHANGE"
 }
 
 # ── Token-exchange self-test (optional, gated) ───────────────────
@@ -1043,40 +1072,42 @@ verify_token_exchange() {
     done
 }
 
+step() { local t=$SECONDS; "$@"; ra_flush || exit $?; echo "  ⏱ $1: $((SECONDS - t)) s"; }
+
 # ── Main ──────────────────────────────────────────────────────────
 
 main() {
-    wait_for_infrastructure
-    setup_accounts_and_identities
+    step wait_for_infrastructure
+    step setup_accounts_and_identities
 
     # Managed mode: Rucio exchanges each account's subject token for storage
     # tokens, so seed them in every environment, not just the sandbox.
     if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
         if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
-            grant_token_exchange
+            step grant_token_exchange
         fi
-        seed_subject_tokens
+        step seed_subject_tokens
     fi
 
     if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
         # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2, in-cluster
         # ruciodb session-token maintenance, authz test identities.
-        configure_rses
-        cleanup_session_tokens
-        setup_authz_test_identities
+        step configure_rses
+        step cleanup_session_tokens
+        step setup_authz_test_identities
     else
-        configure_validation_storage_rses
+        step configure_validation_storage_rses
     fi
 
-    configure_s3_source_rse
-    configure_fts_cloud_storage
-    configure_public_ri_rses
+    step configure_s3_source_rse
+    step configure_fts_cloud_storage
+    step configure_public_ri_rses
 
-    setup_scopes_and_quotas
-    setup_fts_oidc_provider
-    assert_identities_unambiguous
+    step setup_scopes_and_quotas
+    step setup_fts_oidc_provider
+    step assert_identities_unambiguous
 
-    echo -e "\n=== Initialization Complete ==="
+    echo -e "\n=== Initialization Complete (${SECONDS} s) ==="
 }
 
 main

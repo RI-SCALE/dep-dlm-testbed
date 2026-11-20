@@ -374,6 +374,8 @@ rucio-daemons:
 fts:
   enabled: true
   fullnameOverride: fts
+  image:
+    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
   ftsdb:
     enabled: true
     hostname: ftsdb
@@ -764,6 +766,8 @@ xrd4:
 teapot1:
   enabled: true
   fullnameOverride: teapot1
+  image:
+    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
 
   volumes:
     - name: certs
@@ -903,6 +907,8 @@ teapot1:
 teapot2:
   enabled: true
   fullnameOverride: teapot2
+  image:
+    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
 
   volumes:
     - name: certs

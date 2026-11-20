@@ -34,7 +34,6 @@ from conftest import (
     prepare_xrd_dest,
     prepare_xrd_dest_files,
     register_replica,
-    run_daemons,
     seed_and_register_files,
     seed_xrd,
     validate_rule,
@@ -88,8 +87,7 @@ class TestXRootDOIDC:
         register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "XRD4")
 
-        # Advance conveyor pipeline and poll until done
-        run_daemons(RUCIO_SVC)
+        # validate_rule drives the conveyor and polls until done
         validate_rule(rucio_client, rule_id, "XRD3→XRD4 SciTokens", RUCIO_SVC)
 
 
@@ -152,8 +150,7 @@ class TestTeapotOIDC:
         register_replica(rucio_client, "TEAPOT1", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "TEAPOT2")
 
-        # Advance conveyor pipeline and poll until done
-        run_daemons(RUCIO_SVC)
+        # validate_rule drives the conveyor and polls until done
         validate_rule(rucio_client, rule_id, "TEAPOT1→TEAPOT2 WebDAV OIDC", RUCIO_SVC)
 
 
@@ -194,8 +191,7 @@ class TestCrossProtocolOIDC:
         register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "TEAPOT1")
 
-        # Advance conveyor pipeline and poll until done
-        run_daemons(RUCIO_SVC)
+        # validate_rule drives the conveyor and polls until done
         validate_rule(rucio_client, rule_id, "XRD3→TEAPOT1 cross-protocol", RUCIO_SVC)
 
     def test_teapot1_to_xrd3(
@@ -242,8 +238,7 @@ class TestCrossProtocolOIDC:
         register_replica(rucio_client, "TEAPOT1", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "XRD3")
 
-        # Advance conveyor pipeline and poll until done
-        run_daemons(RUCIO_SVC)
+        # validate_rule drives the conveyor and polls until done
         validate_rule(rucio_client, rule_id, "TEAPOT1→XRD3 cross-protocol", RUCIO_SVC)
 
 
@@ -282,7 +277,6 @@ class TestDatasetOIDC:
         log.info("  ✓ Dataset registered")
 
         rule_id = add_rule(rucio_client, SCOPE, dataset, "XRD4")
-        run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "add_dataset XRD3→XRD4", RUCIO_SVC)
 
     def test_add_files_to_dataset(
@@ -311,7 +305,6 @@ class TestDatasetOIDC:
         log.info("  ✓ Files appended")
 
         rule_id = add_rule(rucio_client, SCOPE, dataset, "XRD4")
-        run_daemons(RUCIO_SVC)
         validate_rule(
             rucio_client, rule_id, "add_files_to_dataset XRD3→XRD4", RUCIO_SVC
         )

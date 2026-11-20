@@ -1,4 +1,6 @@
 fullnameOverride: teapot2
+image:
+  tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
 volumes:
   - name: certs
     secret:

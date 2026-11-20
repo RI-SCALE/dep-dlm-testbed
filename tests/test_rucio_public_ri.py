@@ -29,7 +29,6 @@ from conftest import (
     compute_pfn,
     prepare_xrd_dest,
     register_replica,
-    run_daemons,
     validate_rule,
 )
 
@@ -92,5 +91,4 @@ def test_public_ri_pull(
     register_replica(rucio_client, src_rse, SCOPE, name, pfn, size, adler32)
     rule_id = add_rule(rucio_client, SCOPE, name, dest_rse)
 
-    run_daemons(RUCIO_SVC)
     validate_rule(rucio_client, rule_id, f"{src_rse}→{dest_rse}", RUCIO_SVC)

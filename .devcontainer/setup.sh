@@ -133,6 +133,27 @@ install_gcloud() {
     echo -e "${YELLOW}Run 'gcloud init' manually to authenticate — this is interactive (browser sign-in) and intentionally not automated here.${NC}\n"
 }
 
+install_gh() {
+    echo -e "${BLUE}Installing GitHub CLI...${NC}"
+
+    if command -v gh > /dev/null 2>&1; then
+        echo -e "${GREEN}gh already installed: $(gh --version | head -1)${NC}\n"
+        return 0
+    fi
+
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=${ARCH} signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list
+
+    apt-get update -qq
+    apt-get install -y -qq gh
+
+    echo -e "${GREEN}gh: $(gh --version | head -1)${NC}"
+    echo -e "${YELLOW}Run 'gh auth login' manually to authenticate (needed for make ci-durations).${NC}\n"
+}
+
 install_helm_git() {
     echo -e "${BLUE}Installing helm-git plugin (needed for git+https chart dependencies)...${NC}"
 
@@ -251,6 +272,7 @@ install_yq
 install_rucio_gfal
 install_diagrams
 install_gcloud
+install_gh
 install_helm_git
 install_precommit
 install_terraform
