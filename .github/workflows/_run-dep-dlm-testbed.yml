@@ -90,6 +90,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up QEMU (amd64 binaries in the arm64 Teapot image)
+        if: runner.arch == 'ARM64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
       - name: Generate certificates
         run: make certs
 
