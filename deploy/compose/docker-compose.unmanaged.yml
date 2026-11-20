@@ -115,7 +115,6 @@ services:
     build:
       context: ${TESTBED_HOST_SOURCE}
       dockerfile: deploy/compose/Dockerfile.teapot
-    platform: linux/amd64
     hostname: teapot1
     ports:
       - "8081:8081"
@@ -161,7 +160,6 @@ services:
     build:
       context: ${TESTBED_HOST_SOURCE}
       dockerfile: deploy/compose/Dockerfile.teapot
-    platform: linux/amd64
     hostname: teapot2
     ports:
       - "8082:8081"
