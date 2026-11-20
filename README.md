@@ -158,6 +158,8 @@ Help
   help                 Show this help
 
 Setup
+  patches              Regenerate diffs/ against pinned upstream refs
+  patches-check        Fail if patched files changed without regenerating diffs
   certs                Generate CA and host certificates
   init                 Init testbed accounts, RSEs, OIDC seed
   vendor-opa-ri-scale  Re-vendor the opa-ri-scale ODRL evaluator at OPA_RI_SCALE_REF
@@ -195,6 +197,7 @@ Observability
 
 Tests
   test-rucio-transfers Rucio E2E transfer test
+  test-public-ri-transfers Rucio E2E copies from public RI holdings (ENES, EBI) into testbed storage
   test-copernicus-transfers Rucio E2E transfer test with Copernicus data
   test-rucio-deletion  Rucio E2E deletion test
   probe-teapot         Teapot WebDAV probe with OIDC tokens
