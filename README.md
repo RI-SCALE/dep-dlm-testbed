@@ -90,6 +90,14 @@ make init
 make test-copernicus-transfers
 ```
 
+### Public RI holdings
+
+`test-public-ri-transfers` copies one small public file each from ENES (DKRZ) and EBI into TEAPOT1 and XRD3 via HTTP-TPC pull, using the same endpoints as the CERN RI-SCALE instance. The destinations must trust the sources' public CAs; `make certs` installs them from [certs/public-roots/](./certs/public-roots/). The test skips a source if it's unreachable.
+
+```bash
+make test-public-ri-transfers
+```
+
 ### External identity providers
 
 | Scope profile | Env file | `TOKEN_MODE` |
