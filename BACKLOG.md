@@ -23,7 +23,7 @@ that path, from validation to adoption.
 - [x] Observability: Managed Prometheus, Cloud Logging, Cloud Monitoring dashboards and alert policies — [design doc 005](docs/design/design-doc-005-observability.md)
 - [ ] Decide whether transfer events are needed beyond metrics and logs (design-005 phase 3: Hermes to the log backend vs ActiveMQ/OpenSearch)
 - [ ] Production reference environment applied and validated end to end
-- [ ] TLS and trust: align with the CERN Rucio instance and the partner documentation (Confluence); partners bring a private PKI or a public CA for Rucio/FTS host certificates and public TLS on the Gateway (cert-manager); FTS trusts the IGTF/public CAs of real RSEs
+- [ ] TLS and trust: align with the CERN Rucio instance and the partner documentation (Confluence); partners bring a private PKI or a public CA for Rucio/FTS host certificates and public TLS on the Gateway (cert-manager); FTS and storage trust the IGTF/public CAs of real RSEs
 - [ ] On-premises: single-node reference validated in `dep-dlm-deployment` (kubeadm, PostgreSQL, Vault); open: partner ownership of Kubernetes, databases and Vault; fleet offerings (GKE Enterprise, Azure Arc, EKS Anywhere) and GitOps against attached clusters
 
 ## 3. Production enablement
@@ -41,7 +41,6 @@ Testbed side:
 
 ## 5. Research infrastructure adoption
 
-- [ ] Third-party copies from public RI holdings (ENES_DKRZ, EBI_BIA_BIOSTUDIES; anonymous HTTPS, same endpoints as on the CERN RI-SCALE instance): one small file per RI replicated into the testbed's own storage (`make test-public-ri-transfers`), Compose first, then CI; settle which CA bundle FTS and Teapot need for public endpoints
-- [ ] Third-party copies from token-protected RI holdings (EISCAT_WEBDAV, Teapot): clarify the accepted issuer/audience, then the same test with a token-capable source. MUSICA_* and TUBITAK_WEBDAV as destinations later
-- [ ] **Optional:** use cases register further RSEs for their data holdings ([runbook 03](docs/runbooks/03-bring-your-own-storage.md)); sensitive/personal holdings (e.g. BBMRI): real destination in CI, synthetic source from the testbed's own storage
+- [x] Third-party copies from public RI holdings (ENES_DKRZ, EBI_BIA_BIOSTUDIES): HTTP-TPC pull into TEAPOT1 and XRD3, as on the CERN RI-SCALE instance (`make test-public-ri-transfers`)
+- [ ] Third-party copies from token-protected RI holdings (EISCAT_WEBDAV, Teapot): clarify the accepted issuer/audience, then the same test with a token-capable source
 - [ ] Partner integration and operational handover
