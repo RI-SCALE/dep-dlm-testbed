@@ -76,6 +76,11 @@ POLL_DAEMONS = (
     ["rucio-conveyor-finisher", "--run-once"],
 )
 
+# validate_rule's loop: the finisher requeues failed transfers and the
+# submitter resubmits them in the same tick, so a failing transfer reaches
+# STUCK after Rucio's retries instead of hanging until the timeout.
+POLL_RETRY_DAEMONS = POLL_DAEMONS + (["rucio-conveyor-submitter", "--run-once"],)
+
 # ── OIDC provider config (env-overridable; defaults = internal Keycloak) ──
 
 OIDC_ISSUER = os.environ.get("OIDC_ISSUER") or "https://keycloak:8443/realms/rucio"
@@ -399,6 +404,39 @@ def _log_daemon_output(out: bytes, keywords=None) -> None:
             log.info("    | %s", line)
 
 
+# Direct mode runs the daemon CLIs in ONE Python process inside rucio-server:
+# one interpreter start instead of one per daemon, and run_daemon is wrapped
+# so partition_wait_time is 0. Rucio defaults it to 10 s (submitter, poller,
+# finisher) to let parallel instances rebalance; in direct mode each daemon
+# runs alone and once, so the wait is pure overhead. FAST_CONVEYOR=0 falls
+# back to one `<daemon> --run-once` exec per daemon.
+FAST_CONVEYOR = (os.environ.get("FAST_CONVEYOR") or "1") == "1"
+
+_RUN_ONCE_IN_PROCESS = r"""
+import json, runpy, shutil, sys
+import rucio.daemons.common as common  # patched before any daemon module binds it
+
+_run_daemon = common.run_daemon
+
+def _no_partition_wait(*args, **kwargs):
+    if len(args) > 3:  # once, graceful_stop, executable, partition_wait_time, ...
+        args = args[:3] + (0,) + args[4:]
+    else:
+        kwargs["partition_wait_time"] = 0
+    return _run_daemon(*args, **kwargs)
+
+common.run_daemon = _no_partition_wait
+
+for cmd in json.loads(sys.argv[1]):
+    sys.argv = cmd
+    try:
+        runpy.run_path(shutil.which(cmd[0]), run_name="__main__")
+    except SystemExit as e:
+        if e.code not in (None, 0):
+            raise
+"""
+
+
 def advance_pipeline(
     rucio_svc="rucio-server", daemons=None, mode=None, keywords=None
 ) -> None:
@@ -413,7 +451,15 @@ def advance_pipeline(
     mode = mode or DAEMON_MODE
     if mode == "daemons":
         return
-    for cmd in daemons or DEFAULT_CONVEYOR:
+    cmds = [list(c) for c in (daemons or DEFAULT_CONVEYOR)]
+    if FAST_CONVEYOR:
+        log.info("  → %s %s", rucio_svc, " ; ".join(" ".join(c) for c in cmds))
+        out = svc_exec(
+            rucio_svc, ["python3", "-c", _RUN_ONCE_IN_PROCESS, json.dumps(cmds)]
+        )
+        _log_daemon_output(out, keywords)
+        return
+    for cmd in cmds:
         log.info("  → %s %s", rucio_svc, " ".join(cmd))
         out = svc_exec(rucio_svc, cmd)
         _log_daemon_output(out, keywords)
@@ -434,8 +480,10 @@ def validate_rule(
 ) -> None:
     """Poll until locks_ok >= 1 and locks_replicating == 0.
 
-    Submits once (evaluator+submitter), then only cycles poller+finisher
-    while waiting — avoids re-running the whole pipeline every tick.
+    Drives the conveyor itself, so tests call it right after add_rule:
+    submits once (evaluator+submitter), then cycles poller+finisher+submitter
+    while waiting. The evaluator runs only once; the submitter in the loop
+    resubmits requeued transfers, so failures surface as STUCK locks.
     """
     from rucio.common.exception import RuleNotFound
 
@@ -465,12 +513,14 @@ def validate_rule(
         )
 
         if stk > 0:
-            raise RuntimeError(f"Rule {rule_id} ({label}) has {stk} stuck lock(s)")
+            raise RuntimeError(
+                f"Rule {rule_id} ({label}) has {stk} stuck lock(s): {rule.get('error')}"
+            )
         if ok >= 1 and repl == 0:
             log.info("  ✓ %s passed (rule_id=%s)", label, rule_id)
             return
 
-        run_daemons(rucio_svc, POLL_DAEMONS)
+        run_daemons(rucio_svc, POLL_RETRY_DAEMONS)
         time.sleep(interval)
         interval = min(interval * 1.5, 15)
 

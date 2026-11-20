@@ -8,7 +8,6 @@ from conftest import (
     add_rule,
     fts_mysql_exec,
     register_replica,
-    run_daemons,
     validate_rule,
     webdav_delete,
 )
@@ -147,8 +146,6 @@ class TestCopernicusS3:
         )
 
         rule_id = add_rule(rucio_client, SCOPE, name, "TEAPOT2")
-
-        run_daemons(RUCIO_SVC)
 
         validate_rule(
             rucio_client,

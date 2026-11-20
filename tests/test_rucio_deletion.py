@@ -24,7 +24,6 @@ from conftest import (
     compute_pfn,
     prepare_xrd_dest,
     register_replica,
-    run_daemons,
     seed_xrd,
     validate_rule,
     advance_pipeline,
@@ -130,7 +129,6 @@ class TestDeletionLifecycle:
         register_replica(rucio_client, "XRD3", SCOPE, name, src_pfn, size, adler32)
         rule_id = add_rule(rucio_client, SCOPE, name, "XRD4")
 
-        run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "XRD3→XRD4 (pre-deletion)", RUCIO_SVC)
 
         assert replica_exists(dst_pfn, xrd4_write_token), (
@@ -197,7 +195,6 @@ class TestDeletionLifecycle:
         )
         rule_id = add_rule(rucio_client, SCOPE, name, "TEAPOT2")
 
-        run_daemons(RUCIO_SVC)
         validate_rule(
             rucio_client, rule_id, "TEAPOT1→TEAPOT2 (pre-deletion)", RUCIO_SVC
         )
@@ -264,7 +261,6 @@ class TestDeletionLifecycle:
         rucio_client.attach_dids(SCOPE, dataset, [{"scope": SCOPE, "name": file_name}])
         rule_id = add_rule(rucio_client, SCOPE, dataset, "TEAPOT2")
 
-        run_daemons(RUCIO_SVC)
         validate_rule(rucio_client, rule_id, "TEAPOT1→TEAPOT2 (dataset)", RUCIO_SVC)
 
         rucio_client.set_metadata(SCOPE, dataset, "lifetime", -1)
