@@ -9,7 +9,7 @@ CI covers each supported combination: Compose and Kubernetes; the bundled Keyclo
 - **Runtimes:** Docker Compose and Kubernetes (`amd64`/`arm64`), GitOps via Argo CD or Flux across sandbox, staging and production
 - **Identity:** bundled Keycloak, EGI Check-In and LS AAI / Perun; managed and unmanaged token flows
 - **Authorisation:** Rucio delegates permission checks to OPA via a Rego policy package
-- **Storage:** XRootD, Teapot WebDAV and S3 (Copernicus Data Space)
+- **Storage:** XRootD, Teapot WebDAV, S3 (Copernicus Data Space) and public HTTPS sources of research infrastructures (ENES, EBI)
 - **Upstream patches:** minimal patches to Rucio, FTS3, gfal2, davix and Teapot for features not yet upstream: patched files in [patches/](./patches/), generated diffs in [diffs/](./diffs/), overview in [docs/patches.md](./docs/patches.md), decisions in [docs/adrs/](./docs/adrs/) and [docs/design/](./docs/design/)
 
 ## Quick start
