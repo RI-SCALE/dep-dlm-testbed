@@ -28,7 +28,7 @@ EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
 # Same endpoints as ENES_DKRZ / EBI_BIA_BIOSTUDIES on the CERN RI-SCALE instance:
 # plain HTTPS download servers (GET/HEAD only, no WebDAV). Each host also has a
 # Keycloak client and aud:<host> scope in the realm import, and is a
-# token-exchange target. Opt-in: PUBLIC_RI=1.
+# token-exchange target.
 PUBLIC_RI_RSES=(
     "ENES_DKRZ:esgf3.dkrz.de:/thredds/fileServer/cmip6"
     "EBI_BIA_BIOSTUDIES:ftp.ebi.ac.uk:/biostudies/fire/S-BIAD"
@@ -711,19 +711,16 @@ CONF"
 
 # ── Public RI holdings (read-only sources from the CERN RI-SCALE instance) ──
 configure_public_ri_rses() {
-    if [ "${PUBLIC_RI:-0}" != "1" ]; then
-        echo "=== Public RI RSEs skipped (PUBLIC_RI not set) ==="
-        return 0
-    fi
     echo "=== Configuring public RI source RSEs ==="
 
-    # Tokens are all or nothing per job: without oidc_support the job falls
-    # back to X.509 (no delegation here). Rucio derives a token's audience
-    # and scope from davs protocols only, so each RSE also gets a davs
-    # protocol ranked below https (priority 9; 0 would sort first). With
-    # oidc_base_path set to the prefix the token is aud=<host> (realm scope
-    # aud:<host>), scope=storage.read:/. The anonymous source ignores it.
-    # Transfers use https: gfal2 stats davs sources with PROPFIND (405 here).
+    # Tokens are all or nothing per job (without oidc_support the job falls
+    # back to X.509). Rucio derives a token's audience and scope from davs
+    # protocols only, so each RSE gets a davs protocol that is never used for
+    # transfers (priority 9) plus oidc_base_path: aud=<host>, scope
+    # storage.read:/. Issuers with resource indicators (LS AAI) only grant
+    # registered audiences, so there the token is requested for TEAPOT1.
+    # The anonymous source ignores the token. Transfers use https: gfal2
+    # stats davs sources with PROPFIND (405 here).
     local resource_param
     resource_param=$(_cap "client_credentials.resource_param" "false")
 
@@ -735,7 +732,7 @@ configure_public_ri_rses() {
         ra rse set-attribute --rse "$rse" --key oidc_support    --value True
         ra rse set-attribute --rse "$rse" --key oidc_base_path  --value "$prefix"
         if [ "$resource_param" = "true" ]; then
-            ra rse set-attribute --rse "$rse" --key audience --value "https://${host}/"
+            ra rse set-attribute --rse "$rse" --key audience --value "https://teapot1.example.org/"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
@@ -949,12 +946,10 @@ grant_token_exchange() {
     # Public RI hosts become exchange targets too: FTS exchanges the source
     # token for an audience named after the storage host.
     local targets=( "${EXCHANGE_TARGETS[@]}" ) entry rse host prefix
-    if [ "${PUBLIC_RI:-0}" = "1" ]; then
-        for entry in "${PUBLIC_RI_RSES[@]}"; do
-            IFS=: read -r rse host prefix <<< "$entry"
-            targets+=( "$host" )
-        done
-    fi
+    for entry in "${PUBLIC_RI_RSES[@]}"; do
+        IFS=: read -r rse host prefix <<< "$entry"
+        targets+=( "$host" )
+    done
 
     local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
     for target in "${targets[@]}"; do

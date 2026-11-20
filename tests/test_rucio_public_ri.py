@@ -13,8 +13,6 @@ so the job still runs with tokens (see configure_public_ri_rses in
 scripts/init-testbed.sh). TEAPOT1 must trust the sources' public roots
 (certs/public-roots, installed as trust anchors by `make certs`).
 
-Opt-in, like COPERNICUS_S3: needs `make init PUBLIC_RI=1` and outbound HTTPS.
-
     make test-public-ri-transfers
 """
 
@@ -57,10 +55,6 @@ HOLDINGS = [
         id="ebi-bia-s-biad2822",
     ),
 ]
-
-pytestmark = pytest.mark.skipif(
-    os.environ.get("PUBLIC_RI") != "1", reason="PUBLIC_RI=1 not set"
-)
 
 
 def _reachable(pfn):
