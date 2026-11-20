@@ -13,6 +13,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/xrd3key.pem:/tmp/xrdkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.0:/etc/grid-security/certificates/9f727ac7.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.0:/etc/grid-security/certificates/fc5a8f99.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/configs/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/configs/xrootd/authdb:/etc/xrootd/authdb:ro
@@ -34,6 +36,8 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/xrd4key.pem:/tmp/xrdkey.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.0:/etc/grid-security/certificates/5fca1cb1.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.0:/etc/grid-security/certificates/9f727ac7.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.0:/etc/grid-security/certificates/fc5a8f99.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/rucio_ca.pem:/etc/pki/ca-trust/source/anchors/rucio-ca.crt:ro
       - ${TESTBED_HOST_SOURCE}/configs/xrootd/xrdrucio-scitokens.cfg:/etc/xrootd/xrdrucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/configs/xrootd/authdb:/etc/xrootd/authdb:ro
