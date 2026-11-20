@@ -215,6 +215,9 @@ Tests
   test-authz-personas  Authz entitlement-tier test across DEP persona accounts
   test-authz-user      Authz tier from userinfo entitlements for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
 
+CI
+  ci-durations         Compare CI step durations, latest successful runs: BRANCH (current) vs main. WORKFLOW=local.yml. Needs gh.
+
 Rego
   test-rego            Rego unit tests (all phases, no stack needed)
   fmt-rego             Format all Rego files in place (fixes the opa-fmt pre-commit hook)

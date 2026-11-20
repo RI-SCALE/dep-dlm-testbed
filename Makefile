@@ -662,6 +662,12 @@ test-authz-user: ## Authz tier from userinfo entitlements for a real user token.
 	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
 	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
 
+## CI
+
+.PHONY: ci-durations
+ci-durations: ## Compare CI step durations, latest successful runs: BRANCH (current) vs main. WORKFLOW=local.yml. Needs gh.
+	@./scripts/ci-durations.sh $(or $(WORKFLOW),local.yml) $(BRANCH)
+
 ## Rego
 
 .PHONY: test-rego
