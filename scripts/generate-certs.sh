@@ -3,6 +3,7 @@ set -euo pipefail
 
 # ── Global Config ───────────────────────────────────────────────────────────
 CERTS="certs"
+PUBLIC_ROOTS_DIR="certs/public-roots"
 # Extra SAN entries for the validation-storage externally-facing certs
 # (xrd3/xrd4/teapot1/teapot2). Only known once Terraform has reserved the
 # static IP (google_compute_address.this.address) — and, once DNS exists,
@@ -100,27 +101,35 @@ generate_service_certs() {
     chmod 644 "$CERTS/keycloakkey.pem"
 }
 
+# Install one CA under both OpenSSL hash names (canl/StoRM and XRootD look
+# up different ones), each with a permissive signing policy.
+install_trust_anchor() {
+    local pem=$1 h subject
+    subject=$(openssl x509 -noout -subject -nameopt compat -in "$pem" | sed 's/^subject=//; s/^\///')
+    for h in $(openssl x509 -noout -hash -in "$pem") $(openssl x509 -noout -subject_hash_old -in "$pem"); do
+        openssl x509 -in "$pem" -out "$CERTS/${h}.0"
+        cat > "$CERTS/${h}.signing_policy" <<EOF
+access_id_CA      X509    '${subject}'
+pos_rights        globus  CA:sign
+cond_subjects     globus  '/*'
+EOF
+        chmod 644 "$CERTS/${h}.0" "$CERTS/${h}.signing_policy"
+    done
+}
+
 setup_trust_anchors() {
     echo "=== Preparing Trust Anchors (XRootD-safe mode) ==="
     mkdir -p "$CERTS"
 
-    HASH_NEW=$(openssl x509 -noout -hash -in "$CERTS/rucio_ca.pem")
-    HASH_OLD=$(openssl x509 -noout -subject_hash_old -in "$CERTS/rucio_ca.pem")
+    install_trust_anchor "$CERTS/rucio_ca.pem"
 
-    for H in "$HASH_NEW" "$HASH_OLD"; do
-        cp "$CERTS/rucio_ca.pem" "$CERTS/${H}.0"
-        chmod 644 "$CERTS/${H}.0"
-    done
-
-    CA_SUBJECT=$(openssl x509 -noout -subject -nameopt compat -in "$CERTS/rucio_ca.pem" | sed 's/^subject=//; s/^\///')
-
-    for H in "$HASH_NEW" "$HASH_OLD"; do
-        cat > "$CERTS/${H}.signing_policy" <<EOF
-access_id_CA      X509    '${CA_SUBJECT}'
-pos_rights        globus  CA:sign
-cond_subjects     globus  '/*'
-EOF
-        chmod 644 "$CERTS/${H}.signing_policy"
+    # Public roots of the RI holdings (ENES: HARICA, EBI: USERTrust), so
+    # Teapot can pull from them (test_rucio_public_ri.py).
+    local pem
+    for pem in "$PUBLIC_ROOTS_DIR"/*.pem; do
+        [ -e "$pem" ] || continue
+        install_trust_anchor "$pem"
+        echo "  + $(openssl x509 -noout -subject -in "$pem")"
     done
 
     chmod 755 "$CERTS"

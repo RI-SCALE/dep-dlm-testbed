@@ -155,6 +155,10 @@ jobs:
       - name: make test-rucio-transfers
         run: make test-rucio-transfers
 
+      - name: make test-public-ri-transfers
+        continue-on-error: true   # external endpoints; tighten once stable
+        run: make test-public-ri-transfers
+
       - name: make test-observability
         run: make test-observability
 

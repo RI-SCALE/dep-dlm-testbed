@@ -9,4 +9,4 @@ spec:
   interval: 1m
   url: https://github.com/ri-scale/dep-dlm-testbed.git
   ref:
-    branch: fix/helm4-plugin-install
+    branch: feat/tpc-public-ri-holdings

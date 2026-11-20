@@ -219,6 +219,10 @@ jobs:
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
 
+      - name: Rucio E2E transfer test from public RI holdings (ENES, EBI)
+        continue-on-error: true   # external endpoints; tighten once stable
+        run: make test-public-ri-transfers
+
       - name: Observability smoke test
         if: inputs.observability == '1'
         run: make test-observability

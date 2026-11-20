@@ -608,6 +608,10 @@ obs-gcm-dashboards: ## Convert Grafana dashboards to Cloud Monitoring JSON
 test-rucio-transfers: ## Rucio E2E transfer test
 	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
+.PHONY: test-public-ri-transfers
+test-public-ri-transfers: ## Rucio E2E copies from public RI holdings (ENES, EBI) into testbed storage
+	$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_public_ri.py -v"
+
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 	$(EXEC_RUCIO) bash -c "export $(TEST_OIDC_ENV) \
@@ -814,7 +818,8 @@ oidc-client-sync: ## Fetch oidc-client.cfg from Secret Manager into oidc-client.
 .PHONY: clear-artifacts
 clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	$(COMPOSE_ALL) down -v --remove-orphans 2>/dev/null || true
-	find certs \
+	find certs -type f \
+	    ! -path 'certs/public-roots/*' \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \
 	    ! -name 'tls_ca_bundle.pem' \
@@ -826,7 +831,7 @@ clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	done
 	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -exec rm -rf {} + 2>/dev/null || true
 	@find deploy/helm-charts -type f -name '*.tgz' -delete 2>/dev/null || true
-	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem), compose volumes,"
+	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem, public-roots/), compose volumes,"
 	@echo ".terraform/tfplan/crash.log (preserved .terraform.lock.hcl), __pycache__/.pytest_cache, and Helm chart .tgz deps"
 	@echo "(NOT touched: envs/*.env — this holds real configured credentials, not regenerable artifacts)"
 

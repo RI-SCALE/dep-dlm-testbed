@@ -132,6 +132,14 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.0:/etc/grid-security/certificates/9f727ac7.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.signing_policy:/etc/grid-security/certificates/9f727ac7.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b92fd57f.0:/etc/grid-security/certificates/b92fd57f.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b92fd57f.signing_policy:/etc/grid-security/certificates/b92fd57f.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.0:/etc/grid-security/certificates/fc5a8f99.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.signing_policy:/etc/grid-security/certificates/fc5a8f99.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/35105088.0:/etc/grid-security/certificates/35105088.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/35105088.signing_policy:/etc/grid-security/certificates/35105088.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro
@@ -170,6 +178,14 @@ services:
       - ${TESTBED_HOST_SOURCE}/certs/5fca1cb1.signing_policy:/etc/grid-security/certificates/5fca1cb1.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.0:/etc/grid-security/certificates/b96dc756.0:ro
       - ${TESTBED_HOST_SOURCE}/certs/b96dc756.signing_policy:/etc/grid-security/certificates/b96dc756.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.0:/etc/grid-security/certificates/9f727ac7.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/9f727ac7.signing_policy:/etc/grid-security/certificates/9f727ac7.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b92fd57f.0:/etc/grid-security/certificates/b92fd57f.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/b92fd57f.signing_policy:/etc/grid-security/certificates/b92fd57f.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.0:/etc/grid-security/certificates/fc5a8f99.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/fc5a8f99.signing_policy:/etc/grid-security/certificates/fc5a8f99.signing_policy:ro
+      - ${TESTBED_HOST_SOURCE}/certs/35105088.0:/etc/grid-security/certificates/35105088.0:ro
+      - ${TESTBED_HOST_SOURCE}/certs/35105088.signing_policy:/etc/grid-security/certificates/35105088.signing_policy:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}application.yml:/var/lib/teapot/user-teapot/config/application.yml:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}data.properties:/var/lib/teapot/user-teapot/sa.d/data.properties:ro
       - ${TESTBED_HOST_SOURCE}/configs/teapot/${CONFIG_PROFILE_DIR}user-mapping.csv:/etc/teapot/user-mapping.csv:ro

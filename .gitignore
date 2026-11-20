@@ -8,6 +8,7 @@
 !rucio_ca.key.pem
 !rucio_ca.pem
 !tls_ca_bundle.pem
+!certs/public-roots/*.pem
 __pycache__
 .pytest_cache
 *.0
