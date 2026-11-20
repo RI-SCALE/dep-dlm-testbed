@@ -215,6 +215,9 @@ jobs:
         run: make test-rucio-transfers
 
       - name: Rucio E2E transfer test from public RI holdings (ENES, EBI)
+        # External sources and trust anchors don't vary with arch or token
+        # mode: run once per runtime and IdP profile (amd64, first token mode).
+        if: runner.arch == 'X64' && matrix.mode == fromJSON(inputs.token_modes)[0]
         continue-on-error: true   # external endpoints; tighten once stable
         run: make test-public-ri-transfers
 
