@@ -64,7 +64,7 @@ services:
       retries: 20
 
   fts:
-    image: mgajekcern/test-fts:latest
+    image: mgajekcern/test-fts:88c1c757cc9487d785ed695f7105eb95b3c67293
     hostname: fts
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
