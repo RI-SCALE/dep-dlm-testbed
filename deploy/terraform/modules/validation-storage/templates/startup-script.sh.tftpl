@@ -51,7 +51,11 @@ for key, val in data.items():
 chmod 600 "$CERTS_DIR"/*key.pem 2>/dev/null || true
 chmod 644 "$CERTS_DIR"/*cert.pem "$CERTS_DIR"/rucio_ca.pem "$CERTS_DIR"/tls_ca_bundle.pem \
   "$CERTS_DIR"/5fca1cb1.0 "$CERTS_DIR"/5fca1cb1.signing_policy \
-  "$CERTS_DIR"/b96dc756.0 "$CERTS_DIR"/b96dc756.signing_policy 2>/dev/null || true
+  "$CERTS_DIR"/b96dc756.0 "$CERTS_DIR"/b96dc756.signing_policy \
+  "$CERTS_DIR"/9f727ac7.0 "$CERTS_DIR"/9f727ac7.signing_policy \
+  "$CERTS_DIR"/b92fd57f.0 "$CERTS_DIR"/b92fd57f.signing_policy \
+  "$CERTS_DIR"/fc5a8f99.0 "$CERTS_DIR"/fc5a8f99.signing_policy \
+  "$CERTS_DIR"/35105088.0 "$CERTS_DIR"/35105088.signing_policy 2>/dev/null || true
 chmod 644 "$CERTS_DIR/storm-webdav-localhostkey.pem" 2>/dev/null || true
 
 # --- Static config (embedded at plan time via Terraform file()) ----------

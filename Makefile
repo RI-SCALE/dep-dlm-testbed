@@ -822,7 +822,8 @@ oidc-client-sync: ## Fetch oidc-client.cfg from Secret Manager into oidc-client.
 .PHONY: clear-artifacts
 clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	$(COMPOSE_ALL) down -v --remove-orphans 2>/dev/null || true
-	find certs \
+	find certs -type f \
+	    ! -path 'certs/public-roots/*' \
 	    ! -name 'rucio_ca.pem' \
 	    ! -name 'rucio_ca.key.pem' \
 	    ! -name 'tls_ca_bundle.pem' \
@@ -834,7 +835,7 @@ clear-artifacts: ## Remove certs, volumes, Terraform/Python/Helm artifacts
 	done
 	@find . -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -exec rm -rf {} + 2>/dev/null || true
 	@find deploy/helm-charts -type f -name '*.tgz' -delete 2>/dev/null || true
-	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem), compose volumes,"
+	@echo "Cleaned certs (preserved rucio_ca.pem, rucio_ca.key.pem, tls_ca_bundle.pem, public-roots/), compose volumes,"
 	@echo ".terraform/tfplan/crash.log (preserved .terraform.lock.hcl), __pycache__/.pytest_cache, and Helm chart .tgz deps"
 	@echo "(NOT touched: envs/*.env — this holds real configured credentials, not regenerable artifacts)"
 

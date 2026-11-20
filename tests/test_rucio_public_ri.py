@@ -6,11 +6,12 @@ URL the CERN RI-SCALE instance has registered (ENES_DKRZ, EBI_BIA_BIOSTUDIES).
 Each run registers the file under a fresh name on the read-only source RSE
 (non-deterministic, explicit PFN) and replicates it to TEAPOT1 via FTS.
 
-The sources are plain HTTPS download servers (GET/HEAD only, no WebDAV), so
-they are registered as https and FTS streams the file instead of a
-third-party copy (force_streamed_teapot1, as for COPERNICUS_S3); the
-destination uses davs, so the job still runs with tokens (see
-configure_public_ri_rses in scripts/init-testbed.sh).
+As on the CERN instance, FTS runs an HTTP-TPC pull: TEAPOT1 fetches the file
+from the public server itself. The sources are plain HTTPS download servers
+(GET/HEAD only, no WebDAV), registered as https; the destination uses davs,
+so the job still runs with tokens (see configure_public_ri_rses in
+scripts/init-testbed.sh). TEAPOT1 must trust the sources' public roots
+(certs/public-roots, installed as trust anchors by `make certs`).
 
 Opt-in, like COPERNICUS_S3: needs `make init PUBLIC_RI=1` and outbound HTTPS.
 
@@ -21,14 +22,11 @@ import logging
 import os
 import time
 import urllib.request
-from urllib.parse import urlparse
 
 import pytest
 
 from conftest import (
-    TEAPOT1_URL,
     add_rule,
-    fts_mysql_exec,
     register_replica,
     run_daemons,
     validate_rule,
@@ -65,30 +63,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture
-def force_streamed_teapot1():
-    """
-    Stream through FTS instead of a third-party copy. FTS pulls when the
-    destination allows it and pushes when the source does (a missing t_se
-    row counts as FULL); the public sources are plain download servers (405
-    on COPY), so mark TEAPOT1 and every source host tpc_support=NONE and
-    restore afterwards. Same approach as force_streamed_teapot2 in
-    test_rucio_transfers_with_copernicus.py.
-    """
-    hosts = [urlparse(TEAPOT1_URL).hostname] + [
-        urlparse(h.values[1]).hostname for h in HOLDINGS
-    ]
-    storages = [f"{scheme}://{host}" for host in hosts for scheme in ("davs", "https")]
-    values = ",".join(f"('{s}','NONE')" for s in storages)
-    in_list = ",".join(f"'{s}'" for s in storages)
-    fts_mysql_exec(
-        f"INSERT INTO t_se (storage, tpc_support) VALUES {values} "
-        "ON DUPLICATE KEY UPDATE tpc_support='NONE';"
-    )
-    yield
-    fts_mysql_exec(f"DELETE FROM t_se WHERE storage IN ({in_list});")
-
-
 def _reachable(pfn):
     try:
         req = urllib.request.Request(pfn, method="HEAD")
@@ -99,10 +73,8 @@ def _reachable(pfn):
 
 
 @pytest.mark.parametrize("src_rse, pfn, size, adler32", HOLDINGS)
-def test_public_ri_to_teapot(
-    rucio_client, teapots_ready, force_streamed_teapot1, src_rse, pfn, size, adler32
-):
-    """Replicate one public RI file to TEAPOT1 (FTS streams it from the public server)."""
+def test_public_ri_to_teapot(rucio_client, teapots_ready, src_rse, pfn, size, adler32):
+    """Replicate one public RI file to TEAPOT1 (HTTP-TPC pull from the public server)."""
     if not _reachable(pfn):
         pytest.skip(f"{src_rse} source unreachable")
 

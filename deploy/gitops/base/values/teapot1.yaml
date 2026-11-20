@@ -15,9 +15,17 @@ volumes:
       secretName: testbed-certs
       items:
         - { key: rucio_ca.pem,            path: 5fca1cb1.0 }
-        - { key: rucio_ca.pem,            path: b96dc756.0 }
         - { key: 5fca1cb1.signing_policy, path: 5fca1cb1.signing_policy }
+        - { key: rucio_ca.pem,            path: b96dc756.0 }
         - { key: b96dc756.signing_policy, path: b96dc756.signing_policy }
+        - { key: 9f727ac7.0, path: 9f727ac7.0 }
+        - { key: 9f727ac7.signing_policy, path: 9f727ac7.signing_policy }
+        - { key: b92fd57f.0, path: b92fd57f.0 }
+        - { key: b92fd57f.signing_policy, path: b92fd57f.signing_policy }
+        - { key: fc5a8f99.0, path: fc5a8f99.0 }
+        - { key: fc5a8f99.signing_policy, path: fc5a8f99.signing_policy }
+        - { key: 35105088.0, path: 35105088.0 }
+        - { key: 35105088.signing_policy, path: 35105088.signing_policy }
   - name: configs
     configMap:
       name: testbed-configs
