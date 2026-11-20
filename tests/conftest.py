@@ -13,6 +13,7 @@ import subprocess
 import time
 from typing import Optional
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import requests
@@ -492,7 +493,7 @@ def validate_rule(
 
     deadline = time.time() + timeout
     ok = repl = stk = 0
-    interval = 2  # adaptive backoff, caps at 15s
+    interval = 2  # adaptive backoff, caps at 5 s (a daemon cycle takes seconds now)
 
     while time.time() < deadline:
         try:
@@ -522,12 +523,19 @@ def validate_rule(
 
         run_daemons(rucio_svc, POLL_RETRY_DAEMONS)
         time.sleep(interval)
-        interval = min(interval * 1.5, 15)
+        interval = min(interval * 1.5, 5)
 
     raise TimeoutError(
         f"Rule {rule_id} ({label}) did not converge within {timeout}s — "
         f"last: OK={ok} REPL={repl} STUCK={stk}"
     )
+
+
+def _in_parallel(*fns):
+    """Run warm-ups concurrently; re-raise the first failure."""
+    with ThreadPoolExecutor(max_workers=len(fns)) as pool:
+        for future in [pool.submit(fn) for fn in fns]:
+            future.result()
 
 
 # ── XRootD SciTokens (shells out — no HTTP equivalent for these checks) ────
@@ -894,9 +902,11 @@ def teapot_token():
 
 @pytest.fixture(scope="session")
 def teapots_ready(teapot_token):
-    """Warm up both Teapot Storm-WebDAV JVMs before any transfer test runs."""
-    webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token)
-    webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token)
+    """Warm up both Teapot Storm-WebDAV JVMs, in parallel (about 20 s each)."""
+    _in_parallel(
+        lambda: webdav_warm_up(TEAPOT1_URL, "/data/", "teapot1", teapot_token),
+        lambda: webdav_warm_up(TEAPOT2_URL, "/data/", "teapot2", teapot_token),
+    )
     return True
 
 
@@ -910,9 +920,10 @@ def xrootd_ready(rucio_client, xrd3_write_token, xrd4_write_token):
     calls. The endpoint is derived from a real PFN, so this also works
     against external validation storage.
     """
-    for rse, token in (("XRD3", xrd3_write_token), ("XRD4", xrd4_write_token)):
+
+    def warm(rse, token):
         url = urlparse(pfn_to_https(compute_pfn(rucio_client, rse, "ddmlab", "warmup")))
-        webdav_warm_up(
+        return lambda: webdav_warm_up(
             f"{url.scheme}://{url.netloc}",
             "/data/",
             rse.lower(),
@@ -920,6 +931,8 @@ def xrootd_ready(rucio_client, xrd3_write_token, xrd4_write_token):
             depth="0",
             any_status=True,
         )
+
+    _in_parallel(warm("XRD3", xrd3_write_token), warm("XRD4", xrd4_write_token))
     return True
 
 
