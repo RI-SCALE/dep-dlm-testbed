@@ -9,4 +9,4 @@ spec:
   interval: 1m
   url: https://github.com/ri-scale/dep-dlm-testbed.git
   ref:
-    branch: performance/faster-tests
+    branch: main
