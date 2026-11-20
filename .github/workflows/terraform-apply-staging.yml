@@ -86,6 +86,7 @@ jobs:
       environment_name: staging
       token_mode: ${{ inputs.token_mode }}
       scope_profile: ${{ inputs.scope_profile }}
+      public_ri: "1"
     secrets:
       OIDC_CLIENT_ID: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_ID || secrets.EGI_DEV_OIDC_CLIENT_ID }}
       OIDC_CLIENT_SECRET: ${{ inputs.scope_profile == 'ls-aai-dev' && secrets.LS_AAI_DEV_OIDC_CLIENT_SECRET || secrets.EGI_DEV_OIDC_CLIENT_SECRET }}
