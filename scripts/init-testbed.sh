@@ -145,7 +145,49 @@ _psql() {
 
 # ── Service URLs ─────────────────────────────────────────────────
 
-ra() { _exec rucio-server rucio-admin -S userpass -u ddmlab --password secret "$@"; }
+# rucio-admin calls are queued and run in batches: ra_flush sends the queue
+# in ONE exec into rucio-server, where one Python process runs rucio-admin
+# per command (runpy). One interpreter start and one exec per init step
+# instead of one per call, which matters most on k8s (kubectl exec).
+#   ra    <args>  must succeed: a failure stops init, as before
+#   ra_ok <args>  failure tolerated (was: ra <args> || true)
+# step() flushes after every init step, so later steps see the results.
+RA_QUEUE=()
+
+_ra_enqueue() {
+    local strict=$1 a line=""; shift
+    for a in "$@"; do line+=" b$(printf '%s' "$a" | base64 | tr -d '\n')"; done
+    RA_QUEUE+=("${strict}${line}")
+}
+
+ra()    { _ra_enqueue 1 "$@"; }
+ra_ok() { _ra_enqueue 0 "$@"; }
+
+_RA_BATCH_RUNNER='
+import base64, runpy, shutil, sys
+path = shutil.which("rucio-admin")
+lines = sys.argv[1:]
+for line in lines:
+    strict, *enc = line.split()
+    args = [base64.b64decode(e[1:]).decode() for e in enc]
+    sys.argv = ["rucio-admin", "-S", "userpass", "-u", "ddmlab", "--password", "secret", *args]
+    try:
+        runpy.run_path(path, run_name="__main__")
+        code = 0
+    except SystemExit as e:
+        code = 0 if e.code is None else (e.code if isinstance(e.code, int) else 1)
+    if code and strict == "1":
+        print("  ✗ rucio-admin " + " ".join(args) + " failed (" + str(code) + ")", file=sys.stderr)
+        sys.exit(code)
+print("  ✓ " + str(len(lines)) + " rucio-admin call(s) in one process")
+'
+
+ra_flush() {
+    [ "${#RA_QUEUE[@]}" -eq 0 ] && return 0
+    local queue=("${RA_QUEUE[@]}")
+    RA_QUEUE=()
+    _exec rucio-server python3 -c "$_RA_BATCH_RUNNER" "${queue[@]}"
+}
 
 _kc() { _exec keycloak "$KCADM" "$@"; }
 
@@ -206,18 +248,18 @@ wait_for_infrastructure() {
 setup_accounts_and_identities() {
     echo "=== Configuring Rucio Accounts ==="
 
-    ra account add --type SERVICE --email ddmlab@rucio ddmlab || true
-    ra identity add --type USERPASS --id ddmlab --email ddmlab@rucio \
-        --account ddmlab --password secret || true
-    ra account add-attribute ddmlab --key admin --value True || true
-    ra account update --account ddmlab --key type --value SERVICE || true
-    ra account add --type USER --email randomaccount@rucio randomaccount || true
-    ra account add-attribute randomaccount --key admin --value True || true
+    ra_ok account add --type SERVICE --email ddmlab@rucio ddmlab
+    ra_ok identity add --type USERPASS --id ddmlab --email ddmlab@rucio \
+        --account ddmlab --password secret
+    ra_ok account add-attribute ddmlab --key admin --value True
+    ra_ok account update --account ddmlab --key type --value SERVICE
+    ra_ok account add --type USER --email randomaccount@rucio randomaccount
+    ra_ok account add-attribute randomaccount --key admin --value True
 
-    ra account add --type USER --email adminuser@rucio adminuser || true
-    ra account add --type USER --email depoperator@rucio depoperator || true
-    ra account add --type USER --email dependuser@rucio dependuser || true
-    ra account add --type USER --email modeldeveloper@rucio modeldeveloper || true
+    ra_ok account add --type USER --email adminuser@rucio adminuser
+    ra_ok account add --type USER --email depoperator@rucio depoperator
+    ra_ok account add --type USER --email dependuser@rucio dependuser
+    ra_ok account add --type USER --email modeldeveloper@rucio modeldeveloper
 
     local grant_mode
     grant_mode=$(_grant_mode_for_profile)
@@ -550,7 +592,7 @@ configure_rses() {
     for rse in XRD3 XRD4; do
         local host
         host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
+        ra_ok rse add "$rse"
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
@@ -560,18 +602,18 @@ configure_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
+        ra_ok rse add-protocol "$rse" --scheme davs --hostname "$host" --port 1094 \
             --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance XRD3 XRD4 --distance 1 || true
-    ra rse add-distance XRD4 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 XRD4 --distance 1
+    ra_ok rse add-distance XRD4 XRD3 --distance 1
 
     for rse in TEAPOT1 TEAPOT2; do
         local instance
         instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
+        ra_ok rse add "$rse"
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
         ra rse set-attribute --rse "$rse" --key auth_type --value OIDC
@@ -581,24 +623,24 @@ configure_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "$instance"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
 
         # https is second choice for third-party copies: Rucio only submits
         # with tokens over davs, and https sources (public RI) would else
         # pull the destination onto https as well.
-        ra rse add-protocol "$rse" --scheme https \
+        ra_ok rse add-protocol "$rse" --scheme https \
             --hostname "${instance}" --port 8081 --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":2,"third_party_copy_write":2},"lan":{"read":1,"write":1,"delete":2}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":2,"third_party_copy_read":2,"third_party_copy_write":2},"lan":{"read":1,"write":1,"delete":2}}'
     done
-    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
-    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+    ra_ok rse add-distance TEAPOT1 TEAPOT2 --distance 1
+    ra_ok rse add-distance TEAPOT2 TEAPOT1 --distance 1
 
-    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
-    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 TEAPOT1 --distance 1
+    ra_ok rse add-distance TEAPOT1 XRD3 --distance 1
 }
 
 # ── S3 source RSE ──
@@ -615,22 +657,22 @@ configure_s3_source_rse() {
 
     echo "=== Configuring S3 source RSE (COPERNICUS_S3) → s3s://${s3_endpoint}/${s3_bucket}/ ==="
 
-    ra rse add --non-deterministic COPERNICUS_S3 || true
+    ra_ok rse add --non-deterministic COPERNICUS_S3
     ra rse set-attribute --rse COPERNICUS_S3 --key fts             --value "$FTS_OIDC"
     ra rse set-attribute --rse COPERNICUS_S3 --key verify_checksum --value False
 
-    ra rse add-protocol COPERNICUS_S3 --scheme s3s \
+    ra_ok rse add-protocol COPERNICUS_S3 --scheme s3s \
         --hostname "${s3_endpoint}" --port 443 \
         --prefix "/${s3_bucket}" \
         --impl rucio.rse.protocols.gfal.Default \
-        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
+        --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
 
-    ra rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1 || true
-    ra rse add-distance COPERNICUS_S3 XRD4    --distance 1 || true
+    ra_ok rse add-distance COPERNICUS_S3 TEAPOT2 --distance 1
+    ra_ok rse add-distance COPERNICUS_S3 XRD4    --distance 1
 
     local acct
     for acct in root ddmlab randomaccount; do
-        ra account set-limits "$acct" COPERNICUS_S3 -1 || true
+        ra_ok account set-limits "$acct" COPERNICUS_S3 -1
     done
 }
 
@@ -727,7 +769,7 @@ configure_public_ri_rses() {
     local entry rse host prefix dest acct
     for entry in "${PUBLIC_RI_RSES[@]}"; do
         IFS=: read -r rse host prefix <<< "$entry"
-        ra rse add --non-deterministic "$rse" || true
+        ra_ok rse add --non-deterministic "$rse"
         ra rse set-attribute --rse "$rse" --key fts             --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key oidc_support    --value True
         ra rse set-attribute --rse "$rse" --key oidc_base_path  --value "$prefix"
@@ -735,20 +777,20 @@ configure_public_ri_rses() {
             ra rse set-attribute --rse "$rse" --key audience --value "https://teapot1.example.org/"
         fi
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
-        ra rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
+        ra_ok rse add-protocol "$rse" --scheme https --hostname "$host" --port 443 \
             --prefix "$prefix" \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}' || true
+            --domain-json '{"wan":{"read":1,"write":0,"delete":0,"third_party_copy_read":1,"third_party_copy_write":0},"lan":{"read":1,"write":0,"delete":0}}'
         # Trailing slash: minus oidc_base_path it leaves "/" (scope storage.read:/).
-        ra rse add-protocol "$rse" --scheme davs --hostname "$host" --port 443 \
+        ra_ok rse add-protocol "$rse" --scheme davs --hostname "$host" --port 443 \
             --prefix "$prefix/" \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":9,"write":0,"delete":0,"third_party_copy_read":9,"third_party_copy_write":0},"lan":{"read":9,"write":0,"delete":0}}' || true
+            --domain-json '{"wan":{"read":9,"write":0,"delete":0,"third_party_copy_read":9,"third_party_copy_write":0},"lan":{"read":9,"write":0,"delete":0}}'
         for dest in TEAPOT1 XRD3; do
-            ra rse add-distance "$rse" "$dest" --distance 1 || true
+            ra_ok rse add-distance "$rse" "$dest" --distance 1
         done
         for acct in root ddmlab randomaccount; do
-            ra account set-limits "$acct" "$rse" -1 || true
+            ra_ok account set-limits "$acct" "$rse" -1
         done
     done
 }
@@ -776,8 +818,8 @@ configure_validation_storage_rses() {
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         local host
         host=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
-        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra_ok rse add "$rse"
+        ra_ok rse set-attribute --rse "$rse" --key "$rse" --value True
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
@@ -787,21 +829,21 @@ configure_validation_storage_rses() {
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${host}"
         fi
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance XRD3 XRD4 --distance 1 || true
-    ra rse add-distance XRD4 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 XRD4 --distance 1
+    ra_ok rse add-distance XRD4 XRD3 --distance 1
 
     # Teapot/WebDAV side — ports 8081/8082
     for rse_port in "TEAPOT1:8081" "TEAPOT2:8082"; do
         rse="${rse_port%%:*}"; port="${rse_port##*:}"
         local instance
         instance=$(echo "$rse" | tr '[:upper:]' '[:lower:]')
-        ra rse add "$rse" || true
-        ra rse set-attribute --rse "$rse" --key "$rse" --value True || true
+        ra_ok rse add "$rse"
+        ra_ok rse set-attribute --rse "$rse" --key "$rse" --value True
         ra rse set-attribute --rse "$rse" --key fts --value "$FTS_OIDC"
         ra rse set-attribute --rse "$rse" --key verify_checksum --value False
         ra rse set-attribute --rse "$rse" --key oidc_support --value True
@@ -811,21 +853,21 @@ configure_validation_storage_rses() {
         else
             ra rse set-attribute --rse "$rse" --key audience --value "${instance}"
         fi
-        ra rse add-protocol "$rse" --scheme davs \
+        ra_ok rse add-protocol "$rse" --scheme davs \
             --hostname "$val_hostname" --port "$port" --prefix /data \
             --impl rucio.rse.protocols.gfal.Default \
-            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}' || true
+            --domain-json '{"wan":{"read":1,"write":1,"delete":1,"third_party_copy_read":1,"third_party_copy_write":1},"lan":{"read":1,"write":1,"delete":1}}'
     done
-    ra rse add-distance TEAPOT1 TEAPOT2 --distance 1 || true
-    ra rse add-distance TEAPOT2 TEAPOT1 --distance 1 || true
+    ra_ok rse add-distance TEAPOT1 TEAPOT2 --distance 1
+    ra_ok rse add-distance TEAPOT2 TEAPOT1 --distance 1
 
-    ra rse add-distance XRD3 TEAPOT1 --distance 1 || true
-    ra rse add-distance TEAPOT1 XRD3 --distance 1 || true
+    ra_ok rse add-distance XRD3 TEAPOT1 --distance 1
+    ra_ok rse add-distance TEAPOT1 XRD3 --distance 1
 
     local acct
     for acct in root ddmlab randomaccount; do
         for rse in XRD3 XRD4 TEAPOT1 TEAPOT2; do
-            ra account set-limits "$acct" "$rse" -1 || true
+            ra_ok account set-limits "$acct" "$rse" -1
         done
     done
 }
@@ -892,26 +934,26 @@ setup_scopes_and_quotas() {
     # admins (depoperator with MFA, accounts in admin_accounts) may do
     # everything. Register shared data once, in one scope — a second scope
     # for the same files would only create duplicate catalog entries.
-    ra scope add --account root --scope test || true
-    ra scope add --account ddmlab --scope ddmlab || true
-    ra scope add --account randomaccount --scope randomaccount || true
-    ra scope add --account dependuser --scope dependuser || true
-    ra scope add --account modeldeveloper --scope modeldeveloper || true
+    ra_ok scope add --account root --scope test
+    ra_ok scope add --account ddmlab --scope ddmlab
+    ra_ok scope add --account randomaccount --scope randomaccount
+    ra_ok scope add --account dependuser --scope dependuser
+    ra_ok scope add --account modeldeveloper --scope modeldeveloper
 
     for rse in XRD3 XRD4; do
-        ra account set-limits root "$rse" -1 || true
-        ra account set-limits randomaccount "$rse" -1 || true
-        ra account set-limits ddmlab "$rse" -1 || true
-        ra account set-limits dependuser "$rse" -1 || true
-        ra account set-limits modeldeveloper "$rse" -1 || true
+        ra_ok account set-limits root "$rse" -1
+        ra_ok account set-limits randomaccount "$rse" -1
+        ra_ok account set-limits ddmlab "$rse" -1
+        ra_ok account set-limits dependuser "$rse" -1
+        ra_ok account set-limits modeldeveloper "$rse" -1
     done
 
     for rse in TEAPOT1 TEAPOT2; do
-        ra account set-limits root "$rse" -1 || true
-        ra account set-limits randomaccount "$rse" -1 || true
-        ra account set-limits ddmlab "$rse" -1 || true
-        ra account set-limits dependuser "$rse" -1 || true
-        ra account set-limits modeldeveloper "$rse" -1 || true
+        ra_ok account set-limits root "$rse" -1
+        ra_ok account set-limits randomaccount "$rse" -1
+        ra_ok account set-limits ddmlab "$rse" -1
+        ra_ok account set-limits dependuser "$rse" -1
+        ra_ok account set-limits modeldeveloper "$rse" -1
     done
 }
 
@@ -1043,40 +1085,42 @@ verify_token_exchange() {
     done
 }
 
+step() { local t=$SECONDS; "$@"; ra_flush || exit $?; echo "  ⏱ $1: $((SECONDS - t)) s"; }
+
 # ── Main ──────────────────────────────────────────────────────────
 
 main() {
-    wait_for_infrastructure
-    setup_accounts_and_identities
+    step wait_for_infrastructure
+    step setup_accounts_and_identities
 
     # Managed mode: Rucio exchanges each account's subject token for storage
     # tokens, so seed them in every environment, not just the sandbox.
     if [ "${TOKEN_MODE:-managed}" = "managed" ]; then
         if [ "${SCOPE_PROFILE:-local}" = "local" ]; then
-            grant_token_exchange
+            step grant_token_exchange
         fi
-        seed_subject_tokens
+        step seed_subject_tokens
     fi
 
     if [ "${GITOPS_ENV:-sandbox}" = "sandbox" ]; then
         # Sandbox-only: internal XRD3/XRD4/TEAPOT1/TEAPOT2, in-cluster
         # ruciodb session-token maintenance, authz test identities.
-        configure_rses
-        cleanup_session_tokens
-        setup_authz_test_identities
+        step configure_rses
+        step cleanup_session_tokens
+        step setup_authz_test_identities
     else
-        configure_validation_storage_rses
+        step configure_validation_storage_rses
     fi
 
-    configure_s3_source_rse
-    configure_fts_cloud_storage
-    configure_public_ri_rses
+    step configure_s3_source_rse
+    step configure_fts_cloud_storage
+    step configure_public_ri_rses
 
-    setup_scopes_and_quotas
-    setup_fts_oidc_provider
-    assert_identities_unambiguous
+    step setup_scopes_and_quotas
+    step setup_fts_oidc_provider
+    step assert_identities_unambiguous
 
-    echo -e "\n=== Initialization Complete ==="
+    echo -e "\n=== Initialization Complete (${SECONDS} s) ==="
 }
 
 main
