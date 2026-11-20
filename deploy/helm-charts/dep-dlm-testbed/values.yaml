@@ -562,6 +562,14 @@ xrd3:
             path: rucio_ca.pem
             mode: 0644
 
+          - key: 9f727ac7.0
+            path: 9f727ac7.0
+            mode: 0644
+
+          - key: fc5a8f99.0
+            path: fc5a8f99.0
+            mode: 0644
+
     - name: configs
       configMap:
         name: testbed-configs
@@ -587,6 +595,12 @@ xrd3:
     - name: certs
       mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
       subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /etc/grid-security/certificates/9f727ac7.0
+      subPath: 9f727ac7.0
+    - name: certs
+      mountPath: /etc/grid-security/certificates/fc5a8f99.0
+      subPath: fc5a8f99.0
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
       subPath: xrootd--docker-entrypoint.sh
@@ -626,6 +640,14 @@ xrd4:
             path: rucio_ca.pem
             mode: 0644
 
+          - key: 9f727ac7.0
+            path: 9f727ac7.0
+            mode: 0644
+
+          - key: fc5a8f99.0
+            path: fc5a8f99.0
+            mode: 0644
+
     - name: configs
       configMap:
         name: testbed-configs
@@ -651,6 +673,12 @@ xrd4:
     - name: certs
       mountPath: /etc/pki/ca-trust/source/anchors/rucio-ca.crt
       subPath: rucio_ca.pem
+    - name: certs
+      mountPath: /etc/grid-security/certificates/9f727ac7.0
+      subPath: 9f727ac7.0
+    - name: certs
+      mountPath: /etc/grid-security/certificates/fc5a8f99.0
+      subPath: fc5a8f99.0
     - name: scripts
       mountPath: /usr/local/bin/docker-entrypoint.sh
       subPath: xrootd--docker-entrypoint.sh
