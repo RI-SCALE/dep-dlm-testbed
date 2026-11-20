@@ -50,7 +50,7 @@ certs:
     b92fd57f.signing_policy: ""
     fc5a8f99.0: ""
     fc5a8f99.signing_policy: ""
-    35105088.0: ""
+    "35105088.0": ""
     35105088.signing_policy: ""
 
 configs:
@@ -800,8 +800,8 @@ teapot1:
           - key: fc5a8f99.signing_policy
             path: fc5a8f99.signing_policy
 
-          - key: 35105088.0
-            path: 35105088.0
+          - key: "35105088.0"
+            path: "35105088.0"
 
           - key: 35105088.signing_policy
             path: 35105088.signing_policy
@@ -939,8 +939,8 @@ teapot2:
           - key: fc5a8f99.signing_policy
             path: fc5a8f99.signing_policy
 
-          - key: 35105088.0
-            path: 35105088.0
+          - key: "35105088.0"
+            path: "35105088.0"
 
           - key: 35105088.signing_policy
             path: 35105088.signing_policy
