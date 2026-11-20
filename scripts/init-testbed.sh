@@ -20,7 +20,6 @@ AUTHZ_TEST_USERS=(
     "modeldeveloper:secret:modeldeveloper"
 )
 
-KCADM="/opt/keycloak/bin/kcadm.sh"
 KC_REALM=rucio
 EXCHANGE_REQUESTERS=( fts rucio )
 EXCHANGE_TARGETS=( xrd3 xrd4 teapot1 teapot2 )
@@ -189,7 +188,6 @@ ra_flush() {
     _exec rucio-server python3 -c "$_RA_BATCH_RUNNER" "${queue[@]}"
 }
 
-_kc() { _exec keycloak "$KCADM" "$@"; }
 
 _fts_admin() {
     local attempt rc
@@ -957,33 +955,73 @@ setup_scopes_and_quotas() {
     done
 }
 
-# ── Token-exchange grant (merged from grant-token-exchange.sh) ────
+# ── Token-exchange grant ─────────────────────────────────────────
+# Lets the requesters (fts, rucio) exchange tokens for each target audience:
+# per target, enable fine-grained permissions, bind a client policy with the
+# requesters to its token-exchange permission. Keycloak admin REST from one
+# Python process inside rucio-server (kcadm would start one JVM per call).
+_KC_GRANT_EXCHANGE='
+import json, os, re, sys, urllib.error, urllib.parse, urllib.request
+
+KC, REALM = os.environ["KC_URL"].rstrip("/"), os.environ["KC_REALM"]
+TOKEN = None
+
+def call(method, path, body=None, form=None, allow=()):
+    headers, data = {}, None
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+    elif body is not None:
+        data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
+    if TOKEN:
+        headers["Authorization"] = "Bearer " + TOKEN
+    req = urllib.request.Request(KC + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req) as r:
+            raw = r.read()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        if e.code in allow:
+            return None
+        sys.exit("  ✗ %s %s: HTTP %s %s" % (method, path, e.code, e.read().decode()[:200]))
+
+def client_uuid(client_id):
+    found = [c for c in call("GET", "/admin/realms/%s/clients?clientId=%s" % (REALM, client_id))
+             if c["clientId"] == client_id]
+    if not found:
+        sys.exit("  ✗ client %r not found (is it in the realm import?)" % client_id)
+    return found[0]["id"]
+
+TOKEN = call("POST", "/realms/master/protocol/openid-connect/token", form={
+    "grant_type": "password", "client_id": "admin-cli",
+    "username": "admin", "password": "admin"})["access_token"]
+
+requesters = [client_uuid(c) for c in os.environ["REQUESTERS"].split()]
+authz = "/admin/realms/%s/clients/%s/authz/resource-server" % (REALM, client_uuid("realm-management"))
+
+for target in os.environ["TARGETS"].split():
+    perms = call("PUT", "/admin/realms/%s/clients/%s/management/permissions"
+                 % (REALM, client_uuid(target)), {"enabled": True})
+    perm_id = perms["scopePermissions"]["token-exchange"]
+
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", "exchange-to-" + target)
+    policy = {"type": "client", "name": name, "logic": "POSITIVE", "clients": requesters}
+    call("POST", authz + "/policy/client", policy, allow=(409,))  # 409: exists, updated below
+    policy["id"] = [x for x in call("GET", authz + "/policy?" + urllib.parse.urlencode({"name": name}))
+                    if x["name"] == name][0]["id"]
+    call("PUT", authz + "/policy/client/" + policy["id"], policy)
+
+    perm = call("GET", authz + "/permission/scope/" + perm_id)
+    perm["policies"] = [policy["id"]]
+    call("PUT", authz + "/permission/scope/" + perm_id, perm)
+    print("  ✓ %s: policy %s bound to token-exchange" % (target, name))
+'
+
 grant_token_exchange() {
     if [ "${SCOPE_PROFILE:-local}" != "local" ]; then
         echo "  ✗ grant_token_exchange requires SCOPE_PROFILE=local (local Keycloak) — got '${SCOPE_PROFILE}'" >&2
         return 0
     fi
     echo "=== Granting token-exchange permissions ==="
-
-    _kc config credentials \
-        --server http://localhost:8080 \
-        --realm master --user admin --password admin
-
-    local rc uuid
-    local requester_uuids=()
-    for rc in "${EXCHANGE_REQUESTERS[@]}"; do
-        uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId="$rc" --fields id --format csv --noquotes | tr -d '\r')
-        if [ -z "$uuid" ]; then
-            echo "  ERROR: requester client '$rc' not found" >&2
-            exit 1
-        fi
-        echo "  requester $rc UUID: $uuid"
-        requester_uuids+=( "$uuid" )
-    done
-    local requester_uuids_json
-    requester_uuids_json=$(printf '"%s",' "${requester_uuids[@]}")
-    requester_uuids_json="[${requester_uuids_json%,}]"
 
     # Public RI hosts become exchange targets too: FTS exchanges the source
     # token for an audience named after the storage host.
@@ -993,61 +1031,10 @@ grant_token_exchange() {
         targets+=( "$host" )
     done
 
-    local target target_uuid rm_uuid policy_name policy_id perm_name perm_id
-    for target in "${targets[@]}"; do
-        echo "  === target: $target ==="
-
-        target_uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId="$target" --fields id --format csv --noquotes | tr -d '\r')
-        if [ -z "$target_uuid" ]; then
-            echo "  ERROR: target client '$target' not found — is it imported?" >&2
-            exit 1
-        fi
-        echo "    target UUID: $target_uuid"
-
-        _kc update "clients/$target_uuid/management/permissions" -r "$KC_REALM" \
-            -s enabled=true
-        echo "    management permissions enabled"
-
-        rm_uuid=$(_kc get clients -r "$KC_REALM" \
-            -q clientId=realm-management --fields id --format csv --noquotes | tr -d '\r')
-
-        policy_name="exchange-to-${target}"
-        policy_name=$(echo "$policy_name" | tr -c 'A-Za-z0-9_.-' '_')
-
-        echo "    creating client policy: $policy_name  members=$requester_uuids_json"
-        _kc create "clients/$rm_uuid/authz/resource-server/policy/client" -r "$KC_REALM" \
-            -s "name=$policy_name" \
-            -s "clients=$requester_uuids_json" \
-            -s "logic=POSITIVE" \
-            || echo "    (policy may already exist — updating it instead)"
-
-        policy_id=$(_kc get \
-            "clients/$rm_uuid/authz/resource-server/policy?name=$policy_name" \
-            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
-
-        if [ -n "$policy_id" ]; then
-            _kc update \
-                "clients/$rm_uuid/authz/resource-server/policy/client/$policy_id" \
-                -r "$KC_REALM" -s "clients=$requester_uuids_json" \
-                || echo "    (could not update policy membership — check manually)"
-        fi
-
-        perm_name="token-exchange.permission.client.$target_uuid"
-        perm_id=$(_kc get \
-            "clients/$rm_uuid/authz/resource-server/permission?name=$perm_name" \
-            -r "$KC_REALM" --fields id --format csv --noquotes | tr -d '\r' | head -n1)
-
-        if [ -z "$perm_id" ] || [ -z "$policy_id" ]; then
-            echo "  ERROR: could not resolve perm_id ($perm_id) or policy_id ($policy_id)." >&2
-            exit 1
-        fi
-
-        _kc update \
-            "clients/$rm_uuid/authz/resource-server/permission/scope/$perm_id" \
-            -r "$KC_REALM" -s "policies=[\"$policy_id\"]"
-        echo "    policy bound to token-exchange permission"
-    done
+    _exec rucio-server env \
+        KC_URL="${KC_ADMIN_URL:-http://keycloak:8080}" KC_REALM="$KC_REALM" \
+        REQUESTERS="${EXCHANGE_REQUESTERS[*]}" TARGETS="${targets[*]}" \
+        python3 -c "$_KC_GRANT_EXCHANGE"
 }
 
 # ── Token-exchange self-test (optional, gated) ───────────────────
