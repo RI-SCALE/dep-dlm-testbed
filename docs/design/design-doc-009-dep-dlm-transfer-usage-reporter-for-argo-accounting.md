@@ -16,7 +16,7 @@ Nothing reports DEP DLM transfer usage to ARGO Accounting. ARGO (GRNET, WP4) exp
 
 - Bytes transferred per UTC day, per DEP and `group_id`, in ARGO.
 - One stateless daily job in the DEP DLM deployment; no Rucio core change.
-- Safe re-runs: a day sent twice yields one correct value.
+- Each day reported once, so credit balances don't change after the fact; re-runs create no duplicates.
 - Portable: another DEP DLM operator can run it with a Rucio account and an ARGO client.
 
 ## Non-goals
@@ -28,15 +28,19 @@ Nothing reports DEP DLM transfer usage to ARGO Accounting. ARGO (GRNET, WP4) exp
 
 ## Design
 
-A small Python job runs daily as a Kubernetes CronJob in the DEP DLM deployment. It reads finished transfers through Rucio's REST API, maps each owner to a use case through two Rucio account attributes, sums bytes per day and upserts one ARGO metric per installation and `group_id`.
+A small Python job runs nightly as a Kubernetes CronJob in the DEP DLM deployment. It reads yesterday's finished transfers through Rucio's REST API, maps each owner to a use case through two Rucio account attributes, sums bytes and creates one ARGO metric per installation, day and `group_id`.
 
 ### Daily run
 
-1. Window: previous UTC day plus 2 days lookback for late-archived transfers.
-2. For each source/destination RSE pair, page `GET /requests/history/list?request_states=D`; keep rows with `transferred_at` in the window.
+1. Window: yesterday (UTC), reported once, shortly after midnight, so credit
+   balances are as fresh as daily reporting allows (agreed with GRNET, 23/11).
+2. For each source/destination RSE pair, page `GET /requests/history/list?request_states=D`; keep rows with `transferred_at` in that day.
 3. Map each distinct `account` to `(project_id, group_id)` from its account attributes (one `GET /accounts/{account}/attr/` per account and run); accounts without both are excluded and logged.
 4. Sum `bytes` per `(day, project_id, group_id)`.
-5. Upsert in ARGO: find the day's metric via `POST /accounting-system/metrics/search` (period, definition, `group_id`), or by listing the installation's metrics; PATCH `value` if found, else POST.
+5. Create in ARGO: look up the day's metric by listing the installation's
+   metrics (`metric-definition-id`, `start`/`end` = day, `size=100`, matching
+   `group_id`); if it exists, leave it and log; else POST. No PATCH in normal
+   operation.
 
 ### Transfer source
 
@@ -67,11 +71,11 @@ What Rucio master supports (`core/account.py`, `gateway/account.py`, `web/rest/f
 - REST: `GET /accounts/{account}/attr/`, `POST`/`DELETE /accounts/{account}/attr/{key}`. `GET /accounts/?group_id=suc1` lists accounts by exact attribute value, useful for audits.
 - Attributes are not versioned, and only active accounts are readable: a suspended or deleted account's attributes return `AccountNotFound`.
 
-The mapping lives where the accounts are managed, so no separate file has to be kept in sync. The cost is that a changed attribute also changes days re-sent within the lookback or a backfill.
+The mapping lives where the accounts are managed, so no separate file has to be kept in sync. The cost is that a changed attribute also applies to a backfill of earlier days.
 
 ### Request shape (ARGO)
 
-One POST per metric (no bulk endpoint), as in the [Metric API](https://argoeu.github.io/argo-accounting/docs/api/metric) and the [Python library](https://argoeu.github.io/argo-accounting/docs/guides/accounting-library):
+One POST per metric (no bulk endpoint), as in the [devel OpenAPI spec](https://api.devel.acc.argo.grnet.gr/open-api) (3.1.0; the published 1.0.0 lacks `group_id`):
 
 ```json
 POST /accounting-system/installations/{installation_id}/metrics
@@ -86,14 +90,14 @@ Authorization: Bearer <jwt>
 }
 ```
 
-One installation per DEP (CERN appears 4 times). Updates use `PATCH /installations/{id}/metrics/{metric_id}`. The ARGO adapter wraps `argo-acc-library` (`installations[id].metrics.add(...)`).
+Existing metrics are found with `GET /installations/{id}/metrics?metric-definition-id=…&start=…&end=…&size=100` (paged, `group_id` matched client-side). `PATCH /installations/{id}/metrics/{metric_id}` exists but is not used in normal operation. The adapter calls the API with `httpx`; `argo-acc-library` covers add and list only.
 
 ### Identity and permissions
 
 | Call | Credential | Permission |
 | --- | --- | --- |
-| Reporter → ARGO | JWT via OAuth 2.0 client credentials (client from GRNET); valid 1 hour, fetched each run | Role granted through **entitlements in the token**: Metric create, read, update on own entities, scoped to the DEP installations |
-| Reporter → Rucio | Token from DEP IAM (or userpass) for a dedicated Rucio account | `admin` attribute, required by `list_requests_history`; reading account attributes needs none |
+| Reporter → ARGO | JWT via OAuth 2.0 client credentials (one client per accounting project, from GRNET); valid 1 hour, fetched each run | Role granted through **entitlements in the token**: Metric create and read on own entities, scoped to the DEP installations |
+| Reporter → Rucio | OIDC token (client credentials) mapped to a dedicated Rucio account, in line with DEP DLM's token-only objective; userpass only during development | `admin` attribute, required by `list_requests_history`; reading account attributes needs none |
 
 ARGO validates the token and maps entitlements to roles. Access per collection is Always, Entity (own records) or Never; Never wins. Secrets come from Vault via ExternalSecrets.
 
@@ -107,7 +111,7 @@ Hexagonal-lite: a pure core with three ports, no framework. Full clean architect
 | Ports | `TransferSource`, `GroupMapping`, `AccountingSink` |
 | Adapters | `RucioRestSource`, `RucioAttributeMapping`, `ArgoSink`, `StdoutSink` (dry-run) |
 
-No persistence: Rucio is the source of truth and ARGO holds what was sent, so a re-run recomputes and upserts.
+No persistence: Rucio is the source of truth and ARGO holds what was sent, so a re-run recomputes and creates only what is missing.
 
 ### Config
 
@@ -115,13 +119,13 @@ No persistence: Rucio is the source of truth and ARGO holds what was sent, so a 
 argo:
   endpoint: <ARGO instance>
   metric_definition_id: <from ARGO>
-  credentials: vault:dep-dlm/argo-reporter
+  credentials: vault:dep-dlm/argo-reporter   # one client per project
 rucio:
   host: <Rucio server>
   credentials: vault:dep-dlm/rucio-reporter
 projects:                     # account attribute project_id -> ARGO installation
   dep-a: { installation_id: <from ARGO> }
-lookback_days: 2
+lookback_days: 0              # 0: yesterday only
 dry_run: true
 ```
 
@@ -130,7 +134,7 @@ dry_run: true
 | File / component | Change |
 | --- | --- |
 | `dep-dlm-usage-reporter` (new) | Core, ports, adapters, CLI; container image |
-| DEP DLM GitOps | CronJob, daily 02:30 UTC; config as ConfigMap |
+| DEP DLM GitOps | CronJob, nightly shortly after midnight UTC (e.g. 01:00); config as ConfigMap |
 | Vault / ExternalSecrets | ARGO client credentials; Rucio reporter credentials |
 | Rucio | Dedicated reporter account with `admin` attribute; `project_id` and `group_id` attributes on every use case account (one account per use case) |
 | ARGO (GRNET) | Provider CERN, 4 installations, metric definition, service client with entitlements |
@@ -142,19 +146,20 @@ dry_run: true
 - **Invalid config:** fail at start, send nothing.
 - **Dry-run by default:** production sets `dry_run: false` explicitly.
 - **Unmapped account** (attribute missing, or `project_id` not in config): excluded and logged; job exits with a warning code. Bytes are never guessed into a group.
-- **Suspended or deleted account:** its attributes are unreadable, so its late transfers count as unmapped; suspend accounts only after the lookback has passed.
-- **ARGO or Rucio unavailable:** retry with backoff, then fail. The next run's lookback re-sends missing days.
-- **Partial run or late transfers:** each record is an upsert, so re-runs and lookback correct values without duplicates.
+- **Suspended or deleted account:** its attributes are unreadable, so its transfers count as unmapped; suspend accounts only after their last day has been reported.
+- **ARGO or Rucio unavailable:** retry with backoff, then fail. Re-run for the missed day; the lookup prevents duplicates.
+- **Day already in ARGO:** left as is and logged. No PATCH in normal operation, so balances don't change after the fact.
+- **Late-archived transfers:** transfers Rucio archives after the nightly run are missed. If measurements show this matters, the next run adds the previous day's difference (Rucio minus ARGO) to the new day instead of patching.
 - **Expired token:** fetched fresh each run; refreshed if a run exceeds one hour.
 - **Time:** UTC only; a day is `[00:00:00, 24:00:00)`, sent with end `23:59:59Z`.
 
 ## Testing
 
-- **Unit:** day boundaries, UTC, lookback, non-`DONE` states excluded, accounts with missing or partial attributes.
-- **Integration:** `RucioRestSource` and `RucioAttributeMapping` against a Rucio dev stack (docker-compose) seeded across midnight; `ArgoSink` POST, find and PATCH against ARGO devel.
+- **Unit:** day boundaries, UTC, yesterday only, non-`DONE` states excluded, accounts with missing or partial attributes.
+- **Integration:** `RucioRestSource` and `RucioAttributeMapping` against a Rucio dev stack (docker-compose) seeded across midnight; `ArgoSink` lookup and POST against ARGO devel.
 - **Cross-check:** per day, mapped plus unmapped bytes equal the history total; a mismatch fails staging runs.
 - **CI:** lint, type check, unit and integration per merge request; image build and scan.
-- **Staging:** 1–2 weeks against ARGO devel before production.
+- **Staging:** 1–2 weeks against ARGO devel before production; measure how late Rucio archives transfers after midnight.
 
 ## Sequencing
 
@@ -169,7 +174,7 @@ dry_run: true
 ## Open questions
 
 - [ ] **ARGO entitlements:** which entitlement grants metric create and update for the DEP installations?
-- [ ] **Idempotency:** does ARGO reject or merge overlapping periods, or is find-then-PATCH expected? Can search filter on installation\_id, metric\_definition\_id and group\_id with equality? Can a metric carry a client-set external ID (e.g. day plus group\_id) to make re-sends idempotent?
+- [x] **Idempotency:** no client-set metric ID and no duplicate rejection; the reporter looks a day up before POSTing and never patches (agreed with GRNET, 23/11).
 - [ ] **Which transfers count:** `DONE` only; multi-hop intermediate hops; direction needed?
 - [ ] **Unit and zero days:** bytes or a larger unit; send `0` on days without transfers?
 - [ ] **Four DEPs:** separate Rucio instances or VOs, or one instance with an account-to-DEP mapping?
