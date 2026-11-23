@@ -42,6 +42,43 @@ A small Python job runs nightly as a Kubernetes CronJob in the DEP DLM deploymen
    `group_id`); if it exists, leave it and log; else POST. No PATCH in normal
    operation.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as CronJob (01:00 UTC)
+    participant R as Rucio
+    participant A as ARGO
+
+    C->>R: finished transfers (DONE) for yesterday
+    C->>R: account attributes (once per account)
+    Note over C: sum bytes per project and group_id
+    alt account without project_id/group_id
+        Note over C: excluded and logged (exit 2)
+    end
+
+    loop each (day, project, group_id)
+        C->>A: GET installation metrics for that day
+        alt not reported yet
+            C->>A: POST metric
+            opt POST times out
+                C->>A: look up again, POST only if missing
+            end
+        else already reported
+            Note over C: leave as is, log (no PATCH)
+        else several matches
+            Note over C: write nothing (exit 3)
+        end
+    end
+
+    opt Rucio or ARGO down
+        Note over C: retry with backoff, then abort (exit 4) - re-run that day
+    end
+```
+
+A transfer counts once, in full, on the day it finished (`transferred_at`);
+failed transfers are not counted. A transfer that finished before midnight but
+was archived by Rucio after the run is added to the next day's figure.
+
 ### Transfer source
 
 | Option | When |
