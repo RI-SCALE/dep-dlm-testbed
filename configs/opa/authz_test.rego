@@ -15,6 +15,8 @@ _dep_end_user := concat("", [_ns, "dep-end-user:role=member"])
 
 _model_developer := concat("", [_ns, "model-developer:role=member"])
 
+_usage_reporter := concat("", [_ns, "usage-reporter:role=member"])
+
 _unlisted := concat("", [_ns, "cms-production:role=member"])
 
 _mfa := "https://refeds.org/profile/mfa"
@@ -28,6 +30,7 @@ _odrl := {"policies": [{"uid": "urn:test:tiers", "type": "Set", "permission": [
 	},
 	{"action": "rucio:user", "target": _target, "assignee": _dep_end_user},
 	{"action": "rucio:user", "target": _target, "assignee": _model_developer},
+	{"action": "rucio:reporter", "target": _target, "assignee": _usage_reporter},
 ]}]}
 
 _rule_id := "1f0e3dad99908345f7439f8ffabdffc4"
@@ -170,6 +173,40 @@ test_listed_account_with_token_needs_a_tier if {
 	not data.vo.authz.v1.allow with input as {
 		"issuer": "root", "action": "del_rse",
 		"token": {"sub": "x", "entitlements": []}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}
+
+# ── Usage reporter ───────────────────────────────────────────────────────
+
+test_reporter_may_list_request_history if {
+	data.vo.authz.v1.allow with input as {
+		"issuer": "usage-reporter", "action": "list_requests_history",
+		"token": {"sub": "x", "entitlements": [_usage_reporter]}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}
+
+test_reporter_may_not_write if {
+	not data.vo.authz.v1.allow with input as {
+		"issuer": "usage-reporter", "action": "add_rule",
+		"token": {"sub": "x", "entitlements": [_usage_reporter]}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}
+
+test_reporter_is_not_admin if {
+	not data.vo.authz.v1.allow with input as {
+		"issuer": "usage-reporter", "action": "add_rse",
+		"token": {"sub": "x", "entitlements": [_usage_reporter]}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}
+
+test_user_tier_may_not_list_request_history if {
+	not data.vo.authz.v1.allow with input as {
+		"issuer": "dependuser", "action": "list_requests_history",
+		"token": {"sub": "x", "entitlements": [_dep_end_user]}, "kwargs": {},
 	}
 		with data.dep.odrl as _odrl
 }

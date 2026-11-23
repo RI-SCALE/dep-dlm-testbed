@@ -11,6 +11,7 @@ import rego.v1
 #   admin   every action (e.g. dep-operator, with MFA)
 #   user    rules, DIDs and replicas, on any scope and whoever created them
 #           (e.g. dep-end-user, model-developer)
+#   reporter  read-only transfer history (the usage reporter's service account)
 #   none    nothing
 #
 # There are no ownership checks (scope or rule) and no checks on request
@@ -27,6 +28,11 @@ allow if {
 	_has_tier("user")
 }
 
+allow if {
+	input.action in _reporter_actions
+	_has_tier("reporter")
+}
+
 # Everything not listed here (RSEs, protocols, accounts, scopes,
 # approve_rule, reduce_rule, move_rule, update_replicas_states, ...) is
 # admin-only.
@@ -35,6 +41,9 @@ _user_actions := {
 	"add_did", "add_dids", "attach_dids", "attach_dids_to_dids", "detach_dids",
 	"add_replicas", "delete_replicas",
 }
+
+# Read-only; what the usage reporter reads to count transfers.
+_reporter_actions := {"list_requests", "list_requests_history"}
 
 _admin_accounts := data.vo.policy.admin_accounts if {
 	data.vo.policy.admin_accounts

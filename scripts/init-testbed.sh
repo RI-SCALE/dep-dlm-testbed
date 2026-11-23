@@ -259,6 +259,12 @@ setup_accounts_and_identities() {
     ra_ok account add --type USER --email dependuser@rucio dependuser
     ra_ok account add --type USER --email modeldeveloper@rucio modeldeveloper
 
+     # usage reporter: service account; the E2E transfer tests run as root,
+    # so root carries the ENES use case in the testbed
+    ra_ok account add --type SERVICE --email usage-reporter@rucio usage-reporter
+    ra_ok account add-attribute root --key project_id --value RI-SCALE_ENES
+    ra_ok account add-attribute root --key group_id --value suc1
+
     local grant_mode
     grant_mode=$(_grant_mode_for_profile)
     if [ "$grant_mode" != "password" ]; then
@@ -415,6 +421,44 @@ assert_identities_unambiguous() {
         echo "    If an authz test subject (adminuser/depoperator/dependuser/modeldeveloper) appears here,"
         echo "    its token resolves ambiguously in validate_jwt() and the test is meaningless."
     fi
+}
+
+setup_usage_reporter_identity() {
+    local grant_mode
+    grant_mode=$(_grant_mode_for_profile)
+    if [ "$grant_mode" != "password" ]; then
+        echo "  Skipping usage-reporter identity (grant_mode=$grant_mode for $OIDC_ISSUER)."
+        return 0
+    fi
+
+    echo "  Registering OIDC identity for usage-reporter (client credentials)..."
+    _exec rucio-server env OIDC_TOKEN_URL="$OIDC_TOKEN_URL" python3 -c "
+import urllib.request, urllib.parse, json, base64, os
+from rucio.core.identity import add_account_identity
+from rucio.core import oidc
+from rucio.common.types import InternalAccount
+from rucio.common import exception
+
+data = urllib.parse.urlencode({'grant_type': 'client_credentials'}).encode()
+auth = base64.b64encode(b'usage-reporter:usage-reporter-secret').decode()
+req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'], data=data,
+                             headers={'Authorization': 'Basic ' + auth})
+token = json.loads(urllib.request.urlopen(req).read())['access_token']
+claims = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '=='))
+identity = oidc.oidc_identity_string(claims['sub'], claims['iss'])
+
+try:
+    add_account_identity(identity, 'OIDC', InternalAccount('usage-reporter'), 'usage-reporter@rucio', default=True)
+    print('  ✓ usage-reporter: ' + identity)
+except exception.Duplicate:
+    print('  ✓ usage-reporter already mapped')
+except Exception as e:
+    msg = str(e).lower()
+    if 'duplicate key' in msg or 'already exists' in msg or 'unique constraint' in msg:
+        print('  ✓ usage-reporter already mapped (pre-existing)')
+    else:
+        raise
+"
 }
 
 # ── Subject-token seeding (managed-mode token exchange) ──────────
@@ -1079,6 +1123,7 @@ step() { local t=$SECONDS; "$@"; ra_flush || exit $?; echo "  ⏱ $1: $((SECONDS
 main() {
     step wait_for_infrastructure
     step setup_accounts_and_identities
+    step setup_usage_reporter_identity
 
     # Managed mode: Rucio exchanges each account's subject token for storage
     # tokens, so seed them in every environment, not just the sandbox.

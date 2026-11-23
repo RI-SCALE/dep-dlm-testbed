@@ -662,6 +662,18 @@ test-authz-user: ## Authz tier from userinfo entitlements for a real user token.
 	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
 	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
 
+.PHONY: test-usage-reporter
+test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
+ifeq ($(RUNTIME),compose)
+	@rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
+	    -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \
+	echo "$$out"; \
+	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; exit 1;; esac; \
+	echo "$$out" | python3 -c 'import sys, json; r = [json.loads(l) for l in sys.stdin if l.startswith("{")]; assert any(x["group_id"] == "suc1" and x["value"] > 0 for x in r), "no suc1 usage"; print("✓ suc1 reported")'
+else
+	@echo "k8s path follows with the umbrella chart"; exit 1
+endif
+
 ## CI
 
 .PHONY: ci-durations

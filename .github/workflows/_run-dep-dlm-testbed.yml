@@ -214,6 +214,9 @@ jobs:
       - name: Rucio E2E TPC transfer test
         run: make test-rucio-transfers
 
+      - name: make test-usage-reporter
+        run: make test-usage-reporter
+
       - name: Rucio E2E transfer test from public RI holdings (ENES, EBI)
         # External sources and trust anchors don't vary with arch or token
         # mode: run once per runtime and IdP profile (amd64, first token mode).

@@ -93,6 +93,19 @@
       }
     },
     {
+      "clientId": "usage-reporter",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "usage-reporter-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": ["aud:rucio", "storage.read:/", "storage.modify:/", "entitlements"],
+      "optionalClientScopes": ["offline_access"]
+    },
+    {
       "clientId": "fts",
       "enabled": true,
       "publicClient": false,
@@ -417,6 +430,15 @@
       "enabled": true,
       "email": "service-account-rucio@rucio",
       "serviceAccountClientId": "rucio"
+    },
+    {
+      "username": "service-account-usage-reporter",
+      "enabled": true,
+      "serviceAccountClientId": "usage-reporter",
+      "realmRoles": ["offline_access"],
+      "attributes": {
+        "entitlements": ["urn:example:aai.example.org:group:usage-reporter:role=member"]
+      }
     }
   ],
   "clientScopes": [
