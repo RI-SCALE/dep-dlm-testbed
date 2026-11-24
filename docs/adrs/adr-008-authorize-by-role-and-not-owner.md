@@ -118,4 +118,4 @@ This decision holds while each community gets its own deployment. Revisit it if 
 * `configs/opa/odrl/data.json`: tier policy
 * `configs/opa/vendor/opa-ri-scale/VENDORED.md`: ODRL evaluator
 * `scripts/ingest_policies.py`
-* `patches/rucio/rucio_opa_v1_policy/`
+* [rucio-opa-policy-package](https://github.com/RI-SCALE/rucio-opa-policy-package), installed from its release wheel in `deploy/compose/Dockerfile.rucio`
