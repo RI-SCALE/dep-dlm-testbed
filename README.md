@@ -214,6 +214,7 @@ Tests
   probe-fts-xrootd     Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/conveyor
   test-authz-personas  Authz entitlement-tier test across DEP persona accounts
   test-authz-user      Authz tier from userinfo entitlements for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
+  test-usage-reporter  Usage reporter dry-run: today's transfers report suc1 > 0
 
 CI
   ci-durations         Compare CI step durations, latest successful runs: BRANCH (current) vs main. WORKFLOW=local.yml. Needs gh.

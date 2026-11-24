@@ -25,6 +25,9 @@ that path, from validation to adoption.
 - [ ] Production reference environment applied and validated end to end
 - [ ] TLS and trust: align with the CERN Rucio instance and the partner documentation (Confluence); partners bring a private PKI or a public CA for Rucio/FTS host certificates and public TLS on the Gateway (cert-manager); FTS and storage trust the IGTF/public CAs of real RSEs
 - [ ] On-premises: single-node reference validated in `dep-dlm-deployment` (kubeadm, PostgreSQL, Vault); open: partner ownership of Kubernetes, databases and Vault; fleet offerings (GKE Enterprise, Azure Arc, EKS Anywhere) and GitOps against attached clusters
+- [x] Usage reporting: nightly reporter (Rucio → ARGO Accounting), dry-run on Compose, Helm, Flux and Argo CD; read-only OPA tier `rucio:reporter` — [design doc 009](docs/design/design-doc-009-dep-dlm-transfer-usage-reporter-for-argo-accounting.md)
+- [ ] Usage reporter on external IdPs (EGI Check-In Dev, LS AAI): client_credentials tokens carry no entitlement; asked both IdPs, bridge is an `iss` + `sub` whitelist in OPA
+- [ ] Usage reporter writes to ARGO devel, then staging and production (needs GRNET credentials)
 
 ## 3. Production enablement
 

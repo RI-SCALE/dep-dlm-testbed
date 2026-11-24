@@ -135,7 +135,8 @@ spec:
                 fts3config=@configs/fts/${PDIR}fts3config \
                 fts3restconfig=@configs/fts/${PDIR}${FLOW}.fts3restconfig \
                 realm.json=@configs/keycloak/realm.json \
-                userpass-client.cfg=@configs/rucio/userpass-client.cfg
+                userpass-client.cfg=@configs/rucio/userpass-client.cfg \
+                usage-reporter-client-secret=usage-reporter-secret
               echo "seed complete: FLOW=$FLOW SCOPE_PROFILE=$SCOPE_PROFILE"
           volumeMounts:
             - { name: repo, mountPath: /repo }

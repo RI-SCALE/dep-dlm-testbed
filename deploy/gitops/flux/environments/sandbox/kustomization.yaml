@@ -14,6 +14,7 @@ resources:
   - ../../components/rucio-daemons.yaml
   - ../../components/rucio-client.yaml
   - ../../components/opa.yaml
+  - ../../components/usage-reporter.yaml
   - ../../components/kube-prometheus-stack.yaml
   - ../../components/loki.yaml
   - ../../components/alloy.yaml
@@ -29,6 +30,7 @@ configMapGenerator:
   - { name: teapot2-values, namespace: flux-system, files: [ teapot2.yaml=../../../base/values/teapot2.yaml ] }
   - { name: fts-values,           namespace: flux-system, files: [ fts.yaml=../../../base/values/fts.yaml ] }
   - { name: opa-values,           namespace: flux-system, files: [ opa.yaml=../../../base/values/opa.yaml ] }
+  - { name: usage-reporter-values, namespace: flux-system, files: [ usage-reporter.yaml=../../../base/values/usage-reporter.yaml ] }
   - { name: kube-prometheus-stack-values, namespace: flux-system, files: [ kube-prometheus-stack.yaml=../../../base/values/kube-prometheus-stack.yaml ] }
   - { name: loki-values,          namespace: flux-system, files: [ loki.yaml=../../../base/values/loki.yaml ] }
   - { name: alloy-values,         namespace: flux-system, files: [ alloy.yaml=../../../base/values/alloy.yaml ] }

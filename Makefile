@@ -28,12 +28,22 @@ GITOPS_ENV ?= sandbox
 K8S_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
 KUBECTL       := kubectl -n $(K8S_NAMESPACE)
 
+# Job from the CronJob's template, plus REPORTER_DAY=today (create job --from can't set env)
+REPORTER_JOB_PY := import sys, json, datetime; cj = json.load(sys.stdin); \
+  job = {"apiVersion": "batch/v1", "kind": "Job", "metadata": {"name": sys.argv[1]}, "spec": cj["spec"]["jobTemplate"]["spec"]}; \
+  job["spec"]["template"]["spec"]["containers"][0].setdefault("env", []).append({"name": "REPORTER_DAY", "value": datetime.datetime.utcnow().date().isoformat()}); \
+  print(json.dumps(job))
+REPORTER_CHECK_PY := import sys, json; r = [json.loads(l) for l in sys.stdin if l.startswith("{")]; \
+  assert any(x["group_id"] == "suc1" and x["value"] > 0 for x in r), "no suc1 usage"; print("✓ suc1 reported")
+
+
 # Shared by install, upgrade and template so they all render the same release.
 HELM_SET = --set global.tokenMode=$(TOKEN_MODE) \
 	--set global.daemonMode=$(DAEMON_MODE) \
 	--set global.scopeProfile=$(SCOPE_PROFILE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
-	--set observability.enabled=$(if $(filter 1,$(OBSERVABILITY)),true,false)
+	--set observability.enabled=$(if $(filter 1,$(OBSERVABILITY)),true,false) \
+	--set usage-reporter.enabled=$(if $(filter local,$(SCOPE_PROFILE)),true,false)
 
 # Helm creates subchart CRDs only on first install, never on upgrade, so apply
 # the Prometheus Operator CRDs explicitly (server-side: they exceed the annotation limit).
@@ -661,6 +671,30 @@ test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
 test-authz-user: ## Authz tier from userinfo entitlements for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
 	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
 	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
+
+.PHONY: test-usage-reporter
+test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
+ifneq ($(SCOPE_PROFILE),local)
+	@echo "test-usage-reporter: skipped (reporter identity exists only in the local Keycloak, SCOPE_PROFILE=$(SCOPE_PROFILE))"
+else ifeq ($(RUNTIME),compose)
+	@rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
+	    -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \
+	echo "$$out"; \
+	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; exit 1;; esac; \
+	echo "$$out" | python3 -c '$(REPORTER_CHECK_PY)'
+else
+	@job=usage-reporter-test-$$(date +%s); \
+	$(KUBECTL) get cronjob usage-reporter -o json | python3 -c '$(REPORTER_JOB_PY)' $$job | $(KUBECTL) create -f - >/dev/null; \
+	trap "$(KUBECTL) delete job $$job --ignore-not-found >/dev/null" EXIT; \
+	for i in $$(seq 60); do \
+	  phase=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true); \
+	  case "$$phase" in Succeeded|Failed) break;; esac; sleep 3; \
+	done; \
+	out=$$($(KUBECTL) logs job/$$job); echo "$$out"; \
+	rc=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'); \
+	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; exit 1;; esac; \
+	echo "$$out" | python3 -c '$(REPORTER_CHECK_PY)'
+endif
 
 ## CI
 
