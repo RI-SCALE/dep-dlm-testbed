@@ -18,7 +18,7 @@ services:
       - rucio-daemons-prom:/tmp/prometheus
 
   rucio-daemons-metrics:
-    image: rucio/rucio-daemons:release-41.2.1
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:1c42c4052a22cfceac6ce08b9453b409d752d660
     hostname: rucio-daemons-metrics
     profiles: ["daemons"]
     networks:
