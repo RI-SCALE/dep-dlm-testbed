@@ -248,6 +248,7 @@ _ensure_helm_repo() {
 # rather than resolving git+https URLs live, unlike `dependency update`),
 # and runs `helm dependency build` against chart_dir (default: the
 # umbrella chart at deploy/helm-charts/dep-dlm-testbed).
+# oci:// dependencies (dep-dlm-usage-reporter) need no registered repo.
 ensure_helm_chart_deps() {
   local chart_dir="${1:-${REPO_ROOT:-.}/deploy/helm-charts/dep-dlm-testbed}"
   require_cmd helm

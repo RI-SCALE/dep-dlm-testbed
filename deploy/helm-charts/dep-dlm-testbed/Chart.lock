@@ -44,5 +44,8 @@ dependencies:
 - name: alloy
   repository: https://grafana.github.io/helm-charts
   version: 0.10.1
-digest: sha256:6da76699409e99bcad83785eea70e6a3614b96326500e574483d2692d6bff670
-generated: "2026-10-13T09:40:35.883429923Z"
+- name: dep-dlm-usage-reporter
+  repository: oci://ghcr.io/ri-scale/charts
+  version: 0.2.0
+digest: sha256:57060871f78faba4b24f6568a2761039ee2244f713c8fdc3b243770c82ee4fa4
+generated: "2026-11-23T15:43:33.416917672Z"

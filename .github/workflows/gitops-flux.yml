@@ -180,6 +180,9 @@ jobs:
       - name: Rucio E2E transfer tests
         run: make test-rucio-transfers
 
+      - name: make test-usage-reporter
+        run: make test-usage-reporter
+
       - name: Rucio E2E transfer test from public RI holdings (ENES, EBI)
         continue-on-error: true   # external endpoints; tighten once stable
         run: make test-public-ri-transfers

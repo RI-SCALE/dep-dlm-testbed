@@ -103,6 +103,7 @@ apply_apps_root() {
   fi
 
   log "Applying apps root (dep-dlm-${GITOPS_ENV}-apps)"
+  kubectl apply -f "${GITOPS_DIR}/argocd/repositories/"
   kubectl apply -n "$ARGOCD_NAMESPACE" -f <(yq 'select(.metadata.name == "'"${ASET_NAME}"'-apps")' "$APPLY_FILE")
 }
 
