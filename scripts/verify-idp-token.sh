@@ -31,6 +31,7 @@ RESOURCE_1="${RESOURCE_ARR[0]}"
 RESOURCE_2="${RESOURCE_ARR[1]:-${RESOURCE_ARR[0]}}"
 
 TOKEN_URL=""   # set by resolve_token_endpoint, consumed by every test_* block
+USERINFO_URL="" # set by resolve_token_endpoint, consumed by test_userinfo_entitlements
 
 # ── Logic Blocks ────────────────────────────────────────────────────────────
 
@@ -41,11 +42,14 @@ validate_args() {
 }
 
 resolve_token_endpoint() {
-  TOKEN_URL=$(curl -s "${ISSUER%/}/.well-known/openid-configuration" | python3 -c "
+  local discovery
+  discovery=$(curl -s "${ISSUER%/}/.well-known/openid-configuration")
+  TOKEN_URL=$(echo "$discovery" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 print(d['token_endpoint'])
 ")
+  USERINFO_URL=$(echo "$discovery" | python3 -c "import sys, json; print(json.load(sys.stdin).get('userinfo_endpoint', ''))")
   [[ -n "$TOKEN_URL" ]] || die "could not resolve token_endpoint from ${ISSUER}/.well-known/openid-configuration"
   log "TOKEN_URL=$TOKEN_URL"
 }
@@ -205,6 +209,37 @@ print_auth_code_flow_note() {
   echo "login and gives you a real user 'sub' for the profile's user-mapping.csv."
 }
 
+# 7. Entitlements for the client itself — the same lookup as the OPA policy
+#    package (permission.py): access-token claims first, then userinfo.
+test_userinfo_entitlements() {
+  echo
+  echo "=== 7. entitlements for this client (access token, then userinfo) ==="
+  local token
+  token=$(curl -s -u "${CID}:${CSECRET}" \
+    -d 'grant_type=client_credentials' \
+    -d "scope=${SCOPE}" \
+    "$TOKEN_URL" | python3 -c "import sys,json;print(json.load(sys.stdin).get('access_token',''))")
+  [[ -n "$token" ]] || { warn "token mint FAILED"; return 0; }
+  [[ -n "$USERINFO_URL" ]] || { warn "no userinfo_endpoint in discovery"; return 0; }
+  curl -s -H "Authorization: Bearer ${token}" "$USERINFO_URL" | TOKEN="$token" python3 -c "
+import base64, json, os, sys
+p = os.environ['TOKEN'].split('.')[1]; p += '=' * (-len(p) % 4)
+claims = json.loads(base64.urlsafe_b64decode(p))
+try:
+    info = json.load(sys.stdin)
+except ValueError:
+    info = {}
+def ents(d):
+    return d.get('entitlements') or d.get('eduperson_entitlement') or []
+print('sub              :', claims.get('sub'))
+print('token entitlement:', ents(claims) or '-')
+print('userinfo         :', json.dumps(info, indent=2) if info else '(empty or error)')
+found = ents(claims) or ents(info)
+print('entitlement for this client:', bool(found), found or '')
+print('=> ODRL assignee possible' if found else '=> no entitlement: whitelist by iss+sub needed')
+"
+}
+
 # ── Main Entry Point ────────────────────────────────────────────────────────
 
 main() {
@@ -216,6 +251,7 @@ main() {
   test_refresh_token_grant
   test_token_exchange_refresh_token
   print_auth_code_flow_note
+  test_userinfo_entitlements
 }
 
 main
