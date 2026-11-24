@@ -1,8 +1,8 @@
 fullnameOverride: rucio-server
 replicaCount: 1
 image:
-  repository: rucio/rucio-server
-  tag: release-41.2.1
+  repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server
+  tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
   pullPolicy: IfNotPresent
 useSSL: false
 service:
@@ -19,10 +19,6 @@ lifecycle:
         - -c
         - |
           update-ca-trust extract
-          dnf -y install yum-utils epel-release.noarch &&
-          dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
-            python3-gfal2-util gfal2-plugin-http --skip-broken ||
-          echo "gfal2 install failed"
 
 additionalEnvs:
   - name: REQUESTS_CA_BUNDLE
@@ -87,18 +83,3 @@ configMounts:
     volumeName: common-patch
     mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
     subPath: rucio--common.py
-  # Policy package, mounted straight into site-packages rather than
-  # pip-installed in postStart: postStart runs concurrently with the
-  # entrypoint, so Rucio can import the package before an install finishes.
-  - configMapFullName: testbed-patches
-    volumeName: opa-policy-init
-    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/__init__.py
-    subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--__init__.py
-  - configMapFullName: testbed-patches
-    volumeName: opa-policy-client
-    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/opa_client.py
-    subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--opa_client.py
-  - configMapFullName: testbed-patches
-    volumeName: opa-policy-permission
-    mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/permission.py
-    subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--permission.py
