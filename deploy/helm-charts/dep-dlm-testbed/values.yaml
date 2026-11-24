@@ -87,8 +87,8 @@ ruciodb:
   fullnameOverride: rucio-server
   replicaCount: 1
   image:
-    repository: rucio/rucio-server
-    tag: release-41.2.1
+    repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     pullPolicy: IfNotPresent
   useSSL: false
   service:
@@ -105,10 +105,7 @@ ruciodb:
           - -c
           - |
             update-ca-trust extract
-            dnf -y install yum-utils epel-release.noarch &&
-            dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
-              python3-gfal2-util gfal2-plugin-http --skip-broken ||
-            echo "gfal2 install failed"
+
   additionalEnvs:
     - name: REQUESTS_CA_BUNDLE
       value: /etc/pki/tls/certs/ca-bundle.crt
@@ -177,29 +174,13 @@ ruciodb:
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
       subPath: rucio--common.py
 
-    # Policy package, mounted straight into site-packages rather than
-    # pip-installed in postStart: postStart runs concurrently with the
-    # entrypoint, so Rucio can import the package before an install finishes.
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-init
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/__init__.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--__init__.py
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-client
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/opa_client.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--opa_client.py
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-permission
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/permission.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--permission.py
-
 
 rucio-daemons:
   enabled: false
   fullnameOverride: rucio-daemons
   image:
-    repository: rucio/rucio-daemons
-    tag: release-41.2.1
+    repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     pullPolicy: IfNotPresent
 
   # Daemon-only settings, merged after server.cfg into each pod's rucio.cfg:
@@ -223,10 +204,6 @@ rucio-daemons:
           - -c
           - |
             update-ca-trust extract
-            dnf -y install yum-utils epel-release.noarch &&
-            dnf install -y --exclude=globus-gssapi-gsi gfal2-all python3-gfal2 \
-              python3-gfal2-util gfal2-plugin-http --skip-broken ||
-            echo "gfal2 install failed"
 
   # Enable the daemons the testbed needs
   conveyorTransferSubmitterCount: 1
@@ -352,22 +329,6 @@ rucio-daemons:
       mountPath: /usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py
       subPath: rucio--common.py
 
-    # Policy package, mounted straight into site-packages rather than
-    # pip-installed in postStart: postStart runs concurrently with the
-    # entrypoint, and daemons import it (via rucio.common.schema) before an
-    # install could finish, crash-looping on PolicyPackageNotFound.
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-init
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/__init__.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--__init__.py
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-client
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/opa_client.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--opa_client.py
-    - configMapFullName: testbed-patches
-      volumeName: opa-policy-permission
-      mountPath: /usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy/permission.py
-      subPath: rucio--rucio_opa_v1_policy--src--rucio_opa_v1_policy--permission.py
 
 # FTS
 
@@ -375,7 +336,8 @@ fts:
   enabled: true
   fullnameOverride: fts
   image:
-    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
+    repository: ghcr.io/ri-scale/dep-dlm-testbed/fts
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
   ftsdb:
     enabled: true
     hostname: ftsdb
@@ -767,7 +729,8 @@ teapot1:
   enabled: true
   fullnameOverride: teapot1
   image:
-    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
+    repository: ghcr.io/ri-scale/dep-dlm-testbed/teapot
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 
   volumes:
     - name: certs
@@ -908,7 +871,8 @@ teapot2:
   enabled: true
   fullnameOverride: teapot2
   image:
-    tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
+    repository: ghcr.io/ri-scale/dep-dlm-testbed/teapot
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 
   volumes:
     - name: certs

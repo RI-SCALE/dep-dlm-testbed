@@ -86,7 +86,9 @@ This decision holds while each community gets its own deployment. Revisit it if 
 * Policy tests show that users can perform every data action regardless of
   ownership and are denied every admin action, that operators need MFA, and
   that tokens or accounts without a tier are denied
-* The policy package's tests fail if it reads the Rucio catalog
+* The policy package ignores the database session Rucio passes; its unit
+  tests run without Rucio or a database, and its contract tests check the
+  decision against a real OPA
 * Testbed transfer and persona tests pass
 
 ## Pros and Cons of the Options
@@ -118,4 +120,4 @@ This decision holds while each community gets its own deployment. Revisit it if 
 * `configs/opa/odrl/data.json`: tier policy
 * `configs/opa/vendor/opa-ri-scale/VENDORED.md`: ODRL evaluator
 * `scripts/ingest_policies.py`
-* `patches/rucio/rucio_opa_v1_policy/`
+* [rucio-opa-policy-package](https://github.com/RI-SCALE/rucio-opa-policy-package) (unit and OPA contract tests), installed from its release wheel in `deploy/compose/Dockerfile.rucio`

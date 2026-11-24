@@ -1,6 +1,7 @@
 fullnameOverride: fts
 image:
-  tag: 88c1c757cc9487d785ed695f7105eb95b3c67293
+  repository: ghcr.io/ri-scale/dep-dlm-testbed/fts
+  tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 ftsdb:
   enabled: true
   hostname: ftsdb

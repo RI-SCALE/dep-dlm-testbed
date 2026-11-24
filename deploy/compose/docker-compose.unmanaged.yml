@@ -249,7 +249,7 @@ services:
       retries: 10
 
   rucio-server:
-    image: rucio/rucio-server:release-41.2.1
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -276,11 +276,8 @@ services:
       - |
         update-ca-trust extract &&
         python3 /scripts/rucio/bootstrap-db.py &&
-        dnf -y install yum-utils epel-release.noarch &&
-        dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         exec /docker-entrypoint.sh httpd -DFOREGROUND
     volumes:
-      - ${TESTBED_HOST_SOURCE}/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
       - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/configs/rucio/alembic.ini:/opt/rucio/etc/alembic.ini:ro
       - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
@@ -336,7 +333,7 @@ services:
         sleep infinity
 
   rucio-daemons:
-    image: rucio/rucio-daemons:release-41.2.1
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: rucio-daemons
     profiles: ["daemons"]
     depends_on:
@@ -364,8 +361,6 @@ services:
       - -c
       - |
         update-ca-trust extract &&
-        dnf -y install yum-utils epel-release.noarch &&
-        dnf install -y gfal2-all python3-gfal2-util python3-gfal2 gfal2-plugin-http &&
         rucio-conveyor-submitter --sleep-time 5 &
         rucio-conveyor-poller --sleep-time 5 &
         rucio-conveyor-finisher --sleep-time 5 &
@@ -375,7 +370,6 @@ services:
         rucio-undertaker --sleep-time 5 &
         wait
     volumes:
-      - ${TESTBED_HOST_SOURCE}/patches/rucio/rucio_opa_v1_policy/src/rucio_opa_v1_policy:/usr/local/lib/python3.9/site-packages/rucio_opa_v1_policy:ro
       - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}server.client-credentials.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/configs/rucio/${CONFIG_PROFILE_DIR}idpsecrets.json:/opt/rucio/etc/idpsecrets.json:ro
       - ${TESTBED_HOST_SOURCE}/certs/hostcert.pem:/etc/grid-security/hostcert.pem:ro
