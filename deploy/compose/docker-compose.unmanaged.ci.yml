@@ -64,7 +64,7 @@ services:
       retries: 20
 
   fts:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/fts:1c42c4052a22cfceac6ce08b9453b409d752d660
+    image: ghcr.io/ri-scale/dep-dlm-testbed/fts:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: fts
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -110,7 +110,7 @@ services:
       retries: 20
 
   teapot1:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/teapot:1c42c4052a22cfceac6ce08b9453b409d752d660
+    image: ghcr.io/ri-scale/dep-dlm-testbed/teapot:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: teapot1
     ports:
       - "8081:8081"
@@ -153,7 +153,7 @@ services:
       retries: 10
 
   teapot2:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/teapot:1c42c4052a22cfceac6ce08b9453b409d752d660
+    image: ghcr.io/ri-scale/dep-dlm-testbed/teapot:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: teapot2
     ports:
       - "8082:8081"
@@ -243,7 +243,7 @@ services:
       retries: 10
 
   rucio-server:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:1c42c4052a22cfceac6ce08b9453b409d752d660
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -327,7 +327,7 @@ services:
         sleep infinity
 
   rucio-daemons:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:1c42c4052a22cfceac6ce08b9453b409d752d660
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     hostname: rucio-daemons
     profiles: ["daemons"]
     depends_on:

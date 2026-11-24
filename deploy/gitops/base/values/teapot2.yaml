@@ -1,7 +1,7 @@
 fullnameOverride: teapot2
 image:
   repository: ghcr.io/ri-scale/dep-dlm-testbed/teapot
-  tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+  tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 volumes:
   - name: certs
     secret:

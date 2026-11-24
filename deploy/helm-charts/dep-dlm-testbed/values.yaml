@@ -88,7 +88,7 @@ ruciodb:
   replicaCount: 1
   image:
     repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server
-    tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     pullPolicy: IfNotPresent
   useSSL: false
   service:
@@ -180,7 +180,7 @@ rucio-daemons:
   fullnameOverride: rucio-daemons
   image:
     repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons
-    tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
     pullPolicy: IfNotPresent
 
   # Daemon-only settings, merged after server.cfg into each pod's rucio.cfg:
@@ -337,7 +337,7 @@ fts:
   fullnameOverride: fts
   image:
     repository: ghcr.io/ri-scale/dep-dlm-testbed/fts
-    tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
   ftsdb:
     enabled: true
     hostname: ftsdb
@@ -730,7 +730,7 @@ teapot1:
   fullnameOverride: teapot1
   image:
     repository: ghcr.io/ri-scale/dep-dlm-testbed/teapot
-    tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 
   volumes:
     - name: certs
@@ -872,7 +872,7 @@ teapot2:
   fullnameOverride: teapot2
   image:
     repository: ghcr.io/ri-scale/dep-dlm-testbed/teapot
-    tag: 1c42c4052a22cfceac6ce08b9453b409d752d660
+    tag: 5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
 
   volumes:
     - name: certs
