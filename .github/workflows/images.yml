@@ -1,0 +1,104 @@
+name: images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PREFIX: ghcr.io/ri-scale/dep-dlm-testbed
+
+jobs:
+  build:
+    name: ${{ matrix.image.name }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+        image:
+          - { name: fts,           file: deploy/compose/Dockerfile.fts,    args: "" }
+          - { name: teapot,        file: deploy/compose/Dockerfile.teapot, args: "" }
+          - { name: rucio-server,  file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=server" }
+          - { name: rucio-daemons, file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=daemons" }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.file }}
+          build-args: ${{ matrix.image.args }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.PREFIX }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.image.name }}-${{ matrix.arch }},mode=max
+      - run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image.name }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  merge:
+    needs: build
+    name: manifest ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [fts, teapot, rucio-server, rucio-daemons]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          merge-multiple: true
+          path: /tmp/digests
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.PREFIX }}/${{ matrix.image }}
+          tags: type=sha,prefix=,format=long
+      - id: manifest
+        working-directory: /tmp/digests
+        run: |
+          ref="${PREFIX}/${{ matrix.image }}"
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${ref}@sha256:%s " *)
+          echo "digest=$(docker buildx imagetools inspect "${ref}:${{ steps.meta.outputs.version }}" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.PREFIX }}/${{ matrix.image }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
