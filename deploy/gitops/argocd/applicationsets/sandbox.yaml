@@ -159,7 +159,7 @@ spec:
                   chart: dep-dlm-usage-reporter
                   targetRevision: 0.2.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/usage-reporter.yaml"] }
-                - repoURL: https://github.com/ri-scale/dep-dlm-usage-reporter.git
+                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: feat/usage-reporter-testbed
                   ref: values
 
