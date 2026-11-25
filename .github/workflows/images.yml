@@ -26,6 +26,7 @@ jobs:
           - { name: teapot,        file: deploy/compose/Dockerfile.teapot, args: "" }
           - { name: rucio-server,  file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=server" }
           - { name: rucio-daemons, file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=daemons" }
+          - { name: rucio-client,  file: deploy/compose/Dockerfile.rucio-client, args: "" }
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -65,7 +66,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [fts, teapot, rucio-server, rucio-daemons]
+        image: [fts, teapot, rucio-server, rucio-daemons, rucio-client]
     runs-on: ubuntu-latest
     permissions:
       contents: read

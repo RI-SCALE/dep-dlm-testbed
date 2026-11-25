@@ -1,0 +1,19 @@
+# Rucio clients with docker CLI and kubectl for the testbed's test runner
+FROM rucio/rucio-clients:release-41.2.1
+
+USER root
+
+RUN dnf install -y --setopt=install_weak_deps=False dnf-plugins-core \
+ && dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo \
+ && dnf install -y --setopt=install_weak_deps=False docker-ce-cli \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+
+ARG TARGETARCH
+ARG KUBECTL_VERSION=v1.34.0
+RUN curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+ && curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl.sha256" \
+ && echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c - \
+ && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+ && rm kubectl kubectl.sha256 \
+ && docker --version && kubectl version --client
