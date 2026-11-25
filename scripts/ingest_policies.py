@@ -39,16 +39,12 @@ ADMIN_ACCOUNTS = ["root", "ddmlab"]
 OBSOLETE_DATA = ["vo/entitlement_policy"]
 
 # Bridge (ADR-008 addendum): service clients whose IdP doesn't release
-# entitlements in client_credentials tokens yet (LS AAI, EGI Check-in dev),
+# entitlements in client_credentials tokens yet (LS AAI),
 # matched by iss + sub.
 REPORTER_CLIENTS = [
     {
         "iss": "https://login.aai.lifescience-ri.eu/oidc/",
         "sub": "4ff05c0b-1d83-42b7-a00a-8bd162df4165",
-    },
-    {
-        "iss": "https://aai-dev.egi.eu/auth/realms/egi",
-        "sub": "de5a7ad1-27cf-44a9-9554-67a5737933cd",
     },
 ]
 
