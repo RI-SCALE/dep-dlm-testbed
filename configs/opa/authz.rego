@@ -8,11 +8,16 @@ import rego.v1
 # comes from the vendored ODRL evaluator (data.dep), which matches the
 # token's entitlements (group + role) and acr against the ODRL tier policy:
 #
-#   admin   every action (e.g. dep-operator, with MFA)
-#   user    rules, DIDs and replicas, on any scope and whoever created them
-#           (e.g. dep-end-user, model-developer)
+#   admin     every action (e.g. dep-operator, with MFA)
+#   user      rules, DIDs and replicas, on any scope and whoever created them
+#             (e.g. dep-end-user, model-developer)
 #   reporter  read-only transfer history (the usage reporter's service account)
-#   none    nothing
+#   none      nothing
+#
+# Bridge (ADR-008 addendum): LS AAI can't release entitlements in
+# client_credentials tokens, so the reporter tier is also granted to clients
+# listed in data.vo.policy.reporter_clients by iss + sub. Remove the entry
+# once the IdP releases the entitlement.
 #
 # There are no ownership checks (scope or rule) and no checks on request
 # arguments such as RSE names or protocol schemes. Accounts without a token
@@ -33,6 +38,16 @@ allow if {
 	_has_tier("reporter")
 }
 
+# A client_credentials token's sub is the client itself (on LS AAI, its
+# client ID); user tokens issued to the same client carry the user's sub,
+# so they never match.
+allow if {
+	input.action in _reporter_actions
+	some c in _reporter_clients
+	c.iss == input.token.iss
+	c.sub == input.token.sub
+}
+
 # Everything not listed here (RSEs, protocols, accounts, scopes,
 # approve_rule, reduce_rule, move_rule, update_replicas_states, ...) is
 # admin-only.
@@ -48,6 +63,10 @@ _reporter_actions := {"list_requests", "list_requests_history"}
 _admin_accounts := data.vo.policy.admin_accounts if {
 	data.vo.policy.admin_accounts
 } else := ["root"]
+
+_reporter_clients := data.vo.policy.reporter_clients if {
+	data.vo.policy.reporter_clients
+} else := []
 
 _rucio_target := data.vo.policy.rucio_target if {
 	data.vo.policy.rucio_target

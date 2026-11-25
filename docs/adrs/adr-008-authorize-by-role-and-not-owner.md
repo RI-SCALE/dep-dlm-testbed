@@ -62,6 +62,18 @@ data. Groups that must not share data need separate deployments.
 
 This decision holds while each community gets its own deployment. Revisit it if communities share one with real data long-term (as on the current CERN instance), by adding scope grants per group to the ODRL policy or if credits are enforced per Rucio account, by checking rule accounts.
 
+**Addendum (2026-11-25): service clients without entitlements.** LS AAI
+cannot release entitlements in client_credentials tokens (a service cannot
+be a group member), so the usage reporter's client never matches the ODRL
+reporter tier. As a bridge, clients listed in
+`data.vo.policy.reporter_clients` get the read-only reporter actions by
+issuer and subject (`iss` + `sub`); user tokens issued to the same client
+carry the user's `sub` and never match. The list is per deployment profile
+and empty by default. EGI Check-in associates entitlements with service
+accounts, so its reporter uses the ODRL reporter tier. The entry is removed
+once LS AAI releases the entitlement, and the rule once the list is empty
+everywhere.
+
 ### Positive Consequences
 
 * Group members share all data; registering it once is enough
