@@ -1,4 +1,7 @@
 fullnameOverride: rucio-client
+image:
+  repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client
+  tag: dc634d9e1e68023e7878326ffed0268a6f3cff59
 env:
   - name: REQUESTS_CA_BUNDLE
     value: /etc/pki/tls/certs/ca-bundle.crt

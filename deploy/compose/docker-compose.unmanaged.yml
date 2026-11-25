@@ -302,7 +302,7 @@ services:
       retries: 20
 
   rucio-client:
-    image: mgajekcern/rucio-client-docker-kubectl:3867d9453cff79ce4d3b9354065e1c57402dafc7
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client:dc634d9e1e68023e7878326ffed0268a6f3cff59
     hostname: rucio-client
     depends_on:
       rucio-server:
