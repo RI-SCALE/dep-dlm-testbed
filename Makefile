@@ -674,8 +674,8 @@ test-authz-user: ## Authz tier from userinfo entitlements for a real user token.
 
 .PHONY: test-usage-reporter
 test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
-ifneq ($(SCOPE_PROFILE),local)
-	@echo "test-usage-reporter: skipped (reporter identity exists only in the local Keycloak, SCOPE_PROFILE=$(SCOPE_PROFILE))"
+ifeq ($(SCOPE_PROFILE),egi-dev)
+	@echo "test-usage-reporter: skipped (egi-dev reporter entitlement pending, checkin-support ticket)"
 else ifeq ($(RUNTIME),compose)
 	@rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
 	    -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \

@@ -392,10 +392,10 @@ services:
     environment:
       - SSL_CERT_FILE=/etc/grid-security/certificates/tls_ca_bundle.pem
       - REPORTER_RUCIO_HOST=http://rucio-server
-      - REPORTER_RUCIO_TOKEN_URL=https://keycloak:8443/realms/rucio/protocol/openid-connect/token
-      - REPORTER_RUCIO_CLIENT_ID=usage-reporter
-      - REPORTER_RUCIO_CLIENT_SECRET=usage-reporter-secret
-      - REPORTER_RUCIO_SCOPE=openid offline_access storage.read:/ storage.modify:/
+      - REPORTER_RUCIO_TOKEN_URL=${REPORTER_RUCIO_TOKEN_URL:-https://keycloak:8443/realms/rucio/protocol/openid-connect/token}
+      - REPORTER_RUCIO_CLIENT_ID=${REPORTER_RUCIO_CLIENT_ID:-usage-reporter}
+      - REPORTER_RUCIO_CLIENT_SECRET=${REPORTER_RUCIO_CLIENT_SECRET:-usage-reporter-secret}
+      - REPORTER_RUCIO_SCOPE=${REPORTER_RUCIO_SCOPE:-openid offline_access storage.read:/ storage.modify:/}
       - REPORTER_DRY_RUN=true
       - REPORTER_LOOKBACK_DAYS=0
       # dry-run never calls ARGO; placeholders only satisfy validation
