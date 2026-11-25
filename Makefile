@@ -28,10 +28,13 @@ GITOPS_ENV ?= sandbox
 K8S_NAMESPACE ?= dep-dlm-$(GITOPS_ENV)
 KUBECTL       := kubectl -n $(K8S_NAMESPACE)
 
-# Job from the CronJob's template, plus REPORTER_DAY=today (create job --from can't set env)
-REPORTER_JOB_PY := import sys, json, datetime; cj = json.load(sys.stdin); \
+# Job from the CronJob's template, plus REPORTER_DAY=today and, for external
+# IdPs, the profile's REPORTER_RUCIO_* (env overrides the chart's ConfigMap).
+REPORTER_JOB_PY := import sys, os, json, datetime; cj = json.load(sys.stdin); \
   job = {"apiVersion": "batch/v1", "kind": "Job", "metadata": {"name": sys.argv[1]}, "spec": cj["spec"]["jobTemplate"]["spec"]}; \
-  job["spec"]["template"]["spec"]["containers"][0].setdefault("env", []).append({"name": "REPORTER_DAY", "value": datetime.datetime.utcnow().date().isoformat()}); \
+  env = job["spec"]["template"]["spec"]["containers"][0].setdefault("env", []); \
+  env.append({"name": "REPORTER_DAY", "value": datetime.datetime.utcnow().date().isoformat()}); \
+  env.extend({"name": k, "value": os.environ[k]} for k in ("REPORTER_RUCIO_TOKEN_URL", "REPORTER_RUCIO_CLIENT_ID", "REPORTER_RUCIO_SCOPE", "REPORTER_RUCIO_RESOURCE") if os.environ.get(k)); \
   print(json.dumps(job))
 REPORTER_CHECK_PY := import sys, json; r = [json.loads(l) for l in sys.stdin if l.startswith("{")]; \
   assert any(x["group_id"] == "suc1" and x["value"] > 0 for x in r), "no suc1 usage"; print("✓ suc1 reported")
@@ -43,7 +46,8 @@ HELM_SET = --set global.tokenMode=$(TOKEN_MODE) \
 	--set global.scopeProfile=$(SCOPE_PROFILE) \
 	--set rucio-daemons.enabled=$(if $(filter daemons,$(DAEMON_MODE)),true,false) \
 	--set observability.enabled=$(if $(filter 1,$(OBSERVABILITY)),true,false) \
-	--set usage-reporter.enabled=$(if $(filter local,$(SCOPE_PROFILE)),true,false)
+	--set usage-reporter.enabled=true \
+	$(if $(filter local,$(SCOPE_PROFILE)),,--set-string global.usageReporterClientSecret=$(REPORTER_RUCIO_CLIENT_SECRET))
 
 # Helm creates subchart CRDs only on first install, never on upgrade, so apply
 # the Prometheus Operator CRDs explicitly (server-side: they exceed the annotation limit).
@@ -195,6 +199,16 @@ ifeq ($(TEAPOT_EXTRA_SUBS),)
   endif
 endif
 
+# Token endpoint for external IdPs (used by tests, init and the reporter).
+# Before TEST_OIDC_ENV, which expands it immediately.
+ifeq ($(OIDC_TOKEN_URL),)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    OIDC_TOKEN_URL := $(OIDC_ISSUER)/protocol/openid-connect/token
+  else ifeq ($(SCOPE_PROFILE),ls-aai-dev)
+    OIDC_TOKEN_URL := https://login.aai.lifescience-ri.eu/oidc/token
+  endif
+endif
+
 ifeq ($(SCOPE_PROFILE),local)
   TEST_OIDC_ENV :=
 else
@@ -202,6 +216,27 @@ else
     OIDC_CLIENT_ID='$(OIDC_CLIENT_ID)' \
     OIDC_CLIENT_SECRET='$(OIDC_CLIENT_SECRET)' OIDC_GRANT_TYPE='$(OIDC_GRANT_TYPE)' \
     OIDC_EXPECTED_SCOPE='$(OIDC_EXPECTED_SCOPE)' OIDC_TEAPOT_AUD_SCOPE=''
+endif
+
+# Usage reporter's Rucio token for external IdPs (local: compose/chart
+# defaults, Keycloak). EGI uses its dedicated M2M client; its secret only
+# comes from the environment or CI (empty -> the reporter exits 1, never the
+# Rucio client's secret). LS AAI reuses the Rucio client (ADR-008 addendum).
+# resource gives the token Rucio's expected audience (EGI issues none
+# otherwise). $(or) treats empty values (e.g. unset CI secrets) as unset.
+ifneq ($(SCOPE_PROFILE),local)
+  ifeq ($(SCOPE_PROFILE),egi-dev)
+    REPORTER_RUCIO_CLIENT_ID := $(or $(REPORTER_RUCIO_CLIENT_ID),ba1fca56-245f-4f5c-968b-6c73485f5011)
+    REPORTER_RUCIO_SCOPE     := $(or $(REPORTER_RUCIO_SCOPE),openid profile eduperson_entitlement read:/ write:/)
+  else
+    REPORTER_RUCIO_CLIENT_SECRET := $(or $(REPORTER_RUCIO_CLIENT_SECRET),$(OIDC_CLIENT_SECRET))
+  endif
+  REPORTER_RUCIO_TOKEN_URL := $(or $(REPORTER_RUCIO_TOKEN_URL),$(OIDC_TOKEN_URL))
+  REPORTER_RUCIO_CLIENT_ID := $(or $(REPORTER_RUCIO_CLIENT_ID),$(OIDC_CLIENT_ID))
+  REPORTER_RUCIO_SCOPE     := $(or $(REPORTER_RUCIO_SCOPE),$(OIDC_EXPECTED_SCOPE))
+  REPORTER_RUCIO_RESOURCE  := $(or $(REPORTER_RUCIO_RESOURCE),https://fts.example.org/)
+  export REPORTER_RUCIO_TOKEN_URL REPORTER_RUCIO_CLIENT_ID REPORTER_RUCIO_CLIENT_SECRET \
+         REPORTER_RUCIO_SCOPE REPORTER_RUCIO_RESOURCE
 endif
 
 ifeq ($(SCOPE_PROFILE),local)
@@ -447,7 +482,7 @@ else
 	$(KUBECTL) create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	source scripts/common.sh && ensure_helm_chart_deps
 	$(OBS_CRDS)
-	$(HELM) upgrade --install $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	@$(HELM) upgrade --install $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: stop
@@ -470,7 +505,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
 	$(OBS_CRDS)
-	$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	@$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: rebuild-clean
@@ -480,7 +515,7 @@ ifeq ($(RUNTIME),compose)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)
 else
 	$(OBS_CRDS)
-	$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
+	@$(HELM) upgrade $(HELM_SET) $(HELM_RELEASE) $(HELM_CHART) -n $(K8S_NAMESPACE)
 endif
 
 .PHONY: ps
@@ -674,9 +709,7 @@ test-authz-user: ## Authz tier from userinfo entitlements for a real user token.
 
 .PHONY: test-usage-reporter
 test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
-ifeq ($(SCOPE_PROFILE),egi-dev)
-	@echo "test-usage-reporter: skipped (egi-dev reporter entitlement pending, checkin-support ticket)"
-else ifeq ($(RUNTIME),compose)
+ifeq ($(RUNTIME),compose)
 	@rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
 	    -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \
 	echo "$$out"; \

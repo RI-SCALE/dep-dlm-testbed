@@ -99,7 +99,7 @@ dependencies:
     condition: observability.enabled
 
   - name: dep-dlm-usage-reporter
-    version: "0.2.0"
+    version: "0.4.0"
     repository: oci://ghcr.io/ri-scale/charts
     alias: usage-reporter
     condition: usage-reporter.enabled

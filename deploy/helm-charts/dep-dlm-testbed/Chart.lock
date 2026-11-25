@@ -46,6 +46,6 @@ dependencies:
   version: 0.10.1
 - name: dep-dlm-usage-reporter
   repository: oci://ghcr.io/ri-scale/charts
-  version: 0.2.0
-digest: sha256:57060871f78faba4b24f6568a2761039ee2244f713c8fdc3b243770c82ee4fa4
-generated: "2026-11-23T15:43:33.416917672Z"
+  version: 0.4.0
+digest: sha256:be4b30d97436ea2742373c3a13684f1d5d87e702d5cb92a3bc393cc8187acc79
+generated: "2026-11-25T12:05:05.409491677Z"

@@ -72,6 +72,7 @@ jobs:
       S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
       RUNTIME: k8s
       DAEMON_MODE: daemons
+      REPORTER_RUCIO_CLIENT_SECRET: ${{ matrix.scope_profile == 'egi-dev' && secrets.EGI_DEV_REPORTER_CLIENT_SECRET || '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
