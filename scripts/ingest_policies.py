@@ -7,10 +7,12 @@ Direct-integration only — see docs/design/design-doc-004-direct-opa-integratio
 The vendored opa-ri-scale ODRL evaluator (package dep.*) is loaded by OPA at
 start-up; this script checks it's present, then loads:
   1. authz.rego (package vo.authz.v1)
-  2. data: vo/policy (admin_accounts) and the ODRL tier policy at dep/odrl
+  2. data: vo/policy (admin_accounts, reporter_clients) and the ODRL tier
+     policy at dep/odrl
 
-Authorization is role-based (ADR-008): tiers come from the ODRL policy only,
-and accounts without a token are admins only when listed in ADMIN_ACCOUNTS.
+Authorization is role-based (ADR-008): tiers come from the ODRL policy,
+accounts without a token are admins only when listed in ADMIN_ACCOUNTS, and
+REPORTER_CLIENTS bridges LS AAI service clients to the reporter tier.
 
 Usage:
     python ingest_policies.py [--opa-url URL] [--opa-dir DIR]
@@ -35,6 +37,16 @@ ADMIN_ACCOUNTS = ["root", "ddmlab"]
 # Data left behind by earlier policy versions; removed so a live OPA holds
 # only what authz.rego reads.
 OBSOLETE_DATA = ["vo/entitlement_policy"]
+
+# Bridge (ADR-008 addendum): service clients whose IdP doesn't release
+# entitlements in client_credentials tokens yet (LS AAI),
+# matched by iss + sub.
+REPORTER_CLIENTS = [
+    {
+        "iss": "https://login.aai.lifescience-ri.eu/oidc/",
+        "sub": "4ff05c0b-1d83-42b7-a00a-8bd162df4165",
+    },
+]
 
 
 def _default_opa_dir() -> Path:
@@ -156,12 +168,17 @@ def main() -> None:
     ingest_data(
         base_url,
         {
-            "vo/policy": {"admin_accounts": ADMIN_ACCOUNTS},
+            "vo/policy": {
+                "admin_accounts": ADMIN_ACCOUNTS,
+                "reporter_clients": REPORTER_CLIENTS,
+            },
             "dep/odrl": json.loads(odrl_path.read_text()),
         },
     )
     remove_data(base_url, OBSOLETE_DATA)
-    print(f"Done (admin_accounts={ADMIN_ACCOUNTS}).")
+    print(
+        f"Done (admin_accounts={ADMIN_ACCOUNTS}, reporter_clients={len(REPORTER_CLIENTS)})."
+    )
 
 
 if __name__ == "__main__":

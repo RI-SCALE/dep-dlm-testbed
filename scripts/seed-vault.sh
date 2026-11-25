@@ -92,6 +92,9 @@ wait_for_vault_ready() {
 # container-runtime ${FLOW}/${SCOPE_PROFILE} reads) is left untouched for
 # the container's own shell to evaluate.
 apply_seed_job() {
+  # Usage reporter's Rucio client secret: the profile's (EGI: dedicated
+  # client; LS AAI: the Rucio client's), else the local Keycloak default.
+  local reporter_secret="${REPORTER_RUCIO_CLIENT_SECRET:-${OIDC_CLIENT_SECRET:-usage-reporter-secret}}"
   log "Rendering vault-seed-once (FLOW=${FLOW} SCOPE_PROFILE=${SCOPE_PROFILE})"
   kubectl -n "$K8S_NAMESPACE" delete job vault-seed-once --ignore-not-found >/dev/null
 
@@ -102,7 +105,8 @@ apply_seed_job() {
   K8S_NAMESPACE="$K8S_NAMESPACE" FLOW="$FLOW" SCOPE_PROFILE="$SCOPE_PROFILE" \
   REPO_URL="$REPO_URL" REVISION="$REVISION" \
   OIDC_CLIENT_ID="$OIDC_CLIENT_ID" OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
-    envsubst '${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION} ${OIDC_CLIENT_ID} ${OIDC_CLIENT_SECRET}' < "$TMPL" \
+  REPORTER_RUCIO_CLIENT_SECRET="$reporter_secret" \
+    envsubst '${K8S_NAMESPACE} ${FLOW} ${SCOPE_PROFILE} ${REPO_URL} ${REVISION} ${OIDC_CLIENT_ID} ${OIDC_CLIENT_SECRET} ${REPORTER_RUCIO_CLIENT_SECRET}' < "$TMPL" \
     | kubectl -n "$K8S_NAMESPACE" apply -f -
 }
 

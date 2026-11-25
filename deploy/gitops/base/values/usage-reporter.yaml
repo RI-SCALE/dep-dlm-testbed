@@ -1,6 +1,4 @@
 fullnameOverride: usage-reporter
-image:
-  digest: sha256:26b4079430ec6cf90bd155126215aae5c2bb9d24a21f061ca13ba0435dc8ff31
 config:
   REPORTER_DRY_RUN: "true"
   REPORTER_LOOKBACK_DAYS: "0"

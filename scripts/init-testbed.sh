@@ -424,23 +424,29 @@ assert_identities_unambiguous() {
 }
 
 setup_usage_reporter_identity() {
-    local grant_mode
+    local grant_mode client_id client_secret
     grant_mode=$(_grant_mode_for_profile)
-    if [ "$grant_mode" != "password" ]; then
-        echo "  Skipping usage-reporter identity (grant_mode=$grant_mode for $OIDC_ISSUER)."
-        return 0
+    if [ "$grant_mode" = "password" ]; then
+        client_id=usage-reporter; client_secret=usage-reporter-secret
+    else
+        # External IdPs: the reporter's own client where one exists (EGI),
+        # else the shared Rucio client (LS AAI #4233, see ADR-008 addendum).
+        client_id="${REPORTER_RUCIO_CLIENT_ID:-${OIDC_CLIENT_ID:?}}"
+        client_secret="${REPORTER_RUCIO_CLIENT_SECRET:-${OIDC_CLIENT_SECRET:?}}"
     fi
 
     echo "  Registering OIDC identity for usage-reporter (client credentials)..."
-    _exec rucio-server env OIDC_TOKEN_URL="$OIDC_TOKEN_URL" python3 -c "
+    _exec rucio-server env OIDC_TOKEN_URL="$OIDC_TOKEN_URL" \
+        RC_ID="$client_id" RC_SECRET="$client_secret" \
+        python3 -c "
 import urllib.request, urllib.parse, json, base64, os
 from rucio.core.identity import add_account_identity
 from rucio.core import oidc
 from rucio.common.types import InternalAccount
 from rucio.common import exception
 
-data = urllib.parse.urlencode({'grant_type': 'client_credentials'}).encode()
-auth = base64.b64encode(b'usage-reporter:usage-reporter-secret').decode()
+data = urllib.parse.urlencode({'grant_type': 'client_credentials', 'scope': 'openid'}).encode()
+auth = base64.b64encode((os.environ['RC_ID'] + ':' + os.environ['RC_SECRET']).encode()).decode()
 req = urllib.request.Request(os.environ['OIDC_TOKEN_URL'], data=data,
                              headers={'Authorization': 'Basic ' + auth})
 token = json.loads(urllib.request.urlopen(req).read())['access_token']

@@ -210,3 +210,41 @@ test_user_tier_may_not_list_request_history if {
 	}
 		with data.dep.odrl as _odrl
 }
+
+# ── Reporter clients (bridge: iss + sub, no entitlements) ───────────────
+
+_lsaai := "https://login.aai.lifescience-ri.eu/oidc/"
+
+_clients := [{"iss": _lsaai, "sub": "reporter-client"}]
+
+_client_ok(action, token) if {
+	data.vo.authz.v1.allow with input as {"issuer": "usage-reporter", "action": action, "token": token, "kwargs": {}}
+		with data.dep.odrl as _odrl
+		with data.vo.policy.reporter_clients as _clients
+}
+
+test_listed_client_may_list_request_history if {
+	_client_ok("list_requests_history", {"iss": _lsaai, "sub": "reporter-client"})
+	_client_ok("list_requests", {"iss": _lsaai, "sub": "reporter-client"})
+}
+
+test_listed_client_may_not_write if {
+	not _client_ok("add_rule", {"iss": _lsaai, "sub": "reporter-client"})
+	not _client_ok("add_rse", {"iss": _lsaai, "sub": "reporter-client"})
+}
+
+test_listed_client_from_other_issuer_denied if {
+	not _client_ok("list_requests_history", {"iss": "https://aai-dev.egi.eu/auth/realms/egi", "sub": "reporter-client"})
+}
+
+test_user_token_of_same_client_denied if {
+	not _client_ok("list_requests_history", {"iss": _lsaai, "sub": "some-user@lifescience-ri.eu", "azp": "reporter-client", "client_id": "reporter-client"})
+}
+
+test_no_reporter_clients_grants_nothing if {
+	not data.vo.authz.v1.allow with input as {
+		"issuer": "usage-reporter", "action": "list_requests_history",
+		"token": {"iss": _lsaai, "sub": "reporter-client"}, "kwargs": {},
+	}
+		with data.dep.odrl as _odrl
+}

@@ -381,7 +381,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
 
   usage-reporter:
-    image: ghcr.io/ri-scale/dep-dlm-usage-reporter:0.2.0@sha256:26b4079430ec6cf90bd155126215aae5c2bb9d24a21f061ca13ba0435dc8ff31
+    image: ghcr.io/ri-scale/dep-dlm-usage-reporter:0.4.0
     hostname: usage-reporter
     profiles: ["usage-reporter"]
     depends_on:
@@ -392,16 +392,17 @@ services:
     environment:
       - SSL_CERT_FILE=/etc/grid-security/certificates/tls_ca_bundle.pem
       - REPORTER_RUCIO_HOST=http://rucio-server
-      - REPORTER_RUCIO_TOKEN_URL=https://keycloak:8443/realms/rucio/protocol/openid-connect/token
-      - REPORTER_RUCIO_CLIENT_ID=usage-reporter
-      - REPORTER_RUCIO_CLIENT_SECRET=usage-reporter-secret
-      - REPORTER_RUCIO_SCOPE=openid offline_access storage.read:/ storage.modify:/
+      - REPORTER_RUCIO_TOKEN_URL=${REPORTER_RUCIO_TOKEN_URL:-https://keycloak:8443/realms/rucio/protocol/openid-connect/token}
+      - REPORTER_RUCIO_CLIENT_ID=${REPORTER_RUCIO_CLIENT_ID:-usage-reporter}
+      - REPORTER_RUCIO_CLIENT_SECRET=${REPORTER_RUCIO_CLIENT_SECRET:-usage-reporter-secret}
+      - REPORTER_RUCIO_SCOPE=${REPORTER_RUCIO_SCOPE:-openid offline_access storage.read:/ storage.modify:/}
       - REPORTER_DRY_RUN=true
       - REPORTER_LOOKBACK_DAYS=0
       # dry-run never calls ARGO; placeholders only satisfy validation
       - REPORTER_ARGO_METRIC_DEFINITION_ID=dry-run
       - REPORTER_ARGO_TOKEN_URL=https://keycloak:8443/realms/rucio/protocol/openid-connect/token
       - 'REPORTER_PROJECTS={"RI-SCALE_ENES": {"installation_id": "dry-run", "client_id": "dry-run", "client_secret_env": "REPORTER_ENES_CLIENT_SECRET"}}'
+      - REPORTER_RUCIO_RESOURCE=${REPORTER_RUCIO_RESOURCE:-}
     volumes:
       - ${TESTBED_HOST_SOURCE}/certs/tls_ca_bundle.pem:/etc/grid-security/certificates/tls_ca_bundle.pem:ro
   opa:
