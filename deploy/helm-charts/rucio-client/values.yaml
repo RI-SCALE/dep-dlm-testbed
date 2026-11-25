@@ -1,6 +1,6 @@
 image:
-  repository: mgajekcern/rucio-client-docker-kubectl
-  tag: "3867d9453cff79ce4d3b9354065e1c57402dafc7"
+  repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client
+  tag: dc634d9e1e68023e7878326ffed0268a6f3cff59
   digest: ""
   pullPolicy: IfNotPresent
 

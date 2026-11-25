@@ -44,7 +44,7 @@ variable "machine_type" {
 # --- Container images ------------------------------------------------------
 # The compose template (templates/docker-compose.yml.tftpl) pins the same
 # prebuilt images sandbox's own docker-compose.yml already uses
-# (rucio/test-xrootd@sha256:..., ghcr.io/ri-scale/dep-dlm-testbed/teapot:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14)
+# (rucio/test-xrootd@sha256:..., ghcr.io/ri-scale/dep-dlm-testbed/teapot:dc634d9e1e68023e7878326ffed0268a6f3cff59)
 # — no on-VM build,
 # no Artifact Registry step needed. If those images ever need to diverge
 # from sandbox's, edit the compose template directly rather than

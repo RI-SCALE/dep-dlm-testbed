@@ -249,7 +249,7 @@ services:
       retries: 10
 
   rucio-server:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:dc634d9e1e68023e7878326ffed0268a6f3cff59
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -302,7 +302,7 @@ services:
       retries: 20
 
   rucio-client:
-    image: mgajekcern/rucio-client-docker-kubectl:3867d9453cff79ce4d3b9354065e1c57402dafc7
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client:dc634d9e1e68023e7878326ffed0268a6f3cff59
     hostname: rucio-client
     depends_on:
       rucio-server:
@@ -333,7 +333,7 @@ services:
         sleep infinity
 
   rucio-daemons:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:5fe3f66c990e879f3cdbf25841ad48fba1cd7a14
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:dc634d9e1e68023e7878326ffed0268a6f3cff59
     hostname: rucio-daemons
     profiles: ["daemons"]
     depends_on:
