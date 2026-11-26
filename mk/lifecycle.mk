@@ -46,7 +46,7 @@ endif
 restart: stop start ## Tear down and start again
 
 .PHONY: rebuild
-rebuild: ## Rebuild services (SERVICES="fts teapot")
+rebuild: ## Rebuild services (SERVICES="teapot rucio-client")
 ifeq ($(RUNTIME),compose)
 	$(COMPOSE) build  $(SERVICES)
 	$(COMPOSE) up -d --no-deps --force-recreate $(SERVICES)

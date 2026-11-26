@@ -51,7 +51,6 @@ repos:
     hooks:
       - id: shellcheck
         files: ^scripts/.*\.sh$
-        exclude: ^scripts/fts/wait-for-it\.sh$
 
   - repo: local
     hooks:
