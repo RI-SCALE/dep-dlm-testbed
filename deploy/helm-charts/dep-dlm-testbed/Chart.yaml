@@ -22,7 +22,7 @@ dependencies:
 
   - name: rucio-server
     version: "~41.2.1"
-    repository: "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master"
+    repository: "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=e69bb891a7045d64ec0fb72198ce7e502fed83a3"
     alias: rucio-server
     condition: "rucio-server.enabled"
 
@@ -56,7 +56,7 @@ dependencies:
 
   - name: rucio-daemons
     version: "~41.2.1"
-    repository: "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master"
+    repository: "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=e69bb891a7045d64ec0fb72198ce7e502fed83a3"
     alias: rucio-daemons
     condition: rucio-daemons.enabled
 

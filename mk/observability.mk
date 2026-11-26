@@ -20,7 +20,7 @@ endif
 
 .PHONY: test-observability
 test-observability: ## Observability smoke test: scrape targets up, Rucio series, rucio-server logs
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(OBS_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_observability.py -v"
+	@$(EXEC_RUCIO) bash -c "$(OBS_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_observability.py -v"
 
 .PHONY: obs-open
 obs-open: ## Open Grafana (k8s: port-forwards Grafana/Prometheus/Loki until Ctrl-C)

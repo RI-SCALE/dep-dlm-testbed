@@ -7,4 +7,4 @@ spec:
   interval: 5m
   url: https://github.com/mgajek-cern/helm-charts.git
   ref:
-    branch: master
+    commit: e69bb891a7045d64ec0fb72198ce7e502fed83a3

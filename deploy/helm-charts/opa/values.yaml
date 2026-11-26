@@ -2,51 +2,25 @@ replicaCount: 1
 
 image:
   repository: openpolicyagent/opa
-  pullPolicy: IfNotPresent
   tag: "1.8.0-static"
+  pullPolicy: IfNotPresent
 
-imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: "opa"   # rucio-server/rucio-daemons hardcode OPA_URL=http://opa:8181
-
-serviceAccount:
-  create: true
-  automount: true
-  annotations: {}
-  name: ""
-
-podAnnotations: {}
-podLabels: {}
-podSecurityContext: {}
-securityContext: {}
 
 service:
   type: ClusterIP
   port: 8181
 
-ingress:
-  enabled: false
+livenessProbe:
+  httpGet: { path: /health, port: http }
+readinessProbe:
+  httpGet: { path: /health, port: http }
 
 resources: {}
 
-livenessProbe:
-  httpGet:
-    path: /health
-    port: http
-readinessProbe:
-  httpGet:
-    path: /health
-    port: http
-
-autoscaling:
-  enabled: false
-
 volumes: []
 volumeMounts: []
-
-nodeSelector: {}
-tolerations: []
-affinity: {}
 
 # Appended to the default `opa run --server …` args, e.g. paths to load at
 # start-up. Set `args` instead to replace the defaults entirely.

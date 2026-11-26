@@ -249,7 +249,7 @@ services:
       retries: 10
 
   rucio-server:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:dc634d9e1e68023e7878326ffed0268a6f3cff59
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:766076eba70ae540c42ab24fe0035c2a4f01328d
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -302,7 +302,7 @@ services:
       retries: 20
 
   rucio-client:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client:dc634d9e1e68023e7878326ffed0268a6f3cff59
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-client:766076eba70ae540c42ab24fe0035c2a4f01328d
     hostname: rucio-client
     depends_on:
       rucio-server:
@@ -321,19 +321,10 @@ services:
       - ${TESTBED_HOST_SOURCE}/configs/rucio/userpass-client.cfg:/opt/rucio/etc/rucio.cfg:ro
       - ${TESTBED_HOST_SOURCE}/tests:/tests:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command:
-      - /bin/bash
-      - -c
-      - |
-        pip install --no-cache-dir \
-          --trusted-host pypi.org \
-          --trusted-host pypi.python.org \
-          --trusted-host files.pythonhosted.org \
-          pytest boto3 &&
-        sleep infinity
+    command: ["/bin/bash", "-c", "sleep infinity"]
 
   rucio-daemons:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:dc634d9e1e68023e7878326ffed0268a6f3cff59
+    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:766076eba70ae540c42ab24fe0035c2a4f01328d
     hostname: rucio-daemons
     profiles: ["daemons"]
     depends_on:

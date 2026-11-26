@@ -25,7 +25,7 @@ spec:
               sources:
                 - repoURL: https://github.com/mgajek-cern/helm-charts.git
                   path: charts/rucio-server
-                  targetRevision: master
+                  targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main
@@ -35,7 +35,7 @@ spec:
               sources:
                 - repoURL: https://github.com/mgajek-cern/helm-charts.git
                   path: charts/rucio-daemons
-                  targetRevision: master
+                  targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/production/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: main

@@ -235,10 +235,10 @@ ingest_opa_policies() {
 }
 
 _ensure_helm_repo() {
-  local name="$1" url="$2"
-  helm repo list 2>/dev/null | grep -q "^${name}[[:space:]]" && return 0
+  local name=$1 url=$2
+  [ "$(helm repo list -o json 2>/dev/null | jq -r --arg n "$name" '.[] | select(.name == $n) | .url')" = "$url" ] && return 0
   log "Adding ${name} chart repo"
-  helm repo add "$name" "$url" || die "failed to register ${name} helm repo"
+  helm repo add --force-update "$name" "$url" >/dev/null || die "failed to register ${name} helm repo"
 }
 
 # ensure_helm_chart_deps [<chart_dir>]
@@ -260,8 +260,8 @@ ensure_helm_chart_deps() {
   fi
 
   _ensure_helm_repo bitnami              https://charts.bitnami.com/bitnami
-  _ensure_helm_repo rucio-server-fork    "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=master"
-  _ensure_helm_repo rucio-daemons-fork   "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=master"
+  _ensure_helm_repo rucio-server-fork    "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=e69bb891a7045d64ec0fb72198ce7e502fed83a3"
+  _ensure_helm_repo rucio-daemons-fork   "git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-daemons?ref=e69bb891a7045d64ec0fb72198ce7e502fed83a3"
   _ensure_helm_repo prometheus-community https://prometheus-community.github.io/helm-charts
   _ensure_helm_repo grafana              https://grafana.github.io/helm-charts
 

@@ -10,7 +10,7 @@ rationale live in `docs/gitops-blueprint.md`; this is the operational entry poin
 - `argocd/` — per-env ApplicationSet + app-of-apps entrypoints (`.../secrets`
   is the whole synced tree per environment). `rucio-server`/`rucio-daemons`
   source their chart directly from the `mgajek-cern/helm-charts` fork
-  (`targetRevision: master`) rather than from this repo.
+  (`targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3`) rather than from this repo.
 - `flux/` — HelmReleases, sources, ESO, staged entrypoints. Two `GitRepository`
   sources are used: `flux-system/gitrepository-dep-dlm-testbed.yaml` (this
   repo, tracks whatever branch is being deployed) and

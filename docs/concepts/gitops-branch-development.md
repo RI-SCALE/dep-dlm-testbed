@@ -25,9 +25,9 @@ nothing to hand-edit.
 - `deploy/gitops/flux/flux-system/gitrepository-rucio-charts-fork.yaml`
 - the `rucio-server`/`rucio-daemons` chart sources inside
   `argocd/applicationsets/<env>.yaml` (`repoURL:
-  https://github.com/mgajek-cern/helm-charts.git`, `targetRevision: master`)
+  https://github.com/mgajek-cern/helm-charts.git`, `targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3`)
 
-These track the Rucio chart fork's own `master` branch, independent of
+These pin the Rucio chart fork to a commit, independent of
 whatever branch of `dep-dlm-testbed` you're testing. `--revision`/
 `GITOPS_REVISION` never touches them by design — the `dep-dlm-testbed`
 `GitRepository` was deliberately split out of the fork's `GitRepository` into
