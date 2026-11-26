@@ -6,6 +6,7 @@ metadata:
     app: {{ include "teapot.name" . }}
     instance: {{ include "teapot.fullname" . }}
     release: {{ .Release.Name }}
+    {{- include "teapot.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -18,6 +19,7 @@ spec:
         app: {{ include "teapot.name" . }}
         instance: {{ include "teapot.fullname" . }}
         release: {{ .Release.Name }}
+        {{- include "teapot.labels" . | nindent 8 }}
     spec:
       securityContext:
         fsGroup: 101
