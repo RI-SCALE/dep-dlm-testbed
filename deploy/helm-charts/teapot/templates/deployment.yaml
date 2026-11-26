@@ -24,7 +24,7 @@ spec:
       hostname: {{ include "teapot.fullname" . }}
       initContainers:
         - name: fix-data-permissions
-          image: busybox
+          image: busybox:1.37.0
           command: ["sh", "-c", "chown -R 100:101 /data"]
           volumeMounts:
             - name: teapot-data

@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/ri-scale/dep-dlm-testbed/fts
-  tag: dc634d9e1e68023e7878326ffed0268a6f3cff59
+  tag: 766076eba70ae540c42ab24fe0035c2a4f01328d
   pullPolicy: IfNotPresent
 
 fullnameOverride: ""

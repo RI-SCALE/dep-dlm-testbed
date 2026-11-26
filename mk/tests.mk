@@ -16,11 +16,11 @@ REPORTER_CHECK_PY := import sys, json; r = [json.loads(l) for l in sys.stdin if 
 
 .PHONY: test-rucio-transfers
 test-rucio-transfers: ## Rucio E2E transfer test
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_transfers.py -v"
 
 .PHONY: test-public-ri-transfers
 test-public-ri-transfers: ## Rucio E2E copies from public RI holdings (ENES, EBI) into testbed storage
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_public_ri.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_public_ri.py -v"
 
 .PHONY: test-copernicus-transfers
 test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
@@ -30,20 +30,19 @@ test-copernicus-transfers: ## Rucio E2E transfer test with Copernicus data
 		DAEMON_MODE=$(DAEMON_MODE) \
 		RUNTIME=$(RUNTIME) \
 		K8S_NAMESPACE=$(K8S_NAMESPACE); \
-		$(STAGING_PIP_INSTALL) \
 		pytest /tests/test_rucio_transfers_with_copernicus.py -v"
 
 .PHONY: test-rucio-deletion
 test-rucio-deletion: ## Rucio E2E deletion test
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_rucio_deletion.py -v"
 
 .PHONY: probe-teapot
 probe-teapot: ## Teapot WebDAV probe with OIDC tokens
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_teapot.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_teapot.py -v"
 
 .PHONY: probe-xrootd
 probe-xrootd: ## XRootD probe with SciTokens
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_xrootd.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) VALIDATION_STORAGE_HOST=$(VALIDATION_STORAGE_HOSTNAME) pytest /tests/probe_xrootd.py -v"
 
 .PHONY: probe-fts-teapot
 probe-fts-teapot: ## Minimal FTS-only TPC repro (teapot1->teapot2), bypasses Rucio/conveyor
@@ -65,12 +64,12 @@ probe-fts-xrootd: ## Minimal FTS-only TPC repro (xrd3->xrd4), bypasses Rucio/con
 
 .PHONY: test-authz-personas
 test-authz-personas: ## Authz entitlement-tier test across DEP persona accounts
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) $(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
+	@$(EXEC_RUCIO) bash -c "$(TEST_OIDC_ENV) DAEMON_MODE=$(DAEMON_MODE) RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_personas.py -v"
 
 .PHONY: test-authz-user
 test-authz-user: ## Authz tier from userinfo entitlements for a real user token. Needs BEARER_TOKEN (from `rucio whoami`, valid ~1 h).
 	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
-	@$(EXEC_RUCIO) bash -c "$(STAGING_PIP_INSTALL) USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
+	@$(EXEC_RUCIO) bash -c "USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
 
 .PHONY: test-usage-reporter
 test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
