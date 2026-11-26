@@ -6,6 +6,7 @@ metadata:
     app: {{ include "xrootd.name" . }}
     instance: {{ include "xrootd.fullname" . }}
     release: {{ .Release.Name }}
+    {{- include "xrootd.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:

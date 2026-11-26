@@ -6,6 +6,7 @@ metadata:
     app: {{ include "fts.name" . }}
     instance: {{ include "fts.fullname" . }}
     release: {{ .Release.Name }}
+    {{- include "fts.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

@@ -5,6 +5,7 @@ metadata:
   labels:
     app: {{ include "keycloak.name" . }}
     release: {{ .Release.Name }}
+    {{- include "keycloak.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
