@@ -1,5 +1,7 @@
 name: Docker Images
 
+# Testbed-only images. Rucio server/daemons and FTS are built in
+# RI-SCALE/dep-dlm-containers.
 on:
   workflow_dispatch:
 
@@ -11,22 +13,17 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.image.name }} (${{ matrix.arch }})
+    name: ${{ matrix.image }} (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
+        image: [teapot, rucio-client]
         arch: [amd64, arm64]
         include:
           - arch: amd64
             runner: ubuntu-latest
           - arch: arm64
             runner: ubuntu-24.04-arm
-        image:
-          - { name: fts,           file: deploy/compose/Dockerfile.fts,    args: "" }
-          - { name: teapot,        file: deploy/compose/Dockerfile.teapot, args: "" }
-          - { name: rucio-server,  file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=server" }
-          - { name: rucio-daemons, file: deploy/compose/Dockerfile.rucio,  args: "RUCIO_COMPONENT=daemons" }
-          - { name: rucio-client,  file: deploy/compose/Dockerfile.rucio-client, args: "" }
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -43,20 +40,17 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.image.file }}
-          build-args: ${{ matrix.image.args }}
+          file: deploy/compose/Dockerfile.${{ matrix.image }}
           platforms: linux/${{ matrix.arch }}
-          outputs: type=image,name=${{ env.PREFIX }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.arch }}
-          cache-to: type=gha,scope=${{ matrix.image.name }}-${{ matrix.arch }},mode=max
-      - run: |
-          mkdir -p /tmp/digests
-          touch "/tmp/digests/${DIGEST#sha256:}"
+          outputs: type=image,name=${{ env.PREFIX }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }},mode=max
+      - run: mkdir -p /tmp/digests && touch "/tmp/digests/${DIGEST#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
       - uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.image.name }}-${{ matrix.arch }}
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
           path: /tmp/digests/*
           retention-days: 1
 
@@ -66,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [fts, teapot, rucio-server, rucio-daemons, rucio-client]
+        image: [teapot, rucio-client]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,19 +79,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.PREFIX }}/${{ matrix.image }}
-          tags: type=sha,prefix=,format=long
       - id: manifest
         working-directory: /tmp/digests
         run: |
-          ref="${PREFIX}/${{ matrix.image }}"
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${ref}@sha256:%s " *)
-          echo "digest=$(docker buildx imagetools inspect "${ref}:${{ steps.meta.outputs.version }}" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+          ref="${PREFIX}/${IMAGE}"
+          docker buildx imagetools create -t "${ref}:${GITHUB_SHA}" $(printf "${ref}@sha256:%s " *)
+          echo "digest=$(docker buildx imagetools inspect "${ref}:${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE: ${{ matrix.image }}
       - uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.PREFIX }}/${{ matrix.image }}

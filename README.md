@@ -184,7 +184,7 @@ Lifecycle
   start                Start the stack
   stop                 Stop the stack, remove volumes / PVCs
   restart              Tear down and start again
-  rebuild              Rebuild services (SERVICES="fts teapot")
+  rebuild              Rebuild services (SERVICES="teapot rucio-client")
   rebuild-clean        Rebuild from scratch, no cache
   ps                   Show running services / pods
   logs                 Tail logs (SERVICES="..." for a subset)

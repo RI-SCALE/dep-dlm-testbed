@@ -87,8 +87,8 @@ ruciodb:
   fullnameOverride: rucio-server
   replicaCount: 1
   image:
-    repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server
-    tag: 766076eba70ae540c42ab24fe0035c2a4f01328d
+    repository: ghcr.io/ri-scale/dep-dlm-containers/rucio-server
+    tag: 67c1b54e76b116288c93a0079c2c1c11cde0c6da
     pullPolicy: IfNotPresent
   useSSL: false
   service:
@@ -179,8 +179,8 @@ rucio-daemons:
   enabled: false
   fullnameOverride: rucio-daemons
   image:
-    repository: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons
-    tag: 766076eba70ae540c42ab24fe0035c2a4f01328d
+    repository: ghcr.io/ri-scale/dep-dlm-containers/rucio-daemons
+    tag: 67c1b54e76b116288c93a0079c2c1c11cde0c6da
     pullPolicy: IfNotPresent
 
   # Daemon-only settings, merged after server.cfg into each pod's rucio.cfg:
@@ -336,8 +336,8 @@ fts:
   enabled: true
   fullnameOverride: fts
   image:
-    repository: ghcr.io/ri-scale/dep-dlm-testbed/fts
-    tag: 766076eba70ae540c42ab24fe0035c2a4f01328d
+    repository: ghcr.io/ri-scale/dep-dlm-containers/fts
+    tag: 67c1b54e76b116288c93a0079c2c1c11cde0c6da
   ftsdb:
     enabled: true
     hostname: ftsdb

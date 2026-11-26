@@ -29,7 +29,7 @@ helm-charts/
 │       ├── opa-evaluator.yaml           # Vendored ODRL evaluator — ConfigMap
 │       ├── opa-ingest-policies-job.yaml # Pushes policies into OPA (hook)
 │       └── rucio-bootstrap-job.yaml     # Rucio DB bootstrap (hook)
-├── fts/              # FTS3 server (+ optional ftsdb) — ghcr.io/ri-scale/dep-dlm-testbed/fts
+├── fts/              # FTS3 server (+ optional ftsdb) — ghcr.io/ri-scale/dep-dlm-containers/fts
 ├── keycloak/         # Keycloak for local OIDC — quay.io/keycloak/keycloak
 ├── observability/    # Exporters, alert rules, dashboard (design-doc-005)
 ├── opa/              # OPA server for the Rucio policy package — openpolicyagent/opa

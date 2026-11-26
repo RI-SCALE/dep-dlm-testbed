@@ -64,9 +64,7 @@ services:
       retries: 20
 
   fts:
-    build:
-      context: ${TESTBED_HOST_SOURCE}
-      dockerfile: deploy/compose/Dockerfile.fts
+    image: ghcr.io/ri-scale/dep-dlm-containers/fts:67c1b54e76b116288c93a0079c2c1c11cde0c6da
     hostname: fts
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -249,7 +247,7 @@ services:
       retries: 10
 
   rucio-server:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-server:766076eba70ae540c42ab24fe0035c2a4f01328d
+    image: ghcr.io/ri-scale/dep-dlm-containers/rucio-server:67c1b54e76b116288c93a0079c2c1c11cde0c6da
     hostname: rucio-server
     environment:
       - REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt
@@ -324,7 +322,7 @@ services:
     command: ["/bin/bash", "-c", "sleep infinity"]
 
   rucio-daemons:
-    image: ghcr.io/ri-scale/dep-dlm-testbed/rucio-daemons:766076eba70ae540c42ab24fe0035c2a4f01328d
+    image: ghcr.io/ri-scale/dep-dlm-containers/rucio-daemons:67c1b54e76b116288c93a0079c2c1c11cde0c6da
     hostname: rucio-daemons
     profiles: ["daemons"]
     depends_on:

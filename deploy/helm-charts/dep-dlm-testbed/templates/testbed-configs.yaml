@@ -1,5 +1,5 @@
 {{- $excludedDirs := list "rucio" }}
-{{- $excludedFiles := list "realm.json" "fts-activemq.conf" "fts3rest.conf" "managed.fts3restconfig" "unmanaged.fts3restconfig" "fts3config" "fts3restconfig" }}
+{{- $excludedFiles := list "realm.json" "managed.fts3restconfig" "unmanaged.fts3restconfig" "fts3config" "fts3restconfig" }}
 {{- $profile := .Values.global.scopeProfile }}
 {{- $tokenMode := .Values.global.tokenMode }}
 {{- if .Values.configs.create }}
