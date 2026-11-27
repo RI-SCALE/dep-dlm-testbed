@@ -28,7 +28,7 @@ spec:
                   targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-server.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
+                  targetRevision: chore/oci-helm-charts-v0.1.0
                   ref: values
           - name: rucio-daemons
             spec:
@@ -38,7 +38,7 @@ spec:
                   targetRevision: e69bb891a7045d64ec0fb72198ce7e502fed83a3
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/rucio-daemons.yaml", "$values/deploy/gitops/environments/staging/values/rucio-daemons.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
+                  targetRevision: chore/oci-helm-charts-v0.1.0
                   ref: values
           - name: fts
             spec:
@@ -48,7 +48,7 @@ spec:
                   targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/staging/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
+                  targetRevision: chore/oci-helm-charts-v0.1.0
                   ref: values
           - name: opa
             spec:
@@ -58,7 +58,7 @@ spec:
                   targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/opa.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
+                  targetRevision: chore/oci-helm-charts-v0.1.0
                   ref: values
           - name: observability
             spec:
@@ -68,7 +68,7 @@ spec:
                   targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/observability.yaml", "$values/deploy/gitops/environments/staging/values/observability.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
+                  targetRevision: chore/oci-helm-charts-v0.1.0
                   ref: values
   template:
     metadata:
