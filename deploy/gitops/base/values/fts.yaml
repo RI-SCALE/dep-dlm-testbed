@@ -1,7 +1,7 @@
 fullnameOverride: fts
 image:
   repository: ghcr.io/ri-scale/dep-dlm-containers/fts
-  tag: 67c1b54e76b116288c93a0079c2c1c11cde0c6da
+  tag: 3.14.4-dep.0.1.0
 ftsdb:
   enabled: true
   hostname: ftsdb

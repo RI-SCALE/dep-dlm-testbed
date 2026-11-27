@@ -1,7 +1,7 @@
 fullnameOverride: rucio-daemons
 image:
   repository: ghcr.io/ri-scale/dep-dlm-containers/rucio-daemons
-  tag: 67c1b54e76b116288c93a0079c2c1c11cde0c6da
+  tag: 41.2.1-dep.0.1.0
   pullPolicy: IfNotPresent
 useDeprecatedImplicitSecrets: false
 
