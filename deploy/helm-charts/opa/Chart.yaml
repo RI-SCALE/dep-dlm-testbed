@@ -1,6 +1,0 @@
-apiVersion: v2
-name: opa
-description: Open Policy Agent server for Rucio's permission checks (policy package rucio_opa_v1_policy)
-type: application
-version: 0.1.0
-appVersion: "1.8.0"
