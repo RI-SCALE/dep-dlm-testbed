@@ -9,4 +9,4 @@ spec:
   interval: 1m
   url: https://github.com/ri-scale/dep-dlm-testbed.git
   ref:
-    branch: chore/containers-v0.1.0
+    branch: chore/usage-reporter-0.4.1

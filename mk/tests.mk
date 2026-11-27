@@ -11,6 +11,7 @@ REPORTER_JOB_PY := import sys, os, json, datetime; cj = json.load(sys.stdin); \
   print(json.dumps(job))
 REPORTER_CHECK_PY := import sys, json; r = [json.loads(l) for l in sys.stdin if l.startswith("{")]; \
   assert any(x["group_id"] == "suc1" and x["value"] > 0 for x in r), "no suc1 usage"; print("✓ suc1 reported")
+REPORTER_TRIES ?= 3
 
 ## Tests
 
@@ -71,25 +72,37 @@ test-authz-user: ## Authz tier from userinfo entitlements for a real user token.
 	@[ -n "$(BEARER_TOKEN)" ] || { echo "ERROR: BEARER_TOKEN must be set — log in with 'rucio whoami' first"; exit 1; }
 	@$(EXEC_RUCIO) bash -c "USER_TOKEN='$(BEARER_TOKEN)' RUNTIME=$(RUNTIME) K8S_NAMESPACE=$(K8S_NAMESPACE) pytest /tests/test_authz_user.py -v"
 
+REPORTER_TRIES ?= 3
+
 .PHONY: test-usage-reporter
 test-usage-reporter: ## Usage reporter dry-run: today's transfers report suc1 > 0
 ifeq ($(RUNTIME),compose)
-	@rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
-	    -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \
-	echo "$$out"; \
-	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; exit 1;; esac; \
+	@for try in $$(seq $(REPORTER_TRIES)); do \
+	  rc=0; out=$$($(COMPOSE) --profile usage-reporter run --rm --no-deps -T \
+	      -e REPORTER_DAY=$$(date -u +%F) usage-reporter) || rc=$$?; \
+	  echo "$$out"; \
+	  [ "$$rc" = 4 ] && [ $$try -lt $(REPORTER_TRIES) ] || break; \
+	  echo "… Rucio server error, retrying in 20s ($$try/$(REPORTER_TRIES))"; sleep 20; \
+	done; \
+	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; \
+	  $(COMPOSE) logs --tail=200 rucio-server | grep -B5 -A30 'history/list' || true; exit 1;; esac; \
 	echo "$$out" | python3 -c '$(REPORTER_CHECK_PY)'
 else
-	@job=usage-reporter-test-$$(date +%s); \
-	$(KUBECTL) get cronjob usage-reporter -o json | python3 -c '$(REPORTER_JOB_PY)' $$job | $(KUBECTL) create -f - >/dev/null; \
-	trap "$(KUBECTL) delete job $$job --ignore-not-found >/dev/null" EXIT; \
-	for i in $$(seq 60); do \
-	  phase=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true); \
-	  case "$$phase" in Succeeded|Failed) break;; esac; sleep 3; \
+	@jobs=; trap '$(KUBECTL) delete job $$jobs --ignore-not-found >/dev/null 2>&1' EXIT; \
+	for try in $$(seq $(REPORTER_TRIES)); do \
+	  job=usage-reporter-test-$$(date +%s); jobs="$$jobs $$job"; \
+	  $(KUBECTL) get cronjob usage-reporter -o json | python3 -c '$(REPORTER_JOB_PY)' $$job | $(KUBECTL) create -f - >/dev/null; \
+	  for i in $$(seq 60); do \
+	    phase=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true); \
+	    case "$$phase" in Succeeded|Failed) break;; esac; sleep 3; \
+	  done; \
+	  out=$$($(KUBECTL) logs job/$$job); echo "$$out"; \
+	  rc=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'); \
+	  [ "$$rc" = 4 ] && [ $$try -lt $(REPORTER_TRIES) ] || break; \
+	  echo "… Rucio server error, retrying in 20s ($$try/$(REPORTER_TRIES))"; sleep 20; \
 	done; \
-	out=$$($(KUBECTL) logs job/$$job); echo "$$out"; \
-	rc=$$($(KUBECTL) get pods -l job-name=$$job -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'); \
-	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; exit 1;; esac; \
+	case $$rc in 0|2) ;; *) echo "✗ reporter exit code $$rc"; \
+	  $(KUBECTL) logs deploy/rucio-server --tail=200 | grep -B5 -A30 'history/list' || true; exit 1;; esac; \
 	echo "$$out" | python3 -c '$(REPORTER_CHECK_PY)'
 endif
 
