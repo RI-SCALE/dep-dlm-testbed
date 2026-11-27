@@ -14,10 +14,10 @@ import rego.v1
 #   reporter  read-only transfer history (the usage reporter's service account)
 #   none      nothing
 #
-# Bridge (ADR-008 addendum): LS AAI can't release entitlements in
-# client_credentials tokens, so the reporter tier is also granted to clients
-# listed in data.vo.policy.reporter_clients by iss + sub. Remove the entry
-# once the IdP releases the entitlement.
+# Bridge (ADR-008 addendum): LS AAI and EGI Check-in can't release
+# entitlements in client_credentials tokens, so the reporter tier is also
+# granted to clients listed in data.vo.policy.reporter_clients by iss + sub.
+# Remove an entry once its IdP releases the entitlement.
 #
 # There are no ownership checks (scope or rule) and no checks on request
 # arguments such as RSE names or protocol schemes. Accounts without a token
@@ -38,9 +38,9 @@ allow if {
 	_has_tier("reporter")
 }
 
-# A client_credentials token's sub is the client itself (on LS AAI, its
-# client ID); user tokens issued to the same client carry the user's sub,
-# so they never match.
+# A client_credentials token's sub is the client itself (its client ID,
+# on EGI Check-in with an "@egi.eu" suffix); user tokens issued to the
+# same client carry the user's sub, so they never match.
 allow if {
 	input.action in _reporter_actions
 	some c in _reporter_clients

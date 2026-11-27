@@ -12,7 +12,8 @@ start-up; this script checks it's present, then loads:
 
 Authorization is role-based (ADR-008): tiers come from the ODRL policy,
 accounts without a token are admins only when listed in ADMIN_ACCOUNTS, and
-REPORTER_CLIENTS bridges LS AAI service clients to the reporter tier.
+REPORTER_CLIENTS bridges LS AAI and EGI Check-in service clients to the
+reporter tier.
 
 Usage:
     python ingest_policies.py [--opa-url URL] [--opa-dir DIR]
@@ -39,12 +40,16 @@ ADMIN_ACCOUNTS = ["root", "ddmlab"]
 OBSOLETE_DATA = ["vo/entitlement_policy"]
 
 # Bridge (ADR-008 addendum): service clients whose IdP doesn't release
-# entitlements in client_credentials tokens yet (LS AAI),
+# entitlements in client_credentials tokens yet (LS AAI, EGI Check-in),
 # matched by iss + sub.
 REPORTER_CLIENTS = [
     {
         "iss": "https://login.aai.lifescience-ri.eu/oidc/",
         "sub": "4ff05c0b-1d83-42b7-a00a-8bd162df4165",
+    },
+    {
+        "iss": "https://aai-dev.egi.eu/auth/realms/egi",
+        "sub": "ba1fca56-245f-4f5c-968b-6c73485f5011@egi.eu",
     },
 ]
 

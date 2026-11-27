@@ -69,9 +69,10 @@ reporter tier. As a bridge, clients listed in
 `data.vo.policy.reporter_clients` get the read-only reporter actions by
 issuer and subject (`iss` + `sub`); user tokens issued to the same client
 carry the user's `sub` and never match. The list is per deployment profile
-and empty by default. EGI Check-in associates entitlements with service
-accounts, so its reporter uses the ODRL reporter tier. The entry is removed
-once LS AAI releases the entitlement, and the rule once the list is empty
+and empty by default. EGI Check-in can associate entitlements with service
+accounts, but the reporter's re-registered client is not yet in the
+usage-reporter group there, so it is listed too. An entry is removed once
+its IdP releases the entitlement, and the rule once the list is empty
 everywhere.
 
 ### Positive Consequences
