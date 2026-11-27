@@ -13,8 +13,9 @@ spec:
     - { name: external-secrets }
   chart:
     spec:
-      chart: deploy/helm-charts/opa
-      sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      chart: opa
+      version: "0.1.0"
+      sourceRef: { kind: HelmRepository, name: ri-scale-dep-dlm, namespace: flux-system }
   valuesFrom:
     - kind: ConfigMap
       name: opa-values
