@@ -157,7 +157,7 @@ spec:
               sources:
                 - repoURL: ghcr.io/ri-scale/charts
                   chart: dep-dlm-usage-reporter
-                  targetRevision: 0.4.0
+                  targetRevision: 0.4.1
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/usage-reporter.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: chore/containers-v0.1.0

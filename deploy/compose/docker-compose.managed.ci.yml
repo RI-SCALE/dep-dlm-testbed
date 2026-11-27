@@ -372,7 +372,7 @@ services:
       - ${TESTBED_HOST_SOURCE}/patches/rucio/common.py:/usr/local/lib/python3.9/site-packages/rucio/web/rest/flaskapi/v1/common.py:ro
 
   usage-reporter:
-    image: ghcr.io/ri-scale/dep-dlm-usage-reporter:0.4.0
+    image: ghcr.io/ri-scale/dep-dlm-usage-reporter:0.4.1
     hostname: usage-reporter
     profiles: ["usage-reporter"]
     depends_on:
