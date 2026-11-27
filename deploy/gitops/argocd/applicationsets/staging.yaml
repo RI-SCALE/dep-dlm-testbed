@@ -43,9 +43,9 @@ spec:
           - name: fts
             spec:
               sources:
-                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
-                  path: deploy/helm-charts/fts
+                - repoURL: ghcr.io/ri-scale/charts
+                  chart: dep-dlm/fts
+                  targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/fts.yaml", "$values/deploy/gitops/environments/staging/values/fts.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: chore/usage-reporter-0.4.1
@@ -53,9 +53,9 @@ spec:
           - name: opa
             spec:
               sources:
-                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
-                  path: deploy/helm-charts/opa
+                - repoURL: ghcr.io/ri-scale/charts
+                  chart: dep-dlm/opa
+                  targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/opa.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: chore/usage-reporter-0.4.1
@@ -63,9 +63,9 @@ spec:
           - name: observability
             spec:
               sources:
-                - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-                  targetRevision: chore/usage-reporter-0.4.1
-                  path: deploy/helm-charts/observability
+                - repoURL: ghcr.io/ri-scale/charts
+                  chart: dep-dlm/observability
+                  targetRevision: 0.1.0
                   helm: { valueFiles: ["$values/deploy/gitops/base/values/observability.yaml", "$values/deploy/gitops/environments/staging/values/observability.yaml"] }
                 - repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
                   targetRevision: chore/usage-reporter-0.4.1
