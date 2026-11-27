@@ -31,7 +31,7 @@ covered here.
 | What | Where |
 |---|---|
 | Managed Prometheus and workload logging on the cluster | `deploy/terraform/modules/kubernetes` (`monitoring_config`, `logging_config`) |
-| Scrape targets (`PodMonitoring`) | `deploy/helm-charts/observability/templates/podmonitoring.yaml`, enabled and listed per environment in `deploy/gitops/environments/<env>/values/observability.yaml` (`gmp.enabled`, `gmp.podMonitorings`) |
+| Scrape targets (`PodMonitoring`) | `charts/observability/templates/podmonitoring.yaml` in [dep-dlm-helm-charts](https://github.com/RI-SCALE/dep-dlm-helm-charts), enabled and listed per environment in `deploy/gitops/environments/<env>/values/observability.yaml` (`gmp.enabled`, `gmp.podMonitorings`) |
 | Scrape job names | `rucio-server`, `rucio-daemons`, `fts`, `rucio-db`; each `PodMonitoring` name becomes the `job` label, which alerts, dashboard and tests rely on |
 | Exporter database DSNs | `testbed-secrets` keys `rucio-db-dsn` and `fts-db-dsn`, rendered by `deploy/terraform/modules/secrets` |
 | Rucio metrics endpoint | `metrics` in `[api] endpoints` of `modules/secrets/templates/rucio.cfg.tftpl` |

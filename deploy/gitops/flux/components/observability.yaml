@@ -11,7 +11,8 @@ spec:
     - { name: kube-prometheus-stack }    # PrometheusRule CRD
   chart:
     spec:
-      chart: deploy/helm-charts/observability
-      sourceRef: { kind: GitRepository, name: dep-dlm-testbed, namespace: flux-system }
+      chart: observability
+      version: "0.1.0"
+      sourceRef: { kind: HelmRepository, name: ri-scale-dep-dlm, namespace: flux-system }
   valuesFrom:
     - { kind: ConfigMap, name: observability-values, valuesKey: observability.yaml }

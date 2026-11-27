@@ -1,4 +1,4 @@
-# Values for deploy/helm-charts/observability (namespace dep-dlm-<env>).
+# Values for dep-dlm-helm-charts charts/observability (namespace dep-dlm-<env>).
 # Sandbox uses the defaults: exporters reach the in-cluster ftsdb and ruciodb.
 # Staging/production: point the exporters at Cloud SQL via a Secret, e.g.
 # exporters:

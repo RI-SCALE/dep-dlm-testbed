@@ -6,7 +6,7 @@ dependencies:
   repository: git+https://github.com/mgajek-cern/helm-charts.git@charts/rucio-server?ref=e69bb891a7045d64ec0fb72198ce7e502fed83a3
   version: 41.2.1
 - name: fts
-  repository: file://../fts
+  repository: oci://ghcr.io/ri-scale/charts/dep-dlm
   version: 0.1.0
 - name: keycloak
   repository: file://../keycloak
@@ -30,10 +30,10 @@ dependencies:
   repository: file://../teapot
   version: 0.1.0
 - name: opa
-  repository: file://../opa
+  repository: oci://ghcr.io/ri-scale/charts/dep-dlm
   version: 0.1.0
 - name: observability
-  repository: file://../observability
+  repository: oci://ghcr.io/ri-scale/charts/dep-dlm
   version: 0.1.0
 - name: kube-prometheus-stack
   repository: https://prometheus-community.github.io/helm-charts
@@ -47,5 +47,5 @@ dependencies:
 - name: dep-dlm-usage-reporter
   repository: oci://ghcr.io/ri-scale/charts
   version: 0.4.1
-digest: sha256:c2c70f6ab7fc37b68976b052a09e12bcdff4f82de4df10e5a4d9f29b91f507c1
-generated: "2026-11-27T12:23:27.572709+01:00"
+digest: sha256:4cdd5a35ce6392eb54dd6bbc6e9733501a4c9dca0fe791a48922781b936b5c9e
+generated: "2026-11-27T15:35:41.714239295Z"

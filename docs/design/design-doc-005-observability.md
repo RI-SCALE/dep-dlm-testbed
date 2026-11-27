@@ -105,7 +105,7 @@ FTS/Hermes ──▶ ActiveMQ ──▶ Vector ──▶ OpenSearch (phase 3)
 | File / component | Change |
 |---|---|
 | `configs/observability/` | Dashboards, `alerts.yml`, collectors, Alloy/Vector config (single source) |
-| `deploy/helm-charts/observability/` | Exporters, `PrometheusRule`; `PodMonitoring` behind a GMP toggle |
+| [`dep-dlm-helm-charts/charts/observability/`](https://github.com/RI-SCALE/dep-dlm-helm-charts/tree/main/charts/observability) | Exporters, `PrometheusRule`; `PodMonitoring` behind a GMP toggle |
 | `deploy/helm-charts/dep-dlm-testbed/` | `kube-prometheus-stack`, `loki`, `alloy` behind `observability.enabled` (sandbox) |
 | `deploy/gitops/{argocd,flux}/` | Sandbox: full stack. Staging/production: `observability` chart only |
 | `deploy/gitops/environments/staging/values/` | GMP toggle, exporter DSNs from Cloud SQL secrets |

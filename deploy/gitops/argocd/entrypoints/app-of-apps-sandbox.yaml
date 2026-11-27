@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: chore/usage-reporter-0.4.1
+    targetRevision: chore/oci-helm-charts-v0.1.0
     path: deploy/gitops/argocd/applicationsets
     directory:
       recurse: false
@@ -38,7 +38,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ri-scale/dep-dlm-testbed.git
-    targetRevision: chore/usage-reporter-0.4.1
+    targetRevision: chore/oci-helm-charts-v0.1.0
     path: deploy/gitops/environments/sandbox/secrets
     kustomize: {}
   destination: { server: https://kubernetes.default.svc, namespace: dep-dlm-sandbox }

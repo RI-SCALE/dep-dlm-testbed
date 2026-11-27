@@ -28,7 +28,7 @@ dependencies:
 
   - name: fts
     version: "0.1.0"
-    repository: "file://../fts"
+    repository: "oci://ghcr.io/ri-scale/charts/dep-dlm"
     alias: fts
     condition: fts.enabled
 
@@ -74,13 +74,13 @@ dependencies:
 
   - name: opa
     version: "0.1.0"
-    repository: "file://../opa"
+    repository: "oci://ghcr.io/ri-scale/charts/dep-dlm"
     alias: opa
     condition: opa.enabled
 
   - name: observability
     version: "0.1.0"
-    repository: "file://../observability"
+    repository: "oci://ghcr.io/ri-scale/charts/dep-dlm"
     condition: observability.enabled
 
   - name: kube-prometheus-stack
